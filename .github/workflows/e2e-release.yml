@@ -1,0 +1,162 @@
+name: E2E Release
+
+# Manual full-matrix end-to-end across all scenarios.
+# Triggered by maintainers before tagging a release.
+# Each scenario = isolated state file + isolated RG; max-parallel 2 to avoid quota.
+
+on:
+  workflow_dispatch:
+    inputs:
+      landing_zone_type:
+        description: "Landing zone type"
+        required: true
+        default: online
+        type: choice
+        options:
+          - online
+          - corp
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: e2e-release
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.11.4"
+  TF_DIR: ALZ.AKS/templates/terraform
+  LOCATION: swedencentral
+  WORKLOAD_NAME: e2e
+  ENVIRONMENT: test
+
+jobs:
+  e2e:
+    name: e2e (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    environment: apply
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario:
+          - single_region_baseline
+          - single_region_regulated
+          - multi_region_baseline
+          - multi_region_regulated
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Generate run-specific tfvars
+        working-directory: ${{ env.TF_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > ci.auto.tfvars <<EOF
+          subscription_id   = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          tenant_id         = "${{ secrets.AZURE_TENANT_ID }}"
+          location          = "${{ env.LOCATION }}"
+          landing_zone_type = "${{ inputs.landing_zone_type }}"
+          workload_name     = "${{ env.WORKLOAD_NAME }}"
+          environment       = "${{ env.ENVIRONMENT }}"
+          tags = {
+            createdAt = "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            createdBy = "github-actions"
+            workflow  = "e2e-release"
+            run_id    = "${{ github.run_id }}"
+            scenario  = "${{ matrix.scenario }}"
+            ttl_hours = "24"
+          }
+          EOF
+
+      - name: terraform init
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          # Backend uses AAD auth — storage account has shared-key auth disabled.
+          ARM_USE_AZUREAD: "true"
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ secrets.TFSTATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TFSTATE_SA }}" \
+            -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
+            -backend-config="key=e2e/${{ matrix.scenario }}/${{ github.run_id }}.tfstate" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: terraform plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan -input=false -no-color \
+            -var-file="../scenarios/${{ matrix.scenario }}.tfvars" \
+            -out=tfplan
+
+      - name: terraform apply
+        id: apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Capture outputs
+        if: steps.apply.outcome == 'success'
+        id: outputs
+        working-directory: ${{ env.TF_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "resource_group=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+          echo "cluster_name=$(terraform output -raw aks_cluster_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Pester 5
+        if: steps.apply.outcome == 'success'
+        shell: pwsh
+        run: Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Run post-deploy assertions
+        if: steps.apply.outcome == 'success'
+        shell: pwsh
+        env:
+          AKSTEST_RESOURCE_GROUP: ${{ steps.outputs.outputs.resource_group }}
+          AKSTEST_CLUSTER_NAME: ${{ steps.outputs.outputs.cluster_name }}
+          AKSTEST_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './ALZ.AKS/tests/assertions'
+          $cfg.Run.Exit = $false
+          $cfg.TestResult.Enabled = $true
+          $cfg.TestResult.OutputPath = "./ALZ.AKS/tests/results/postdeploy-${{ matrix.scenario }}.xml"
+          $cfg.TestResult.OutputFormat = 'NUnitXml'
+          $result = Invoke-Pester -Configuration $cfg
+          if ($result.FailedCount -gt 0) {
+              throw "Post-deploy assertions failed: $($result.FailedCount) failure(s)."
+          }
+
+      - name: Upload Pester results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postdeploy-${{ matrix.scenario }}-${{ github.run_id }}
+          path: ./ALZ.AKS/tests/results/
+
+      - name: terraform destroy
+        if: always()
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform destroy -input=false -auto-approve -no-color \
+            -var-file="../scenarios/${{ matrix.scenario }}.tfvars" \
+          || echo "::warning::terraform destroy failed; janitor will reap this RG by tag."
