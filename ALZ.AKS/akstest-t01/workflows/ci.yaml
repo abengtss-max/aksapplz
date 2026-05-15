@@ -1,0 +1,19 @@
+# CI Caller Workflow - Triggered on Pull Requests to validate changes
+# Runs terraform plan to preview infrastructure changes before merge
+name: "01 AKS Landing Zone Continuous Integration"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  CI:
+    uses: __ORG_NAME__/__TEMPLATE_REPO_NAME__/.github/workflows/ci-template.yaml@main
+    with:
+      environment: __PLAN_ENVIRONMENT__
+    secrets: inherit

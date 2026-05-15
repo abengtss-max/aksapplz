@@ -1,0 +1,21 @@
+# CD Caller Workflow - Triggered on push to main or manually
+# Calls the reusable CD template from the templates repository
+name: "02 AKS Landing Zone Continuous Delivery"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  CD:
+    uses: ${{ github.repository_owner }}/aksapplz-templates/.github/workflows/cd-template.yaml@main
+    with:
+      plan_environment: aksapplz-plan
+      apply_environment: aksapplz-apply
+    secrets: inherit

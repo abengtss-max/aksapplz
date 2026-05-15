@@ -1,0 +1,53 @@
+---
+# T01: single_region_baseline (all defaults, online mode)
+scenario: "single_region_baseline"
+landing_zone_type: "online"
+bootstrap_location: "swedencentral"
+aks_landing_zone_subscription_id: "f96403ae-7ef3-4e36-81a7-cb74a12ce667"
+connectivity_subscription_id: "1722f280-2f89-42c1-a80f-9a4773491727"
+hub_vnet_resource_id: ""
+hub_firewall_private_ip: ""
+spoke_vnet_address_space: "10.10.0.0/16"
+subnet_address_prefix_aks_system_nodes: "10.10.0.0/24"
+subnet_address_prefix_aks_user_nodes: "10.10.1.0/22"
+subnet_address_prefix_aks_api_server: "10.10.5.0/28"
+subnet_address_prefix_app_gateway: "10.10.6.0/24"
+subnet_address_prefix_private_endpoints: "10.10.7.0/24"
+subnet_address_prefix_ingress: "10.10.8.0/24"
+kubernetes_version: "1.31"
+aks_sku_tier: "Standard"
+aks_private_cluster: false
+aks_admin_group_object_ids:
+  - "2a151a66-e0ce-455a-bae5-8a21513e3004"
+bootstrap_subscription_id: "f96403ae-7ef3-4e36-81a7-cb74a12ce667"
+service_name: "akstest"
+environment_name: "t01"
+postfix_number: 1
+use_self_hosted_runners: true
+use_private_networking: true
+github_personal_access_token: "Set via environment variable TF_VAR_github_personal_access_token"
+github_runners_personal_access_token: "Set via environment variable TF_VAR_github_runners_personal_access_token"
+github_organization_name: "abengtss-max-org"
+apply_approvers:
+  - "abengtss-max"
+enable_defender: true
+enable_workload_identity: true
+enable_azure_policy: true
+enable_prometheus: true
+enable_grafana: true
+enable_app_gateway: true
+enable_acr: true
+enable_key_vault: true
+enable_keda: true
+enable_vpa: false
+enable_istio: false
+enable_nginx_ingress: false
+enable_flux: false
+enable_dapr: false
+enable_fips: false
+enable_backup: false
+enable_cost_analysis: false
+enable_node_auto_provisioning: false
+iac_type: "terraform"
+bootstrap_module_name: "aksapplz_github"
+starter_module_name: "aks_landing_zone"

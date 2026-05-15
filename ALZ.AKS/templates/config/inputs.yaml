@@ -1,0 +1,99 @@
+---
+# Required Inputs
+
+# This section contains the required inputs to bootstrap the AKS Application Landing Zone
+# For more detail on these inputs, visit the project README.md
+
+# For advanced configuration options, any variable available in the bootstrap module can be set in this file
+
+## Scenario
+# Options: single_region_baseline, multi_region_baseline, single_region_regulated, multi_region_regulated
+scenario: "single_region_baseline"
+
+## Landing Zone Type
+# corp:   Connected to hub VNet via peering, UDR through firewall, private cluster
+# online: Internet-facing, no hub connectivity, public endpoints
+landing_zone_type: "corp"
+
+## Decision 1: Bootstrap Resource Azure Region
+bootstrap_location: "swedencentral"
+
+## Decision 2: AKS Landing Zone Subscription
+# The subscription where the AKS cluster and supporting resources will be deployed
+aks_landing_zone_subscription_id: ""  # Leave empty to use the subscription connected to Azure CLI
+
+## Decision 3: Connectivity Subscription
+# The subscription containing the hub VNet and firewall (deployed by ALZ)
+connectivity_subscription_id: ""
+
+## Decision 4: Hub Networking
+# Required for VNet peering and UDR to route egress through the hub firewall
+hub_vnet_resource_id: ""              # Full resource ID of hub VNet, e.g. /subscriptions/.../virtualNetworks/vnet-hub
+hub_firewall_private_ip: ""           # Private IP of hub firewall for UDR, e.g. 10.0.0.4
+
+## Decision 5: Spoke Networking
+# System and user node pools use separate subnets (AKS baseline best practice)
+spoke_vnet_address_space: "10.10.0.0/16"
+subnet_address_prefix_aks_system_nodes: "10.10.0.0/24"
+subnet_address_prefix_aks_user_nodes: "10.10.1.0/22"
+subnet_address_prefix_aks_api_server: "10.10.5.0/28"
+subnet_address_prefix_app_gateway: "10.10.6.0/24"
+subnet_address_prefix_private_endpoints: "10.10.7.0/24"
+subnet_address_prefix_ingress: "10.10.8.0/24"
+
+## Decision 6: AKS Configuration
+kubernetes_version: "1.31"
+aks_sku_tier: "Standard"                          # Free, Standard, or Premium
+aks_private_cluster: true
+aks_admin_group_object_ids: []                    # Entra ID group Object IDs for cluster admin access
+
+## Decision 7: Bootstrap Resource Subscription
+bootstrap_subscription_id: ""  # Leave empty to use the subscription connected to Azure CLI
+
+## Decision 8: Bootstrap Resource Naming
+# Resources will be named: {service_name}-{environment_name}-{postfix_number}
+# For example: aksapplz-prod-001
+service_name: "aksapplz"
+environment_name: "prod"
+postfix_number: 1
+
+## Decision 9: Bootstrap Networking and Agents
+use_self_hosted_runners: true
+use_private_networking: true
+
+## Decision 10: Version Control System Settings
+github_personal_access_token: "Set via environment variable TF_VAR_github_personal_access_token"  # Can also be supplied via environment variable TF_VAR_github_personal_access_token
+github_runners_personal_access_token: "Set via environment variable TF_VAR_github_runners_personal_access_token"  # Can also be supplied via environment variable TF_VAR_github_runners_personal_access_token
+github_organization_name: ""
+apply_approvers: []
+
+## Decision 11: Features & Options
+# Core security
+enable_defender: true
+enable_workload_identity: true
+enable_azure_policy: true
+# Monitoring
+enable_prometheus: true
+enable_grafana: true
+# Supporting resources
+enable_app_gateway: true
+enable_acr: true
+enable_key_vault: true
+# Scaling
+enable_keda: true
+enable_vpa: false
+# Networking
+enable_istio: false
+enable_nginx_ingress: false
+# GitOps
+enable_flux: false
+enable_dapr: false
+# Compliance
+enable_fips: false
+enable_backup: false
+enable_cost_analysis: false
+
+# Basic Inputs (Do not modify)
+iac_type: "terraform"
+bootstrap_module_name: "aksapplz_github"
+starter_module_name: "aks_landing_zone"

@@ -1,0 +1,19 @@
+# CI Caller Workflow - Triggered on Pull Requests
+# Calls the reusable CI template from the templates repository
+name: "01 AKS Landing Zone Continuous Integration"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  CI:
+    uses: ${{ github.repository_owner }}/aksapplz-templates/.github/workflows/ci-template.yaml@main
+    with:
+      environment: aksapplz-plan
+    secrets: inherit
