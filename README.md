@@ -20,29 +20,37 @@ Then GitHub Actions deploys the AKS landing zone.
 │ Phase 0 │→ │ Phase 1  │→ │ Phase 2      │→ │ Phase 3         │
 │ Plan    │  │ Pre-reqs │  │ Bootstrap    │  │ Run             │
 │         │  │          │  │              │  │                 │
-│ Pick    │  │ Tools,   │  │ Deploy-AKS-  │  │ GitHub Actions  │
-│ scenario│  │ perms,   │  │ LandingZone  │  │ provisions AKS  │
-│ + fill  │  │ PATs,    │  │ runs         │  │ landing zone    │
-│ inputs  │  │ hub VNet │  │ Terraform    │  │ from workload   │
-│ .yaml   │  │ info     │  │              │  │ repo            │
+│ Make    │  │ Tools,   │  │ Fill inputs  │  │ GitHub Actions  │
+│ all     │  │ perms,   │  │ .yaml from   │  │ provisions AKS  │
+│ decisions│ │ PATs,    │  │ checklist +  │  │ landing zone    │
+│ in the  │  │ hub VNet │  │ run cmdlet   │  │ from workload   │
+│ checklist│ │ info     │  │              │  │ repo            │
 └─────────┘  └──────────┘  └──────────────┘  └─────────────────┘
    You          You           Cmdlet            CI/CD
 ```
 
 | Phase | Owner | Time | Output |
 |---|---|---|---|
-| **0 — Plan** | You | 30 min | A complete `config/inputs.yaml` |
+| **0 — Plan** | You + architects | 30–60 min | Filled-in planning checklist (every decision agreed on paper) |
 | **1 — Pre-reqs** | You | 15 min | Tools installed, `az login` done, 2 PATs in env vars |
-| **2 — Bootstrap** | `Deploy-AKSLandingZone` | 10–15 min | Azure bootstrap RGs + workload GitHub repo |
+| **2 — Bootstrap** | `Deploy-AKSLandingZone` | 10–15 min | `inputs.yaml` populated from the checklist → Azure bootstrap RGs + workload GitHub repo |
 | **3 — Run** | GitHub Actions | 25–40 min | AKS cluster + supporting resources |
 
 ---
 
 ## Phase 0 — Plan
 
-Open [config/inputs.yaml](config/inputs.yaml) and fill it in. The 11 decisions below map 1:1 to the file.
+**Make every decision on paper before you touch the keyboard.** Do not edit `inputs.yaml` in this phase — that happens in Phase 2 once the decisions are signed off.
 
-### 0.1 Pick a scenario
+### 0.1 Use the planning artifacts
+
+| Artifact | Use it for |
+|---|---|
+| [config/checklist.xlsx](config/checklist.xlsx) | **Primary.** One row per decision — fill with architects, networking, security, and platform teams in a single meeting. |
+| [ALZ.AKS/docs/deployment-checklist.md](ALZ.AKS/docs/deployment-checklist.md) | Markdown checklist version — use for PR reviews / async sign-off. |
+| [ALZ.AKS/docs/scenarios-and-options.md](ALZ.AKS/docs/scenarios-and-options.md) | Full reference for every option and scenario default. |
+
+### 0.2 Pick a scenario
 
 | Scenario | Use when | Differences from baseline |
 |---|---|---|
@@ -51,25 +59,23 @@ Open [config/inputs.yaml](config/inputs.yaml) and fill it in. The 11 decisions b
 | `multi_region_baseline` | Active/active across two regions | Adds `secondary_location` + ACR geo-replication |
 | `multi_region_regulated` | Multi-region, regulated workloads | Combines both |
 
-Full option matrix: [ALZ.AKS/docs/scenarios-and-options.md](ALZ.AKS/docs/scenarios-and-options.md).
+### 0.3 Decisions to record in the checklist
 
-### 0.2 Fill the 11 decisions
-
-| # | Field(s) in `inputs.yaml` | What to provide |
+| # | Decision | Who decides |
 |---|---|---|
-| 1 | `bootstrap_location` | Azure region for bootstrap RGs (e.g. `swedencentral`) |
-| 2 | `aks_landing_zone_subscription_id` | Sub where AKS will be deployed |
-| 3 | `connectivity_subscription_id` | Sub holding the ALZ hub VNet + firewall |
-| 4 | `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip` | From your existing ALZ hub |
-| 5 | `spoke_vnet_address_space` + 6 subnet prefixes | Must not overlap with hub or other spokes |
-| 6 | `kubernetes_version`, `aks_sku_tier`, `aks_private_cluster`, `aks_admin_group_object_ids` | Entra group object ID for K8s cluster-admin RBAC |
-| 7 | `bootstrap_subscription_id` | Where tfstate + identities live (usually = landing-zone sub) |
-| 8 | `service_name`, `environment_name`, `postfix_number` | Resources are named `{service}-{env}-{postfix}` |
-| 9 | `use_self_hosted_runners`, `use_private_networking` | `true` requires Token-2 + adds ACI runner |
-| 10 | `github_organization_name`, `apply_approvers` | Org name + GitHub user(s) that approve `apply` |
-| 11 | Feature flags (`enable_defender`, `enable_workload_identity`, `enable_prometheus`, …) | Scenario defaults are usually correct |
+| 1 | Bootstrap Azure region | Platform |
+| 2 | AKS landing-zone subscription ID | Platform |
+| 3 | Connectivity subscription ID (hub) | Platform / Networking |
+| 4 | Hub VNet resource ID, name, RG, firewall private IP | Networking |
+| 5 | Spoke VNet + 6 subnet CIDRs (no overlap with hub/other spokes) | Networking |
+| 6 | Kubernetes version, SKU tier, private cluster yes/no, Entra cluster-admin group object ID | Platform / Security |
+| 7 | Bootstrap subscription ID (usually = decision 2) | Platform |
+| 8 | `service_name`, `environment_name`, `postfix_number` (resources are named `{service}-{env}-{postfix}`) | Platform |
+| 9 | Self-hosted runners yes/no, private networking yes/no | Platform / Security |
+| 10 | GitHub organization name, list of `apply_approvers` (GitHub usernames) | Platform / DevOps |
+| 11 | Feature flags (Defender, Workload Identity, Prometheus, Grafana, App Gateway, KEDA, Istio, Flux, Dapr, Backup, Cost Analysis, FIPS, ACR geo-replication, …) | Security / Platform |
 
-> Planning workbook (Excel): [config/checklist.xlsx](config/checklist.xlsx) — fill with architects, then transcribe to `inputs.yaml`.
+**Exit criteria for Phase 0:** every row in the checklist has an answer, signed off by the responsible team. Now proceed to Phase 1.
 
 ---
 
@@ -126,6 +132,28 @@ Full pre-flight checklist: [ALZ.AKS/docs/deployment-checklist.md](ALZ.AKS/docs/d
 
 ## Phase 2 — Bootstrap
 
+### 2.1 Transcribe the checklist into `inputs.yaml`
+
+Open [config/inputs.yaml](config/inputs.yaml) and fill each field from the Phase 0 checklist. The fields map 1:1 to the 11 decisions:
+
+| Decision (Phase 0) | Field(s) in `inputs.yaml` |
+|---|---|
+| 1 | `bootstrap_location` |
+| 2 | `aks_landing_zone_subscription_id` |
+| 3 | `connectivity_subscription_id` |
+| 4 | `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip` |
+| 5 | `spoke_vnet_address_space`, `subnet_address_prefix_*` (6 subnets) |
+| 6 | `kubernetes_version`, `aks_sku_tier`, `aks_private_cluster`, `aks_admin_group_object_ids` |
+| 7 | `bootstrap_subscription_id` |
+| 8 | `service_name`, `environment_name`, `postfix_number` |
+| 9 | `use_self_hosted_runners`, `use_private_networking` |
+| 10 | `github_organization_name`, `apply_approvers` |
+| 11 | `enable_*` feature flags + `scenario` |
+
+Do not put PATs in this file — they live only in env vars (Phase 1.4).
+
+### 2.2 Run the cmdlet
+
 ```powershell
 # Clone + import
 git clone <repo-url> aksapplz
@@ -144,13 +172,13 @@ Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -PlanOnly
 Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
 ```
 
-### What the cmdlet does
+### 2.3 What the cmdlet does
 
 1. **Preflight** — verifies tools, `az login`, registers `Microsoft.ContainerInstance` (idempotent), checks PATs.
 2. **Render** — converts `inputs.yaml` → `bootstrap/alz/github/terraform.tfvars.json` and embeds the workload Terraform + workflow templates as a `repository_files` map.
 3. **Terraform init + plan + apply** against `bootstrap/alz/github/`.
 
-### Parameters
+### 2.4 Parameters
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -160,7 +188,7 @@ Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
 | `-SkipPreflight` | no | Skip tool / login / RP checks (advanced) |
 | `-BootstrapRoot` | no | Override the composition path (default `<repo>/bootstrap/alz/github`) |
 
-### What gets created
+### 2.5 What gets created
 
 **Azure** (two resource groups, named from `service_name`/`env`/`postfix`):
 - tfstate storage account + container (AAD-only)
