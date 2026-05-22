@@ -27,7 +27,7 @@
     PowerShellVersion = '7.0'
 
     # Functions to export from this module
-    FunctionsToExport = @('Deploy-AKSLandingZone')
+    FunctionsToExport = @('Deploy-AKSLandingZone', 'Invoke-AKSLandingZoneTerraform')
 
     # Cmdlets to export from this module
     CmdletsToExport   = @()

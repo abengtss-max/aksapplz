@@ -2264,6 +2264,260 @@ function Invoke-Destroy {
 
 
 # =============================================================================
+# Terraform-based Bootstrap (Phase 7 — AVM)
+# =============================================================================
+# Renders bootstrap/alz/github/terraform.tfvars.json from the wizard config
+# and the repository_files map (terraform/*.tf + workflows/*.yaml) that the
+# github module pushes into the workload repository.
+
+function New-TerraformTfvarsJson {
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][string]$BootstrapRoot,
+        [Parameter(Mandatory)][hashtable]$RepositoryFiles
+    )
+
+    # Pass-through map: every wizard input the workload repo will need at apply time.
+    # Stored verbatim under aks_landing_zone_inputs so the workload tfvars can
+    # reference whatever fields it wants.
+    $passThrough = @{}
+    foreach ($k in $Config.Keys) {
+        # Strip PATs and noise; never write secrets into tfvars.json.
+        if ($k -in @('github_personal_access_token','github_runners_personal_access_token')) { continue }
+        $passThrough[$k] = $Config[$k]
+    }
+
+    $tfvars = [ordered]@{
+        scenario                              = $Config.scenario
+        bootstrap_location                    = $Config.bootstrap_location
+        secondary_location                    = $Config.secondary_location
+        service_name                          = $Config.service_name
+        environment_name                      = $Config.environment_name
+        postfix_number                        = [int]$Config.postfix_number
+        tenant_id                             = $Config.tenant_id
+        bootstrap_subscription_id             = $Config.bootstrap_subscription_id
+        aks_landing_zone_subscription_id      = $Config.aks_landing_zone_subscription_id
+        connectivity_subscription_id          = $Config.connectivity_subscription_id
+        hub_vnet_resource_id                  = $Config.hub_vnet_resource_id
+        hub_vnet_name                         = $Config.hub_vnet_name
+        hub_vnet_resource_group_name          = $Config.hub_vnet_resource_group_name
+        hub_firewall_private_ip               = $Config.hub_firewall_private_ip
+        github_organization_name              = $Config.github_organization_name
+        apply_approvers                       = @($Config.apply_approvers)
+        use_self_hosted_runners               = [bool]$Config.use_self_hosted_runners
+        use_private_networking                = [bool]$Config.use_private_networking
+        repository_files                      = $RepositoryFiles
+        aks_landing_zone_inputs               = $passThrough
+        tags                                  = @{ managedBy = "aksapplz-bootstrap-terraform"; service = $Config.service_name; environment = $Config.environment_name }
+    }
+
+    $outPath = Join-Path $BootstrapRoot "terraform.tfvars.json"
+    $json    = $tfvars | ConvertTo-Json -Depth 12
+    Set-Content -Path $outPath -Value $json -Encoding UTF8
+    Write-Log "Wrote $outPath" -Severity "SUCCESS"
+    return $outPath
+}
+
+function Get-RepositoryFilesMap {
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [string]$TemplateRoot
+    )
+
+    if ([string]::IsNullOrEmpty($TemplateRoot)) { $TemplateRoot = $script:TemplateRoot }
+
+    $files = @{}
+
+    # Terraform code -> /terraform/*.tf in the workload repo
+    $tfSrc = Join-Path $TemplateRoot "terraform"
+    if (Test-Path $tfSrc) {
+        foreach ($f in Get-ChildItem -Path $tfSrc -Recurse -File) {
+            $rel = "terraform/$($f.Name)"
+            $files[$rel] = (Get-Content $f.FullName -Raw)
+        }
+    }
+
+    # Workflows (caller copies only — templates stay private to the workload repo)
+    $wfSrc = Join-Path $TemplateRoot "workflows"
+    if (Test-Path $wfSrc) {
+        foreach ($wfFile in @("ci.yaml","cd.yaml")) {
+            $p = Join-Path $wfSrc $wfFile
+            if (Test-Path $p) {
+                $content = Get-Content $p -Raw
+                # Best-effort placeholder substitution — workload workflows are simple.
+                $content = $content -replace '__ORG_NAME__',          $Config.github_organization_name
+                $content = $content -replace '__PLAN_ENVIRONMENT__',  "plan"
+                $content = $content -replace '__APPLY_ENVIRONMENT__', "apply"
+                $files[".github/workflows/$wfFile"] = $content
+            }
+        }
+    }
+
+    # tfvars file (rendered from wizard answers) -> aks-landing-zone.auto.tfvars
+    # Reuse Write-TfvarsFile by piping its output through a temp file.
+    $tmp = [System.IO.Path]::GetTempFileName()
+    try {
+        Write-TfvarsFile -Config $Config -OutputPath $tmp
+        $files["aks-landing-zone.auto.tfvars"] = (Get-Content $tmp -Raw)
+    } finally {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    }
+
+    # .gitignore — keep workload repo tidy
+    $files[".gitignore"] = @"
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
+"@
+
+    return $files
+}
+
+function Invoke-AKSLandingZoneTerraform {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$InputConfigPath,
+        [Parameter()][string]$BootstrapRoot,
+        [Parameter()][switch]$AutoApprove,
+        [Parameter()][switch]$PlanOnly,
+        [Parameter()][switch]$SkipPreflight
+    )
+
+    Show-Banner
+    Write-Log "=== Terraform Bootstrap (Phase 7 — AVM) ===" -Severity "INFO"
+
+    # ── Resolve bootstrap composition path ──
+    if ([string]::IsNullOrEmpty($BootstrapRoot)) {
+        $repoRoot      = Split-Path -Parent $script:ModuleRoot
+        $BootstrapRoot = Join-Path $repoRoot "bootstrap/alz/github"
+    }
+    if (!(Test-Path $BootstrapRoot)) {
+        Write-Log "Bootstrap root not found: $BootstrapRoot" -Severity "ERROR"
+        Write-Log "Pass -BootstrapRoot pointing to <repo>/bootstrap/alz/github." -Severity "INFO"
+        return
+    }
+    Write-Log "Bootstrap composition: $BootstrapRoot" -Severity "INFO"
+
+    # ── Preflight ──
+    if (!$SkipPreflight) {
+        foreach ($cmd in @('terraform','az','gh')) {
+            if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+                Write-Log "Required tool not found on PATH: $cmd" -Severity "ERROR"
+                return
+            }
+        }
+        $tfVer = (terraform version -json | ConvertFrom-Json).terraform_version
+        Write-Log "terraform $tfVer detected" -Severity "SUCCESS"
+
+        $acct = az account show -o json 2>$null | ConvertFrom-Json
+        if (-not $acct) { Write-Log "az not logged in. Run 'az login'." -Severity "ERROR"; return }
+        Write-Log "az logged in as $($acct.user.name), tenant $($acct.tenantId)" -Severity "SUCCESS"
+
+        if ([string]::IsNullOrEmpty($env:TF_VAR_github_personal_access_token)) {
+            Write-Log "TF_VAR_github_personal_access_token is not set." -Severity "ERROR"
+            Write-Log "Export a fine-grained PAT (admin:org + repo) before re-running." -Severity "INFO"
+            return
+        }
+    }
+
+    # ── Load wizard config ──
+    if (!(Test-Path $InputConfigPath)) {
+        Write-Log "Input config not found: $InputConfigPath" -Severity "ERROR"; return
+    }
+    Write-Log "Loading $InputConfigPath" -Severity "INFO"
+    $config = Read-FlatYaml -Path $InputConfigPath
+
+    # Make sure tenant_id is present (Read-FlatYaml does not derive it).
+    if ([string]::IsNullOrEmpty($config.tenant_id)) {
+        $config.tenant_id = (az account show --query tenantId -o tsv).Trim()
+        Write-Log "Derived tenant_id from az context: $($config.tenant_id)" -Severity "INFO"
+    }
+
+    # ── Build repository_files map ──
+    Write-Log "Building repository_files map from /terraform and /workflows templates..." -Severity "INFO"
+    $repoFiles = Get-RepositoryFilesMap -Config $config
+    Write-Log "Repository files: $($repoFiles.Keys.Count) entries" -Severity "SUCCESS"
+
+    # ── Render terraform.tfvars.json ──
+    $tfvarsJson = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFiles
+
+    # ── terraform init + plan/apply ──
+    Push-Location $BootstrapRoot
+    try {
+        Write-Log "Running terraform init..." -Severity "INFO"
+        terraform init -input=false -upgrade
+        if ($LASTEXITCODE -ne 0) { Write-Log "terraform init failed." -Severity "ERROR"; return }
+
+        if ($PlanOnly) {
+            Write-Log "Running terraform plan (-PlanOnly mode)..." -Severity "INFO"
+            terraform plan -input=false -out=bootstrap.tfplan
+            if ($LASTEXITCODE -ne 0) { Write-Log "terraform plan failed." -Severity "ERROR"; return }
+            Write-Log "Plan saved to bootstrap.tfplan. Exiting (PlanOnly)." -Severity "SUCCESS"
+            return
+        }
+
+        $applyArgs = @('apply','-input=false')
+        if ($AutoApprove) { $applyArgs += '-auto-approve' }
+        Write-Log "Running terraform apply..." -Severity "INFO"
+        terraform @applyArgs
+        if ($LASTEXITCODE -ne 0) { Write-Log "terraform apply failed." -Severity "ERROR"; return }
+
+        # ── Capture outputs ──
+        $outputs = terraform output -json | ConvertFrom-Json
+        $rg      = $outputs.backend_resource_group_name.value
+        $sa      = $outputs.backend_storage_account_name.value
+        $ct      = $outputs.backend_container_name.value
+        $repoUrl = $outputs.repository_html_url.value
+        Write-Log "Backend: rg=$rg sa=$sa container=$ct" -Severity "SUCCESS"
+        Write-Log "Workload repo: $repoUrl" -Severity "SUCCESS"
+
+        # ── Migrate state to the storage account just created ──
+        $backendTf = @"
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "$rg"
+    storage_account_name = "$sa"
+    container_name       = "$ct"
+    key                  = "bootstrap.tfstate"
+    use_azuread_auth     = true
+    subscription_id      = "$($config.bootstrap_subscription_id)"
+    tenant_id            = "$($config.tenant_id)"
+  }
+}
+"@
+        $backendPath = Join-Path $BootstrapRoot "backend.tf"
+        Set-Content -Path $backendPath -Value $backendTf -Encoding UTF8
+        Write-Log "Wrote $backendPath" -Severity "SUCCESS"
+
+        Write-Log "Migrating state to azurerm backend..." -Severity "INFO"
+        terraform init -migrate-state -force-copy -input=false
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight." -Severity "WARNING"
+        } else {
+            Write-Log "State migrated to $sa/$ct/bootstrap.tfstate" -Severity "SUCCESS"
+        }
+
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "  ║   Terraform Bootstrap Complete                              ║" -ForegroundColor Green
+        Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Host "  Workload repository : $repoUrl" -ForegroundColor White
+        Write-Host "  Backend             : $sa / $ct" -ForegroundColor White
+        Write-Host "  Identities          : $($outputs.managed_identity_client_ids.value | ConvertTo-Json -Compress)" -ForegroundColor White
+        if ($outputs.container_registry_login_server.value) {
+            Write-Host "  ACR / runner image  : $($outputs.runner_image.value)" -ForegroundColor White
+        }
+        Write-Host ""
+        Write-Host "  Next: open the workload repo, review files, then trigger the CD workflow." -ForegroundColor Yellow
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# =============================================================================
 # ████████  PUBLIC FUNCTION: Deploy-AKSLandingZone  ████████
 # =============================================================================
 
@@ -2666,4 +2920,4 @@ function Deploy-AKSLandingZone {
 # =============================================================================
 # Export the public function
 # =============================================================================
-Export-ModuleMember -Function Deploy-AKSLandingZone
+Export-ModuleMember -Function Deploy-AKSLandingZone, Invoke-AKSLandingZoneTerraform

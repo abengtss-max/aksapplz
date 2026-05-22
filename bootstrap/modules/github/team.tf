@@ -18,7 +18,7 @@ resource "github_team_membership" "approvers" {
 }
 
 resource "github_team_repository" "this" {
-  count      = local.team_id == null ? 0 : 1
+  count      = (var.create_team || var.existing_team_name != "") ? 1 : 0
   team_id    = local.team_id
   repository = github_repository.this.name
   permission = "push"
