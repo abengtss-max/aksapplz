@@ -35,11 +35,18 @@ cd aksapplz
 # Import the module for the current PowerShell session
 Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force
 
-# Verify the command is available
-Get-Command Deploy-AKSLandingZone
+# Verify both commands are available
+Get-Command Deploy-AKSLandingZone, Invoke-AKSLandingZoneTerraform
 ```
 
-> The `bootstrap/Deploy-AKSLandingZone.ps1` script in the repo root is an older standalone version retained for reference. **Use the `ALZ.AKS` module** — it is the canonical implementation and is kept in sync with the embedded templates.
+> The module ships **two cmdlets**:
+>
+> | Cmdlet | Bootstrap engine |
+> |---|---|
+> | `Deploy-AKSLandingZone` | Original imperative implementation (PowerShell + `az` + `gh` calls). Kept for backwards compatibility. |
+> | `Invoke-AKSLandingZoneTerraform` | **Recommended.** Renders `terraform.tfvars.json` and drives a Terraform composition under `bootstrap/alz/github/` (Azure + GitHub modules, AVM-first). Idempotent and matches the upstream ALZ accelerator pattern. |
+>
+> The `bootstrap/Deploy-AKSLandingZone.ps1` script in the repo root is the older standalone version retained for reference. **Use the `ALZ.AKS` module** — it is the canonical implementation and is kept in sync with the embedded templates.
 
 ---
 
@@ -87,7 +94,10 @@ This is a stricter subset of the upstream [ALZ permissions doc](https://azure.gi
 
 - **You must use a GitHub organization** — personal accounts are not supported (same constraint as upstream ALZ; they don't expose the org features we need).
 - You must be a member of the org with permission to create repositories. Token-1 (below) does the actual repo creation, so an org Owner role is not strictly required as long as the PAT can write to "All repositories".
-- Free organizations are supported but the bootstrap will make the repos **public** (required for free-tier Actions features). Use a paid organization for private repos in production.
+- **GitHub org plan matters:**
+  - **Free org** — supported. The Terraform composition detects the plan via `data.github_organization` and **automatically skips** features the Free plan does not support on private repos: `github_branch_protection.main` and the `required_reviewers` + `deployment_branch_policy` blocks on the `apply` environment. The bootstrap still creates the repo as **private** with workflows, OIDC, environments, and federated identity credentials.
+  - **Team / Enterprise org** — full feature set: `main` branch protection (PR + linear history + conversation resolution), and the `apply` environment is gated on the approver team with `deployment_branch_policy.protected_branches = true`.
+  - To upgrade later, upgrade the org plan on github.com, then re-run `Invoke-AKSLandingZoneTerraform` — Terraform will create the previously-skipped resources without touching the rest.
 
 ### 2.3 GitHub Personal Access Tokens — fine-grained
 
@@ -274,6 +284,42 @@ Useful flags:
 - `-Destroy` — print the destroy procedure (see [Destroy](#destroy)).
 
 You'll see headers for **Pre-flight + Steps 1/6 … 6/6** and a final summary box with all created resources.
+
+### Step 5.5 — Alternative: Terraform-based bootstrap (`Invoke-AKSLandingZoneTerraform`)
+
+`Invoke-AKSLandingZoneTerraform` is the new, recommended bootstrap engine. Instead of running `az` and `gh` imperatively, it renders `bootstrap/alz/github/terraform.tfvars.json` from your `inputs.yaml` and runs Terraform against the `bootstrap/alz/github/` composition (AVM modules for ACR, VNet, NAT gateway, storage; native resources for managed identities, federated credentials, GitHub repo/team/environments/files).
+
+```powershell
+# Pre-set both PATs (the cmdlet does not prompt)
+$env:TF_VAR_github_personal_access_token         = "github_pat_..."   # token-1 (admin:org + repo)
+$env:TF_VAR_github_runners_personal_access_token = "github_pat_..."   # token-2 (only when use_self_hosted_runners = true)
+
+# Plan-only (no changes applied)
+Invoke-AKSLandingZoneTerraform -PlanOnly
+
+# Apply
+Invoke-AKSLandingZoneTerraform -AutoApprove
+```
+
+Notable flags:
+
+| Flag | Effect |
+|---|---|
+| `-InputConfigPath <path>` | Override the default `<repo>/config/inputs.yaml`. |
+| `-BootstrapRoot <path>` | Override the default `<repo>/bootstrap/alz/github`. |
+| `-PlanOnly` | Run `terraform init` + `terraform plan` and stop. |
+| `-AutoApprove` | Skip the apply confirmation. |
+| `-SkipPreflight` | Skip tool/`az`/RP/PAT checks (advanced; not recommended). |
+
+What the cmdlet does:
+
+1. **Preflight** — checks `terraform`, `az`, `gh` are on `PATH`; confirms `az` is logged in; runs `az provider register --namespace Microsoft.ContainerInstance` (idempotent); verifies the PAT env vars are set.
+2. **Renders `terraform.tfvars.json`** — flattens `inputs.yaml` and embeds the 13 workload Terraform files + 2 workflow files as a `repository_files` map (so the composition can `github_repository_file` them into the generated repo without touching disk).
+3. **`terraform init -upgrade`** then **`terraform plan -out=bootstrap.tfplan`** then **`terraform apply bootstrap.tfplan`**.
+4. On Free GitHub orgs, automatically skips `github_branch_protection` and environment `required_reviewers` (see [Section 2.2](#22-github-account--organization)).
+5. Writes `bootstrap.tfplan` and `terraform.tfstate` locally under `bootstrap/alz/github/`; `apply*.log` and the `.tfstate*` files are gitignored.
+
+Outputs include the ACR login server, GitHub repo URL, managed identity client IDs, backend storage account name, and the runner image tag.
 
 ---
 
@@ -503,7 +549,13 @@ The Pre-flight step registers all required providers (ContainerService, Network,
 - Happens on re-runs when ACR is already locked down. The module temporarily flips `public-network-enabled true` + `default-action Allow` for the build, then re-locks. If your environment forbids the public toggle, run `az acr build` from a peered network.
 
 ### Branch protection fails to set
-- Free GitHub orgs only support protected branches on **public** repos. The module already creates public repos by default; for private, upgrade to GitHub Pro/Team.
+- Free GitHub orgs do not support `github_branch_protection` or environment `required_reviewers` on private repos. `Invoke-AKSLandingZoneTerraform` detects this and silently skips both. Upgrade to Team/Enterprise and re-run to enable them.
+
+### ACR Tasks fail with `client with IP '…' is not allowed access`
+- ACR Tasks run on Azure-managed public agents and cannot reach a registry that has `public_network_access_enabled = false`. The composition therefore keeps ACR public access **enabled** while still provisioning the private endpoint for in-VNet traffic (`network_rule_bypass_option = "AzureServices"`). If your environment forbids public ACR endpoints, switch to a dedicated ACR Tasks agent pool inside the spoke VNet or build the runner image out-of-band.
+
+### `azurerm_resource_provider_registration: provider is already registered`
+- `Microsoft.ContainerInstance` is often pre-registered at the subscription level by other tooling. `Invoke-AKSLandingZoneTerraform` runs `az provider register --namespace Microsoft.ContainerInstance` in preflight (idempotent) instead of letting Terraform own the registration.
 
 ---
 
@@ -553,8 +605,18 @@ aksapplz/
 │   ├── TEST-PLAN.md
 │   └── TEST-RESULTS.md
 │
-├── bootstrap/                       # ← Legacy standalone script (kept for reference)
-│   └── Deploy-AKSLandingZone.ps1
+├── bootstrap/                       # ← Terraform bootstrap composition + legacy script
+│   ├── Deploy-AKSLandingZone.ps1    #   legacy standalone PowerShell bootstrap (reference)
+│   ├── alz/
+│   │   └── github/                  #   root composition driven by Invoke-AKSLandingZoneTerraform
+│   │       ├── main.tf              #     wires modules/azure + modules/github + modules/resource_names
+│   │       ├── variables.tf
+│   │       ├── outputs.tf
+│   │       └── terraform.tf         #     provider versions + backend
+│   └── modules/
+│       ├── resource_names/          #   computes the deterministic Azure + GitHub names
+│       ├── azure/                   #   RGs, storage, UAMI, ACR, ACI, VNet, NAT, private endpoints
+│       └── github/                  #   repo, team, environments, action vars, repo files, branch protection (paid plan only)
 ├── terraform/                       # ← Legacy copy of templates (kept for reference)
 ├── workflows/                       # ← Legacy copy of templates (kept for reference)
 ├── config/                          # Planning workbook + legacy yaml/tfvars
