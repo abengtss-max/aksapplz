@@ -36,20 +36,9 @@ variable "github_organization_name" {
   type        = string
 }
 
-variable "managed_identities" {
-  description = <<-EOT
-    Map of UAMI logical names => federated credential definitions.
-    Typical keys: 'plan', 'apply'.
-  EOT
-  type = map(object({
-    federated_credentials = map(object({
-      subject = string
-    }))
-    role_assignments = list(object({
-      scope                = string
-      role_definition_name = string
-    }))
-  }))
+variable "repository_name" {
+  description = "Workload repository name (used in federated credential subject)."
+  type        = string
 }
 
 # --- Self-hosted runners (ACI) -------------------------------------------------
@@ -108,4 +97,17 @@ variable "storage_account_replication_type" {
   description = "Replication SKU for the Terraform state storage account."
   type        = string
   default     = "ZRS"
+}
+
+variable "allow_storage_access_from_my_ip" {
+  description = "When true, add the operator's public IP to the storage account network rules (private deployments only)."
+  type        = bool
+  default     = false
+}
+
+# --- Tagging -------------------------------------------------------------------
+variable "tags" {
+  description = "Tags applied to all bootstrap resources."
+  type        = map(string)
+  default     = {}
 }

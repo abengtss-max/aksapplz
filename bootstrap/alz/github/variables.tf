@@ -122,6 +122,14 @@ variable "use_private_networking" {
   default     = true
 }
 
+variable "tags" {
+  description = "Tags applied to all bootstrap resources."
+  type        = map(string)
+  default = {
+    managedBy = "aksapplz-bootstrap-terraform"
+  }
+}
+
 # --- Pass-through (rendered into repo files; not consumed by bootstrap) -------
 variable "aks_landing_zone_inputs" {
   description = "Free-form pass-through map written verbatim into the workload repo's tfvars."
