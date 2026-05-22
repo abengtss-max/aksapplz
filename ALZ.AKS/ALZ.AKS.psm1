@@ -2387,24 +2387,27 @@ function Get-RepositoryFilesMap {
     Deploy the AKS Application Landing Zone bootstrap using the Terraform composition.
 
 .DESCRIPTION
-    Recommended entry point. Renders `bootstrap/alz/github/terraform.tfvars.json` from
-    your wizard-produced `inputs.yaml` (and embeds the workload Terraform + workflow
-    templates as a `repository_files` map), then runs `terraform init` + `plan` +
-    `apply` against the bootstrap composition. Idempotent; safe to re-run.
+    Single entry point for both interactive and advanced (non-interactive) workflows.
 
-    Use Deploy-AKSLandingZoneLegacy if you need the original imperative bootstrap
-    (PowerShell + `az` + `gh` calls) — that flow also runs the interactive wizard
-    that generates `inputs.yaml` in the first place.
+    INTERACTIVE MODE (recommended) — invoke without -InputConfigPath. The cmdlet
+    walks you through every decision, writes `<repo>/config/inputs.yaml` for you,
+    asks for confirmation, then renders `bootstrap/alz/github/terraform.tfvars.json`
+    and runs `terraform init` + `plan` + `apply` against the bootstrap composition.
+
+    ADVANCED MODE — pass -InputConfigPath pointing to a pre-filled inputs.yaml.
+    Skips the wizard and goes straight to render + Terraform.
+
+    Idempotent; safe to re-run.
 
 .PARAMETER InputConfigPath
-    Path to the wizard-generated inputs.yaml (typically `<repo>/config/inputs.yaml`).
-    Generate one with `Deploy-AKSLandingZoneLegacy` (no arguments) if you do not have one.
+    Path to a wizard-generated inputs.yaml. Omit to run the interactive wizard
+    (the wizard will write `<repo>/config/inputs.yaml` and use it).
 
 .PARAMETER BootstrapRoot
     Optional. Defaults to `<repo>/bootstrap/alz/github` (the Terraform composition shipped with this module).
 
 .PARAMETER AutoApprove
-    Pass `-auto-approve` to `terraform apply`.
+    Pass `-auto-approve` to `terraform apply` (and skip the post-wizard "ready to bootstrap?" prompt).
 
 .PARAMETER PlanOnly
     Run `terraform init` + `terraform plan` and stop.
@@ -2413,17 +2416,19 @@ function Get-RepositoryFilesMap {
     Skip tool / `az login` / Microsoft.ContainerInstance RP / PAT checks. Advanced.
 
 .EXAMPLE
-    $env:TF_VAR_github_personal_access_token         = 'github_pat_...'
-    $env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'
-    Deploy-AKSLandingZone -InputConfigPath ~/aksapplz/config/inputs.yaml -PlanOnly
+    # Interactive (recommended)
+    Deploy-AKSLandingZone
 
 .EXAMPLE
-    Deploy-AKSLandingZone -InputConfigPath ~/aksapplz/config/inputs.yaml -AutoApprove
+    # Advanced — bring your own inputs.yaml
+    $env:TF_VAR_github_personal_access_token         = 'github_pat_...'
+    $env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'
+    Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
 #>
 function Deploy-AKSLandingZone {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$InputConfigPath,
+        [Parameter()][string]$InputConfigPath,
         [Parameter()][string]$BootstrapRoot,
         [Parameter()][switch]$AutoApprove,
         [Parameter()][switch]$PlanOnly,
@@ -2431,7 +2436,46 @@ function Deploy-AKSLandingZone {
     )
 
     Show-Banner
-    Write-Log "=== Terraform Bootstrap (Phase 7 — AVM) ===" -Severity "INFO"
+    Write-Log "=== AKS Application Landing Zone — Bootstrap ===" -Severity "INFO"
+
+    # ── Interactive wizard fallback when no config supplied ──
+    if ([string]::IsNullOrEmpty($InputConfigPath)) {
+        Write-Log "No -InputConfigPath provided — running interactive wizard." -Severity "INFO"
+
+        $repoRoot  = Split-Path -Parent $script:ModuleRoot
+        $configDir = Join-Path $repoRoot "config"
+        if (!(Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+
+        Write-Log "Querying Azure for subscriptions and regions..." -Severity "INFO"
+        $azureContext = Get-AzureContext
+
+        $config = Get-InteractiveInputs -AzureContext $azureContext
+        if ($null -eq $config) {
+            Write-Log "Wizard cancelled — no configuration written." -Severity "WARN"
+            return
+        }
+
+        $InputConfigPath = Join-Path $configDir "inputs.yaml"
+        $tfvarsPath      = Join-Path $configDir "aks-landing-zone.tfvars"
+        Write-InputsYaml -Config $config -OutputPath $InputConfigPath
+        Write-TfvarsFile -Config $config -OutputPath $tfvarsPath
+        Write-Log "Configuration written to $InputConfigPath" -Severity "SUCCESS"
+
+        Write-Host ""
+        Write-Log "PAT tokens are read from environment variables (never written to disk):" -Severity "INFO"
+        Write-Host "  TF_VAR_github_personal_access_token" -ForegroundColor Yellow
+        Write-Host "  TF_VAR_github_runners_personal_access_token  (only if use_self_hosted_runners = true)" -ForegroundColor Yellow
+        Write-Host ""
+
+        if (-not $AutoApprove -and -not $PlanOnly) {
+            Write-Log "Ready to run the Terraform bootstrap now?" -Severity "INPUT REQUIRED"
+            $proceed = Read-Host "Enter '[y]es' to continue or '[n]o' to stop here and review files"
+            if ($proceed -ne "y" -and $proceed -ne "yes") {
+                Write-Log "Stopped. Re-run with: Deploy-AKSLandingZone -InputConfigPath `"$InputConfigPath`"" -Severity "INFO"
+                return
+            }
+        }
+    }
 
     # ── Resolve bootstrap composition path ──
     if ([string]::IsNullOrEmpty($BootstrapRoot)) {

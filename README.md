@@ -20,10 +20,10 @@ Then GitHub Actions deploys the AKS landing zone.
 │ Phase 0 │→ │ Phase 1  │→ │ Phase 2      │→ │ Phase 3         │
 │ Plan    │  │ Pre-reqs │  │ Bootstrap    │  │ Run             │
 │         │  │          │  │              │  │                 │
-│ Make    │  │ Tools,   │  │ Fill inputs  │  │ GitHub Actions  │
-│ all     │  │ perms,   │  │ .yaml from   │  │ provisions AKS  │
-│ decisions│ │ PATs,    │  │ checklist +  │  │ landing zone    │
-│ in the  │  │ hub VNet │  │ run cmdlet   │  │ from workload   │
+│ Make    │  │ Tools,   │  │ Run wizard,  │  │ GitHub Actions  │
+│ all     │  │ perms,   │  │ confirm, then│  │ provisions AKS  │
+│ decisions│ │ PATs,    │  │ cmdlet runs  │  │ landing zone    │
+│ in the  │  │ hub VNet │  │ Terraform    │  │ from workload   │
 │ checklist│ │ info     │  │              │  │ repo            │
 └─────────┘  └──────────┘  └──────────────┘  └─────────────────┘
    You          You           Cmdlet            CI/CD
@@ -33,7 +33,7 @@ Then GitHub Actions deploys the AKS landing zone.
 |---|---|---|---|
 | **0 — Plan** | You + architects | 30–60 min | Filled-in planning checklist (every decision agreed on paper) |
 | **1 — Pre-reqs** | You | 15 min | Tools installed, `az login` done, 2 PATs in env vars |
-| **2 — Bootstrap** | `Deploy-AKSLandingZone` | 10–15 min | `inputs.yaml` populated from the checklist → Azure bootstrap RGs + workload GitHub repo |
+| **2 — Bootstrap** | `Deploy-AKSLandingZone` (interactive wizard, recommended) | 10–15 min | Azure bootstrap RGs + workload GitHub repo |
 | **3 — Run** | GitHub Actions | 25–40 min | AKS cluster + supporting resources |
 
 ---
@@ -132,27 +132,9 @@ Full pre-flight checklist: [ALZ.AKS/docs/deployment-checklist.md](ALZ.AKS/docs/d
 
 ## Phase 2 — Bootstrap
 
-### 2.1 Transcribe the checklist into `inputs.yaml`
+### 2.1 Interactive mode (recommended)
 
-Open [config/inputs.yaml](config/inputs.yaml) and fill each field from the Phase 0 checklist. The fields map 1:1 to the 11 decisions:
-
-| Decision (Phase 0) | Field(s) in `inputs.yaml` |
-|---|---|
-| 1 | `bootstrap_location` |
-| 2 | `aks_landing_zone_subscription_id` |
-| 3 | `connectivity_subscription_id` |
-| 4 | `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip` |
-| 5 | `spoke_vnet_address_space`, `subnet_address_prefix_*` (6 subnets) |
-| 6 | `kubernetes_version`, `aks_sku_tier`, `aks_private_cluster`, `aks_admin_group_object_ids` |
-| 7 | `bootstrap_subscription_id` |
-| 8 | `service_name`, `environment_name`, `postfix_number` |
-| 9 | `use_self_hosted_runners`, `use_private_networking` |
-| 10 | `github_organization_name`, `apply_approvers` |
-| 11 | `enable_*` feature flags + `scenario` |
-
-Do not put PATs in this file — they live only in env vars (Phase 1.4).
-
-### 2.2 Run the cmdlet
+You do **not** need to edit `inputs.yaml` yourself — the cmdlet generates it for you from the answers you give in the wizard, using the decisions you already captured in Phase 0.
 
 ```powershell
 # Clone + import
@@ -160,31 +142,70 @@ git clone <repo-url> aksapplz
 cd aksapplz
 Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force
 
-# Verify
+# Sanity-check
 Get-Command Deploy-AKSLandingZone
 az account show
-$env:TF_VAR_github_personal_access_token         # must be set
+$env:TF_VAR_github_personal_access_token         # must be set (Phase 1.4)
 
-# 1. Dry-run
-Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -PlanOnly
-
-# 2. Apply
-Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
+# Run the wizard, then bootstrap (single command)
+Deploy-AKSLandingZone
 ```
+
+What happens:
+
+1. The wizard prompts you for each decision (scenario → subscriptions → networking → AKS → naming → GitHub → feature flags), pre-populating defaults from the scenario you pick.
+2. It writes `config/inputs.yaml` (and a companion `config/aks-landing-zone.tfvars`).
+3. It asks **"ready to run the bootstrap now?"** — answer `y` to continue, `n` to stop and review the files.
+4. On `y`, the cmdlet proceeds straight to render + Terraform `init` + `plan` + `apply`.
+
+Add `-AutoApprove` to skip both the post-wizard confirmation and the `terraform apply` confirmation. Add `-PlanOnly` to stop after `terraform plan`.
+
+### 2.2 Advanced mode (non-interactive)
+
+For CI/CD pipelines or when you want to manage `inputs.yaml` in source control, pre-fill the file and pass it explicitly:
+
+1. Open [config/inputs.yaml](config/inputs.yaml) and fill each field from the Phase 0 checklist. Fields map 1:1 to the 11 decisions:
+
+   | Decision (Phase 0) | Field(s) in `inputs.yaml` |
+   |---|---|
+   | 1 | `bootstrap_location` |
+   | 2 | `aks_landing_zone_subscription_id` |
+   | 3 | `connectivity_subscription_id` |
+   | 4 | `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip` |
+   | 5 | `spoke_vnet_address_space`, `subnet_address_prefix_*` (6 subnets) |
+   | 6 | `kubernetes_version`, `aks_sku_tier`, `aks_private_cluster`, `aks_admin_group_object_ids` |
+   | 7 | `bootstrap_subscription_id` |
+   | 8 | `service_name`, `environment_name`, `postfix_number` |
+   | 9 | `use_self_hosted_runners`, `use_private_networking` |
+   | 10 | `github_organization_name`, `apply_approvers` |
+   | 11 | `enable_*` feature flags + `scenario` |
+
+   Do not put PATs in this file — they live only in env vars (Phase 1.4).
+
+2. Run the cmdlet with the path:
+
+   ```powershell
+   # Dry-run
+   Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -PlanOnly
+
+   # Apply
+   Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
+   ```
 
 ### 2.3 What the cmdlet does
 
-1. **Preflight** — verifies tools, `az login`, registers `Microsoft.ContainerInstance` (idempotent), checks PATs.
-2. **Render** — converts `inputs.yaml` → `bootstrap/alz/github/terraform.tfvars.json` and embeds the workload Terraform + workflow templates as a `repository_files` map.
-3. **Terraform init + plan + apply** against `bootstrap/alz/github/`.
+1. **Wizard** *(interactive mode only)* — prompts for each decision, writes `config/inputs.yaml`.
+2. **Preflight** — verifies tools, `az login`, registers `Microsoft.ContainerInstance` (idempotent), checks PATs.
+3. **Render** — converts `inputs.yaml` → `bootstrap/alz/github/terraform.tfvars.json` and embeds the workload Terraform + workflow templates as a `repository_files` map.
+4. **Terraform init + plan + apply** against `bootstrap/alz/github/`.
 
 ### 2.4 Parameters
 
 | Parameter | Required | Description |
 |---|---|---|
-| `-InputConfigPath` | yes | Path to your filled `inputs.yaml` |
+| `-InputConfigPath` | no | Path to a pre-filled `inputs.yaml`. **Omit to run the interactive wizard.** |
 | `-PlanOnly` | no | Run `init` + `plan`, stop before `apply` |
-| `-AutoApprove` | no | Skip the interactive `apply` confirmation |
+| `-AutoApprove` | no | Skip both the post-wizard "ready to bootstrap?" prompt and the `terraform apply` confirmation |
 | `-SkipPreflight` | no | Skip tool / login / RP checks (advanced) |
 | `-BootstrapRoot` | no | Override the composition path (default `<repo>/bootstrap/alz/github`) |
 
