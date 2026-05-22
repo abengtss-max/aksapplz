@@ -136,3 +136,10 @@ variable "aks_landing_zone_inputs" {
   type        = map(any)
   default     = {}
 }
+
+# --- Files to push into the workload repository -------------------------------
+variable "repository_files" {
+  description = "Map of repo-relative file paths to contents (rendered by the wizard from /terraform and /workflows)."
+  type        = map(string)
+  default     = {}
+}

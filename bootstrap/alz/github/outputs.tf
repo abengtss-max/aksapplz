@@ -34,3 +34,24 @@ output "runner_image" {
   description = "Runner image FQN built into ACR."
   value       = module.azure.runner_image
 }
+
+# --- GitHub --------------------------------------------------------------------
+output "repository_full_name" {
+  description = "Full org/repo name of the workload repository."
+  value       = module.github.repository_full_name
+}
+
+output "repository_html_url" {
+  description = "Web URL of the workload repository."
+  value       = module.github.repository_html_url
+}
+
+output "github_environment_names" {
+  description = "GitHub Actions environments created on the workload repo."
+  value       = module.github.environment_names
+}
+
+output "github_runner_group_name" {
+  description = "GitHub Actions runner group name (defaults to 'Default' when not created)."
+  value       = module.github.runner_group_name
+}
