@@ -1,7 +1,14 @@
 # -----------------------------------------------------------------------------
 # Networking - Spoke VNet, Subnets, NSGs, UDR, VNet Peering
 # Uses Azure Verified Module: avm-res-network-virtualnetwork
+#
+# Corp landing zone: UDR to hub firewall, VNet peering, private endpoints
 # -----------------------------------------------------------------------------
+
+locals {
+  # This accelerator deploys a corp (hub-spoke, private) landing zone.
+  is_corp = true
+}
 
 # Resource Group
 resource "azurerm_resource_group" "main" {
@@ -10,8 +17,10 @@ resource "azurerm_resource_group" "main" {
   tags     = local.default_tags
 }
 
-# Route Table - UDR to hub firewall
+# Route Table - UDR to hub firewall (Corp only)
 resource "azurerm_route_table" "aks" {
+  count = local.is_corp ? 1 : 0
+
   name                = local.route_table_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -25,9 +34,17 @@ resource "azurerm_route_table" "aks" {
   }
 }
 
-# NSG - AKS Nodes Subnet
-resource "azurerm_network_security_group" "aks_nodes" {
-  name                = local.nsg_aks_name
+# NSG - AKS System Node Pool Subnet
+resource "azurerm_network_security_group" "aks_system_nodes" {
+  name                = local.nsg_aks_system_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+}
+
+# NSG - AKS User Node Pool Subnet
+resource "azurerm_network_security_group" "aks_user_nodes" {
+  name                = local.nsg_aks_user_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   tags                = local.default_tags
@@ -35,6 +52,8 @@ resource "azurerm_network_security_group" "aks_nodes" {
 
 # NSG - Application Gateway Subnet
 resource "azurerm_network_security_group" "app_gateway" {
+  count = var.enable_app_gateway ? 1 : 0
+
   name                = local.nsg_appgw_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -90,8 +109,10 @@ resource "azurerm_network_security_group" "app_gateway" {
   }
 }
 
-# NSG - Private Endpoints Subnet
+# NSG - Private Endpoints Subnet (Corp only — Online uses public endpoints)
 resource "azurerm_network_security_group" "private_endpoints" {
+  count = local.is_corp ? 1 : 0
+
   name                = local.nsg_pe_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -127,66 +148,95 @@ module "spoke_vnet" {
   source  = "Azure/avm-res-network-virtualnetwork/azurerm"
   version = "~> 0.7"
 
-  name                = local.vnet_name
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  address_space       = [var.vnet_address_space]
-  tags                = local.default_tags
+  name          = local.vnet_name
+  parent_id     = azurerm_resource_group.main.id
+  location      = azurerm_resource_group.main.location
+  address_space = [var.vnet_address_space]
+  tags          = local.default_tags
 
-  subnets = {
-    aks_nodes = {
-      name             = local.subnets.aks_nodes.name
-      address_prefixes = local.subnets.aks_nodes.address_prefixes
-      network_security_group = {
-        id = azurerm_network_security_group.aks_nodes.id
-      }
-      route_table = {
-        id = azurerm_route_table.aks.id
-      }
-    }
-
-    aks_api_server = {
-      name             = local.subnets.aks_api_server.name
-      address_prefixes = local.subnets.aks_api_server.address_prefixes
-      delegation = [{
-        name = "Microsoft.ContainerService.managedClusters"
-        service_delegation = {
-          name = "Microsoft.ContainerService/managedClusters"
-          actions = [
-            "Microsoft.Network/virtualNetworks/subnets/join/action"
-          ]
+  subnets = merge(
+    # AKS system node pool subnet — dedicated for system pods (CriticalAddonsOnly)
+    {
+      aks_system_nodes = {
+        name             = local.subnets.aks_system_nodes.name
+        address_prefixes = local.subnets.aks_system_nodes.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.aks_system_nodes.id
         }
-      }]
-    }
-
-    app_gateway = {
-      name             = local.subnets.app_gateway.name
-      address_prefixes = local.subnets.app_gateway.address_prefixes
-      network_security_group = {
-        id = azurerm_network_security_group.app_gateway.id
+        route_table = local.is_corp ? {
+          id = azurerm_route_table.aks[0].id
+        } : null
+      }
+    },
+    # AKS user node pool subnet — dedicated for workload pods
+    {
+      aks_user_nodes = {
+        name             = local.subnets.aks_user_nodes.name
+        address_prefixes = local.subnets.aks_user_nodes.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.aks_user_nodes.id
+        }
+        route_table = local.is_corp ? {
+          id = azurerm_route_table.aks[0].id
+        } : null
+      }
+    },
+    # AKS API server subnet — always created (for VNet integration)
+    {
+      aks_api_server = {
+        name             = local.subnets.aks_api_server.name
+        address_prefixes = local.subnets.aks_api_server.address_prefixes
+        delegations = [{
+          name = "Microsoft.ContainerService.managedClusters"
+          service_delegation = {
+            name = "Microsoft.ContainerService/managedClusters"
+          }
+        }]
+      }
+    },
+    # App Gateway subnet — only if enabled
+    var.enable_app_gateway ? {
+      app_gateway = {
+        name             = local.subnets.app_gateway.name
+        address_prefixes = local.subnets.app_gateway.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.app_gateway[0].id
+        }
+      }
+    } : {},
+    # Private endpoints subnet — Corp only
+    local.is_corp ? {
+      private_endpoints = {
+        name             = local.subnets.private_endpoints.name
+        address_prefixes = local.subnets.private_endpoints.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.private_endpoints[0].id
+        }
+      }
+    } : {},
+    # Ingress subnet — always created
+    {
+      ingress = {
+        name             = local.subnets.ingress.name
+        address_prefixes = local.subnets.ingress.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.aks_user_nodes.id
+        }
       }
     }
-
-    private_endpoints = {
-      name             = local.subnets.private_endpoints.name
-      address_prefixes = local.subnets.private_endpoints.address_prefixes
-      network_security_group = {
-        id = azurerm_network_security_group.private_endpoints.id
-      }
-    }
-
-    ingress = {
-      name             = local.subnets.ingress.name
-      address_prefixes = local.subnets.ingress.address_prefixes
-      network_security_group = {
-        id = azurerm_network_security_group.aks_nodes.id
-      }
-    }
-  }
+  )
 }
+
+# =============================================================================
+# VNet Peering (Corp only)
+# In a Corp landing zone, the platform team provisions the hub. The spoke
+# peers to it and traffic is forced through the hub firewall via UDR.
+# =============================================================================
 
 # VNet Peering: Spoke -> Hub
 resource "azurerm_virtual_network_peering" "spoke_to_hub" {
+  count = local.is_corp ? 1 : 0
+
   name                         = "peer-spoke-to-hub"
   resource_group_name          = azurerm_resource_group.main.name
   virtual_network_name         = module.spoke_vnet.name
@@ -199,6 +249,7 @@ resource "azurerm_virtual_network_peering" "spoke_to_hub" {
 
 # VNet Peering: Hub -> Spoke
 resource "azurerm_virtual_network_peering" "hub_to_spoke" {
+  count    = local.is_corp ? 1 : 0
   provider = azurerm.connectivity
 
   name                         = "peer-hub-to-${local.name_prefix}"

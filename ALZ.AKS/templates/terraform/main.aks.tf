@@ -29,7 +29,7 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 # AKS Cluster using Azure Verified Module
 module "aks" {
   source  = "Azure/avm-res-containerservice-managedcluster/azurerm"
-  version = "~> 0.4"
+  version = "~> 0.4.0"
 
   name      = local.aks_name
   parent_id = azurerm_resource_group.main.id

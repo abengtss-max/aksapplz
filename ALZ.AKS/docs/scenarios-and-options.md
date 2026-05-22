@@ -102,8 +102,6 @@ Options are feature toggles that can be customized within any scenario. Each sce
 |--------|---------|-------------|
 | `enable_app_gateway` | `true` | Application Gateway with WAF v2 |
 | `enable_istio_service_mesh` | Scenario | Istio service mesh with mTLS |
-| `enable_application_gateway_for_containers` | `false` | AGC for advanced L7 ingress |
-| `enable_nginx_ingress` | `false` | Web Application Routing (managed NGINX) |
 
 ### Storage
 

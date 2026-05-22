@@ -23,9 +23,14 @@ output "vnet_name" {
   value       = module.spoke_vnet.name
 }
 
-output "aks_subnet_id" {
-  description = "The ID of the AKS nodes subnet."
-  value       = module.spoke_vnet.subnets["aks_nodes"].resource_id
+output "aks_system_subnet_id" {
+  description = "The ID of the AKS system node pool subnet."
+  value       = module.spoke_vnet.subnets["aks_system_nodes"].resource_id
+}
+
+output "aks_user_subnet_id" {
+  description = "The ID of the AKS user node pool subnet."
+  value       = module.spoke_vnet.subnets["aks_user_nodes"].resource_id
 }
 
 # AKS
@@ -41,7 +46,7 @@ output "aks_cluster_name" {
 
 output "aks_oidc_issuer_url" {
   description = "The OIDC issuer URL for workload identity federation."
-  value       = module.aks.oidc_issuer_url
+  value       = module.aks.oidc_issuer_profile_issuer_url
 }
 
 output "aks_kubelet_identity" {
@@ -68,7 +73,7 @@ output "key_vault_id" {
 
 output "key_vault_uri" {
   description = "The URI of the Key Vault."
-  value       = module.key_vault.resource.vault_uri
+  value       = module.key_vault.uri
 }
 
 # Monitoring
@@ -84,7 +89,7 @@ output "monitor_workspace_id" {
 
 output "grafana_endpoint" {
   description = "The endpoint URL for Managed Grafana."
-  value       = var.enable_managed_grafana ? module.grafana[0].resource.endpoint : null
+  value       = var.enable_managed_grafana ? azurerm_dashboard_grafana.main[0].endpoint : null
 }
 
 # Application Gateway

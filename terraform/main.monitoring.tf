@@ -74,9 +74,9 @@ resource "azurerm_monitor_data_collection_rule" "prometheus" {
 resource "azurerm_monitor_data_collection_rule_association" "prometheus" {
   count = var.enable_managed_prometheus ? 1 : 0
 
-  name                        = "dcra-prometheus-${local.name_prefix}"
-  target_resource_id          = module.aks.resource_id
-  data_collection_rule_id     = azurerm_monitor_data_collection_rule.prometheus[0].id
+  name                    = "dcra-prometheus-${local.name_prefix}"
+  target_resource_id      = module.aks.resource_id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.prometheus[0].id
 }
 
 # Associate DCE with AKS cluster
@@ -91,10 +91,8 @@ resource "azurerm_monitor_data_collection_rule_association" "prometheus_dce" {
 # Managed Grafana - Using Azure Verified Module
 # ----------------------------------------------------------------------------- 
 
-module "grafana" {
-  count   = var.enable_managed_grafana ? 1 : 0
-  source  = "Azure/avm-res-dashboard-grafana/azurerm"
-  version = "~> 0.2"
+resource "azurerm_dashboard_grafana" "main" {
+  count = var.enable_managed_grafana ? 1 : 0
 
   name                = local.grafana_name
   resource_group_name = azurerm_resource_group.main.name
@@ -105,30 +103,37 @@ module "grafana" {
   zone_redundancy_enabled       = var.grafana_zone_redundancy
   public_network_access_enabled = var.grafana_public_access
   api_key_enabled               = true
+  grafana_major_version         = var.grafana_major_version
+
+  identity {
+    type = "SystemAssigned"
+  }
 
   # Link to Azure Monitor workspace for Prometheus data source
-  azure_monitor_workspace_integrations = var.enable_managed_prometheus ? [
-    {
+  dynamic "azure_monitor_workspace_integrations" {
+    for_each = var.enable_managed_prometheus ? [1] : []
+    content {
       resource_id = azurerm_monitor_workspace.main[0].id
-    }
-  ] : []
-
-  # Grafana admin role assignments
-  role_assignments = {
-    grafana_admin = {
-      role_definition_id_or_name = "Grafana Admin"
-      principal_id               = var.grafana_admin_group_object_id
     }
   }
 }
 
-# Role assignment: Grafana needs Monitoring Reader on the subscription
+# Role assignment: Grafana Admin for the specified group
+resource "azurerm_role_assignment" "grafana_admin" {
+  count = var.enable_managed_grafana ? 1 : 0
+
+  scope                = azurerm_dashboard_grafana.main[0].id
+  role_definition_name = "Grafana Admin"
+  principal_id         = var.grafana_admin_group_object_id
+}
+
+# Role assignment: Grafana needs Monitoring Reader on the resource group (least privilege)
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
   count = var.enable_managed_grafana ? 1 : 0
 
-  scope                = "/subscriptions/${var.subscription_id}"
+  scope                = azurerm_resource_group.main.id
   role_definition_name = "Monitoring Reader"
-  principal_id         = module.grafana[0].resource.identity[0].principal_id
+  principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
 }
 
 # Role assignment: Grafana needs Monitoring Data Reader on Azure Monitor workspace
@@ -137,5 +142,5 @@ resource "azurerm_role_assignment" "grafana_monitor_data_reader" {
 
   scope                = azurerm_monitor_workspace.main[0].id
   role_definition_name = "Monitoring Data Reader"
-  principal_id         = module.grafana[0].resource.identity[0].principal_id
+  principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
 }

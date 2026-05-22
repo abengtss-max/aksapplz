@@ -10,9 +10,9 @@ This checklist aligns with the [Azure Landing Zone Accelerator](https://aka.ms/a
 - [ ] Terraform >= 1.9 installed
 - [ ] GitHub CLI (`gh`) installed
 - [ ] Git installed
-- [ ] GitHub PAT created with scopes: `repo`, `admin:org`, `workflow`
-- [ ] Runner PAT created with scope: `admin:org` (if using self-hosted runners)
-- [ ] ALZ.AKS module installed (`Install-PSResource -Name ALZ.AKS`)
+- [ ] GitHub PAT created with scopes: `repo`, `admin:org` (Members R/W), `workflow` *(can be pasted into the wizard or set via `$env:TF_VAR_github_personal_access_token`)*
+- [ ] Runner PAT created with scope: `admin:org` Full (if using self-hosted runners) *(env var: `$env:TF_VAR_github_runners_personal_access_token`)*
+- [ ] ALZ.AKS module imported from clone: `Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force` *(module is not yet published to PSGallery)*
 
 ### Azure Prerequisites
 - [ ] Azure Landing Zone deployed (hub VNet, firewall, connectivity subscription)

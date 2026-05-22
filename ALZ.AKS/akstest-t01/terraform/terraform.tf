@@ -42,7 +42,7 @@ provider "azurerm" {
 # -----------------------------------------------------------------------------
 provider "azurerm" {
   alias                           = "connectivity"
-  subscription_id                 = var.landing_zone_type == "corp" ? var.connectivity_subscription_id : var.subscription_id
+  subscription_id                 = var.connectivity_subscription_id
   resource_provider_registrations = "none"
   features {}
 }

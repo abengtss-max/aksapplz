@@ -12,8 +12,9 @@ variable "subscription_id" {
 }
 
 variable "connectivity_subscription_id" {
-  description = "The Azure subscription ID for the connectivity (hub) subscription."
+  description = "The Azure subscription ID for the connectivity (hub) subscription. Only required for 'corp' landing zones."
   type        = string
+  default     = ""
 }
 
 variable "tenant_id" {
@@ -34,12 +35,12 @@ variable "workload_name" {
 }
 
 variable "environment" {
-  description = "The environment name (e.g., dev, staging, prod)."
+  description = "The environment name (e.g., dev, staging, prod, or test identifier)."
   type        = string
   default     = "prod"
   validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "Environment must be one of: dev, staging, prod."
+    condition     = can(regex("^[a-z0-9]{1,8}$", var.environment))
+    error_message = "Environment must be 1-8 lowercase alphanumeric characters."
   }
 }
 
@@ -60,41 +61,47 @@ variable "vnet_address_space" {
 }
 
 variable "subnet_address_prefixes" {
-  description = "Address prefixes for each subnet."
+  description = "Address prefixes for each subnet. System and user node pools are separated per AKS baseline best practices."
   type = object({
-    aks_nodes       = string
-    aks_api_server  = string
-    app_gateway     = string
+    aks_system_nodes  = string
+    aks_user_nodes    = string
+    aks_api_server    = string
+    app_gateway       = string
     private_endpoints = string
-    ingress         = string
+    ingress           = string
   })
   default = {
-    aks_nodes       = "10.10.0.0/22"   # 1024 IPs - AKS nodes
-    aks_api_server  = "10.10.4.0/28"   # 16 IPs - API server VNet integration
-    app_gateway     = "10.10.5.0/24"   # 256 IPs - App Gateway
-    private_endpoints = "10.10.6.0/24" # 256 IPs - Private endpoints
-    ingress         = "10.10.7.0/24"   # 256 IPs - Ingress/load balancer
+    aks_system_nodes  = "10.10.0.0/24"  # 256 IPs  - System node pool (CriticalAddonsOnly)
+    aks_user_nodes    = "10.10.16.0/22" # 1024 IPs - User/workload node pools
+    aks_api_server    = "10.10.20.0/28" # 16 IPs   - API server VNet integration
+    app_gateway       = "10.10.21.0/24" # 256 IPs  - App Gateway
+    private_endpoints = "10.10.22.0/24" # 256 IPs  - Private endpoints
+    ingress           = "10.10.23.0/24" # 256 IPs  - Ingress/load balancer
   }
 }
 
 variable "hub_vnet_resource_id" {
-  description = "The resource ID of the hub VNet to peer with."
+  description = "The resource ID of the hub VNet to peer with. Required for 'corp' landing zones."
   type        = string
+  default     = ""
 }
 
 variable "hub_vnet_name" {
-  description = "The name of the hub VNet."
+  description = "The name of the hub VNet. Required for 'corp' landing zones."
   type        = string
+  default     = ""
 }
 
 variable "hub_vnet_resource_group_name" {
-  description = "The resource group name of the hub VNet."
+  description = "The resource group name of the hub VNet. Required for 'corp' landing zones."
   type        = string
+  default     = ""
 }
 
 variable "hub_firewall_private_ip" {
-  description = "The private IP address of the hub Azure Firewall (for UDR)."
+  description = "The private IP address of the hub Azure Firewall (for UDR). Required for 'corp' landing zones."
   type        = string
+  default     = ""
 }
 
 variable "use_remote_gateways" {
@@ -110,7 +117,7 @@ variable "use_remote_gateways" {
 variable "kubernetes_version" {
   description = "The version of Kubernetes for AKS."
   type        = string
-  default     = "1.30"
+  default     = "1.33"
 }
 
 variable "aks_sku_tier" {
@@ -251,7 +258,7 @@ variable "system_node_pool" {
     min_count       = number
     max_count       = number
     node_count      = number
-    max_surge        = string
+    max_surge       = string
   })
   default = {
     vm_size         = "Standard_D4ds_v5"
@@ -294,6 +301,43 @@ variable "user_node_pool" {
 }
 
 # =============================================================================
+# Scenario
+# =============================================================================
+
+variable "scenario" {
+  description = <<-EOT
+    The deployment scenario that pre-configures the architecture:
+    - "single_region_baseline"   : Single-region AKS with corp/online connectivity
+    - "multi_region_baseline"    : Multi-region AKS with Azure Front Door, Fleet Manager
+    - "single_region_regulated"  : PCI-DSS compliant single-region AKS
+    - "multi_region_regulated"   : PCI-DSS compliant multi-region AKS
+  EOT
+  type        = string
+  default     = "single_region_baseline"
+  validation {
+    condition = contains([
+      "single_region_baseline",
+      "multi_region_baseline",
+      "single_region_regulated",
+      "multi_region_regulated"
+    ], var.scenario)
+    error_message = "scenario must be one of: single_region_baseline, multi_region_baseline, single_region_regulated, multi_region_regulated."
+  }
+}
+
+variable "secondary_location" {
+  description = "Secondary Azure region for multi-region scenarios (geo-replicated ACR, etc.)."
+  type        = string
+  default     = ""
+}
+
+variable "enable_acr_geo_replication" {
+  description = "Enable geo-replication for ACR to the secondary location (multi-region scenarios)."
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
 # Features
 # =============================================================================
 
@@ -331,6 +375,140 @@ variable "enable_diagnostic_settings" {
   description = "Enable diagnostic settings for all resources."
   type        = bool
   default     = true
+}
+
+# --- Identity & Security Options ---
+
+variable "enable_workload_identity" {
+  description = "Enable Workload Identity for pod-level Entra ID authentication."
+  type        = bool
+  default     = true
+}
+
+variable "enable_azure_rbac" {
+  description = "Enable Azure RBAC for Kubernetes authorization (instead of native Kubernetes RBAC)."
+  type        = bool
+  default     = true
+}
+
+variable "disable_local_accounts" {
+  description = "Disable local Kubernetes accounts (enforce Entra ID only)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_image_cleaner" {
+  description = "Enable automatic image cleaner to remove stale images from nodes."
+  type        = bool
+  default     = true
+}
+
+variable "image_cleaner_interval_hours" {
+  description = "How often the image cleaner runs (in hours)."
+  type        = number
+  default     = 48
+}
+
+variable "enable_azure_policy" {
+  description = "Enable Azure Policy add-on for AKS."
+  type        = bool
+  default     = true
+}
+
+# --- Networking Options ---
+
+variable "enable_istio_service_mesh" {
+  description = "Enable Istio-based service mesh add-on."
+  type        = bool
+  default     = false
+}
+
+variable "istio_internal_ingress_gateway" {
+  description = "Enable Istio internal ingress gateway."
+  type        = bool
+  default     = false
+}
+
+variable "istio_external_ingress_gateway" {
+  description = "Enable Istio external ingress gateway."
+  type        = bool
+  default     = false
+}
+
+# --- Scaling & Compute Options ---
+
+variable "enable_vpa" {
+  description = "Enable Vertical Pod Autoscaler."
+  type        = bool
+  default     = false
+}
+
+variable "enable_node_auto_provisioning" {
+  description = "Enable Node Auto Provisioning (NAP / Karpenter)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_fips" {
+  description = "Enable FIPS 140-2 compliant node OS."
+  type        = bool
+  default     = false
+}
+
+# --- GitOps & App Platform Options ---
+
+variable "enable_flux" {
+  description = "Enable Flux v2 GitOps extension for Kubernetes."
+  type        = bool
+  default     = false
+}
+
+variable "enable_dapr" {
+  description = "Enable Dapr (Distributed Application Runtime) extension."
+  type        = bool
+  default     = false
+}
+
+# --- Storage Options ---
+
+variable "enable_blob_csi_driver" {
+  description = "Enable Azure Blob CSI driver."
+  type        = bool
+  default     = true
+}
+
+variable "enable_disk_csi_driver" {
+  description = "Enable Azure Disk CSI driver."
+  type        = bool
+  default     = true
+}
+
+variable "enable_file_csi_driver" {
+  description = "Enable Azure Files CSI driver."
+  type        = bool
+  default     = true
+}
+
+variable "enable_snapshot_controller" {
+  description = "Enable volume snapshot controller."
+  type        = bool
+  default     = true
+}
+
+# --- Business Continuity Options ---
+
+variable "enable_backup" {
+  description = "Enable Azure Backup for AKS (via Backup extension)."
+  type        = bool
+  default     = false
+}
+
+# --- Compliance & Governance Options ---
+
+variable "enable_cost_analysis" {
+  description = "Enable cost analysis add-on for AKS (requires Standard or Premium SKU)."
+  type        = bool
+  default     = false
 }
 
 # =============================================================================
@@ -399,10 +577,16 @@ variable "grafana_sku" {
   default     = "Standard"
 }
 
+variable "grafana_major_version" {
+  description = "Grafana major version. Valid values: 11, 12."
+  type        = string
+  default     = "11"
+}
+
 variable "grafana_zone_redundancy" {
   description = "Enable zone redundancy for Grafana."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "grafana_public_access" {

@@ -1,5 +1,5 @@
 terraform {
-  required_version = "~> 1.9"
+  required_version = ">= 1.9"
 
   required_providers {
     azurerm = {
@@ -19,7 +19,14 @@ terraform {
   backend "azurerm" {}
 }
 
+# -----------------------------------------------------------------------------
+# Provider: Main subscription (landing zone)
+# resource_provider_registrations = "core" — azurerm handles standard providers
+# -----------------------------------------------------------------------------
 provider "azurerm" {
+  resource_provider_registrations = "core"
+  subscription_id                 = var.subscription_id
+
   features {
     resource_group {
       prevent_deletion_if_contains_resources = false
@@ -28,12 +35,15 @@ provider "azurerm" {
       purge_soft_delete_on_destroy = false
     }
   }
-  subscription_id = var.subscription_id
 }
 
+# -----------------------------------------------------------------------------
+# Provider: Connectivity subscription (hub) — used for hub VNet peering
+# -----------------------------------------------------------------------------
 provider "azurerm" {
-  alias           = "connectivity"
-  subscription_id = var.connectivity_subscription_id
+  alias                           = "connectivity"
+  subscription_id                 = var.connectivity_subscription_id
+  resource_provider_registrations = "core"
   features {}
 }
 

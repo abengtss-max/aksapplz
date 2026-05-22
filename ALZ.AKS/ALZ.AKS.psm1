@@ -85,20 +85,18 @@ function Test-SoftwareRequirements {
         $results += [pscustomobject]@{ Result = "Warning"; Details = "GitHub CLI (gh) is not installed. Required for bootstrap execution." }
     }
 
-    # Environment variables
-    $envVars = @()
-    if ($env:TF_VAR_github_personal_access_token)         { $envVars += "TF_VAR_github_personal_access_token" }
-    if ($env:TF_VAR_github_runners_personal_access_token)  { $envVars += "TF_VAR_github_runners_personal_access_token" }
-    if ($env:ARM_SUBSCRIPTION_ID)                          { $envVars += "ARM_SUBSCRIPTION_ID ($($env:ARM_SUBSCRIPTION_ID))" }
-    $allExpected = @("TF_VAR_github_personal_access_token","TF_VAR_github_runners_personal_access_token","ARM_SUBSCRIPTION_ID")
-    $missing = $allExpected | Where-Object { -not (Get-Item "env:$_" -ErrorAction SilentlyContinue) }
+    # Environment variables (PATs). Token-1 is always required for bootstrap; token-2 only when
+    # use_self_hosted_runners = true. ARM_SUBSCRIPTION_ID is auto-resolved from inputs.yaml so
+    # we do not enforce it here.
+    $token1Set = [bool]$env:TF_VAR_github_personal_access_token
+    $token2Set = [bool]$env:TF_VAR_github_runners_personal_access_token
 
-    if ($envVars.Count -eq 0) {
-        $results += [pscustomobject]@{ Result = "Warning"; Details = "No expected environment variables are set. PATs should be set via TF_VAR_github_personal_access_token." }
-    } elseif ($missing.Count -gt 0 -and $envVars.Count -gt 0) {
-        $results += [pscustomobject]@{ Result = "Warning"; Details = "At least one environment variable is set, but the other expected environment variables are not set. Set environment variables: $($envVars -join ', ')." }
+    if ($token1Set -and $token2Set) {
+        $results += [pscustomobject]@{ Result = "Success"; Details = "GitHub PAT environment variables are set: TF_VAR_github_personal_access_token, TF_VAR_github_runners_personal_access_token." }
+    } elseif ($token1Set) {
+        $results += [pscustomobject]@{ Result = "Success"; Details = "TF_VAR_github_personal_access_token is set. TF_VAR_github_runners_personal_access_token is only required if use_self_hosted_runners = true." }
     } else {
-        $results += [pscustomobject]@{ Result = "Success"; Details = "All expected environment variables are set: $($envVars -join ', ')." }
+        $results += [pscustomobject]@{ Result = "Warning"; Details = "TF_VAR_github_personal_access_token is not set. The wizard will prompt for it (see README Section 2.3 for fine-grained PAT permissions)." }
     }
 
     # Azure CLI
@@ -710,9 +708,14 @@ function Get-InteractiveInputs {
 
     # ── Decision 10: Version Control System Settings ──
     Write-Log "github_personal_access_token" -Severity "INPUT REQUIRED"
-    Write-Host "A GitHub Personal Access Token (PAT) with repo and workflow scopes."
-    Write-Host "Required scopes: repo, admin:org (Members: Read and Write), workflow"
-    Write-Host "https://github.com/aksapplz/docs/prerequisites"
+    Write-Host "A GitHub fine-grained Personal Access Token (token-1) used by Terraform to"
+    Write-Host "create the repos, push files, set secrets and variables, and configure environments."
+    Write-Host "Resource owner: your organization   |   Repository access: All repositories"
+    Write-Host "Repository permissions (all Read and write):"
+    Write-Host "  Actions, Administration, Contents, Environments, Secrets, Variables, Workflows"
+    Write-Host "Organization permissions (all Read and write):"
+    Write-Host "  Members, Self-hosted runners (only if using org-level runner groups)"
+    Write-Host "Create at: https://github.com/settings/personal-access-tokens (Fine-grained tokens)"
     Write-Host "Required: Yes"
     if ($env:TF_VAR_github_personal_access_token) {
         $masked = Get-MaskedValue -Value $env:TF_VAR_github_personal_access_token
@@ -736,9 +739,13 @@ function Get-InteractiveInputs {
     Write-Host ""
 
     Write-Log "github_runners_personal_access_token" -Severity "INPUT REQUIRED"
-    Write-Host "A GitHub Personal Access Token (PAT) for registering self-hosted runners."
-    Write-Host "Required scopes: admin:org (Full control)"
-    Write-Host "https://github.com/aksapplz/docs/prerequisites"
+    Write-Host "A GitHub fine-grained PAT (token-2) used by self-hosted runners to register with GitHub."
+    Write-Host "Resource owner: your organization   |   Repository access: All repositories"
+    Write-Host "Repository permissions (Read and write):"
+    Write-Host "  Administration"
+    Write-Host "Organization permissions (Read and write):"
+    Write-Host "  Self-hosted runners (only if using org-level runner groups)"
+    Write-Host "Create at: https://github.com/settings/personal-access-tokens (Fine-grained tokens)"
     if ($env:TF_VAR_github_runners_personal_access_token) {
         $masked = Get-MaskedValue -Value $env:TF_VAR_github_runners_personal_access_token
         Write-Host "Environment variable TF_VAR_github_runners_personal_access_token is set ($masked)"
@@ -796,7 +803,6 @@ function Get-InteractiveInputs {
         @{ Key = "enable_node_auto_provisioning"; Label = "Enable Node Auto Provisioning (Karpenter)?"; Default = $(if ($isMultiRegion) { "true" } else { "false" }) }
         # --- Networking ---
         @{ Key = "enable_istio";            Label = "Enable Istio service mesh (mTLS)?";        Default = $(if ($isRegulated) { "true" } else { "false" }) }
-        @{ Key = "enable_nginx_ingress";    Label = "Enable Web App Routing (managed NGINX)?";  Default = "false" }
         # --- GitOps ---
         @{ Key = "enable_flux";             Label = "Enable Flux v2 GitOps?";                   Default = $(if ($isMultiRegion) { "true" } else { "false" }) }
         @{ Key = "enable_dapr";             Label = "Enable Dapr extension?";                   Default = "false" }
@@ -860,9 +866,6 @@ function Write-InputsYaml {
 ## Scenario
 scenario: "$($Config.scenario)"
 secondary_location: "$($Config.secondary_location)"
-
-## Landing Zone Type
-landing_zone_type: "$($Config.landing_zone_type)"
 
 ## Decision 1: Bootstrap Resource Azure Region
 bootstrap_location: "$($Config.bootstrap_location)"
@@ -934,7 +937,6 @@ enable_vpa: $(& $boolStr $Config.enable_vpa)
 enable_node_auto_provisioning: $(& $boolStr $Config.enable_node_auto_provisioning)
 # Networking
 enable_istio: $(& $boolStr $Config.enable_istio)
-enable_nginx_ingress: $(& $boolStr $Config.enable_nginx_ingress)
 # GitOps
 enable_flux: $(& $boolStr $Config.enable_flux)
 enable_dapr: $(& $boolStr $Config.enable_dapr)
@@ -1012,9 +1014,6 @@ scenario = "$($Config.scenario)"
 
 # Secondary region (multi-region scenarios only)
 secondary_location = "$($Config.secondary_location)"
-
-# Landing zone type (corp = hub peering, online = standalone)
-landing_zone_type = "$($Config.landing_zone_type)"
 
 # -----------------------------------------------------------------------------
 # Core Settings
@@ -1154,8 +1153,6 @@ enable_app_gateway                        = $(& $boolTf $Config.enable_app_gatew
 enable_istio_service_mesh                 = $(& $boolTf $Config.enable_istio)
 istio_internal_ingress_gateway            = $(& $boolTf $Config.enable_istio)
 istio_external_ingress_gateway            = false
-enable_application_gateway_for_containers = false
-enable_nginx_ingress                      = $(& $boolTf $Config.enable_nginx_ingress)
 
 # -----------------------------------------------------------------------------
 # Storage
@@ -1487,6 +1484,17 @@ function New-GitHubBootstrap {
     $pat = if ($env:TF_VAR_github_personal_access_token) { $env:TF_VAR_github_personal_access_token }
            else { $Config.github_personal_access_token }
     $org = $Config.github_organization_name
+
+    # Hard-fail if no PAT is available. Falling back to the gh CLI keyring OAuth token
+    # produces confusing 'CreateRepository' errors when the OAuth app is not authorized
+    # for the org. The wizard requires a fine-grained PAT explicitly.
+    if ([string]::IsNullOrWhiteSpace($pat)) {
+        Write-Log "No fine-grained PAT available for bootstrap." -Severity "ERROR"
+        Write-Log "Set `$env:TF_VAR_github_personal_access_token to a fine-grained PAT before re-running." -Severity "ERROR"
+        Write-Log "See README Section 2.3 for required permissions, or generate one at:" -Severity "ERROR"
+        Write-Log "  https://github.com/settings/personal-access-tokens" -Severity "ERROR"
+        return $false
+    }
     $env:GH_TOKEN = $pat
 
     # Validate token works
@@ -1495,24 +1503,78 @@ function New-GitHubBootstrap {
         Write-Log "GitHub token validation failed — check PAT. Error: $tokenCheck" -Severity "ERROR"
         return $false
     }
-    Write-Log "Authenticated as: $tokenCheck" -Severity "INFO"
+    Write-Log "Authenticated as: $tokenCheck (via TF_VAR_github_personal_access_token)" -Severity "INFO"
+
+    # Detect whether the PAT is fine-grained ('github_pat_*') vs classic OAuth/PAT.
+    # Classic OAuth tokens from `gh auth login` cannot create org repos unless the
+    # OAuth app is org-authorized — this is the most common silent failure.
+    $isFineGrained = $pat.StartsWith('github_pat_')
+    if (-not $isFineGrained) {
+        Write-Log "PAT does not look fine-grained (expected prefix 'github_pat_'). If creation fails, regenerate as fine-grained at https://github.com/settings/personal-access-tokens" -Severity "WARNING"
+    }
 
     # Repos (check before create)
-    $repoCheck = gh repo view "$org/$($Names.RepoName)" --json name 2>&1
+    $repoCheck = gh repo view "$org/$($Names.RepoName)" --json name,visibility 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Log "Creating repository $org/$($Names.RepoName)..." -Severity "INFO"
-        $createResult = gh repo create "$org/$($Names.RepoName)" --public -d "AKS Application Landing Zone - Infrastructure" 2>&1
-        if ($LASTEXITCODE -ne 0) { Write-Log "Failed to create repo: $createResult" -Severity "ERROR"; return $false }
+        Write-Log "Creating private repository $org/$($Names.RepoName)..." -Severity "INFO"
+        $createResult = gh repo create "$org/$($Names.RepoName)" --private -d "AKS Application Landing Zone - Infrastructure" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "Failed to create repo: $createResult" -Severity "ERROR"
+            if ("$createResult" -match 'does not have the correct permissions to execute .CreateRepository' -or
+                "$createResult" -match 'You need admin access to the organization') {
+                Write-Log "Remediation: token-1 cannot create repositories in organization '$org' right now." -Severity "ERROR"
+                Write-Log "  1. MOST LIKELY: PAT 'Resource owner' is set to your USER, not the organization." -Severity "ERROR"
+                Write-Log "     A fine-grained PAT can only create org resources when its Resource owner = '$org'." -Severity "ERROR"
+                Write-Log "     Regenerate the PAT at https://github.com/settings/personal-access-tokens/new and set:" -Severity "ERROR"
+                Write-Log "       - Resource owner: $org   (NOT your personal user)" -Severity "ERROR"
+                Write-Log "       - Repository access: All repositories" -Severity "ERROR"
+                Write-Log "  2. Required Repository permissions (Read and write): Administration, Contents," -Severity "ERROR"
+                Write-Log "     Actions, Environments, Secrets, Variables, Workflows. 'Administration: R/W' is" -Severity "ERROR"
+                Write-Log "     what authorizes repo creation." -Severity "ERROR"
+                Write-Log "  3. Required Organization permissions (Read and write): Members, Self-hosted runners." -Severity "ERROR"
+                Write-Log "  4. After generating, an org Owner must APPROVE the PAT request at:" -Severity "ERROR"
+                Write-Log "       https://github.com/organizations/$org/settings/personal-access-token-requests" -Severity "ERROR"
+                Write-Log "  5. Verify org allows private repo creation: Settings -> Member privileges." -Severity "ERROR"
+            }
+            return $false
+        }
+    } else {
+        # Existing repo: enforce private visibility (bootstrap requires private).
+        $existing = $repoCheck | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if ($existing -and $existing.visibility -and $existing.visibility -ne 'PRIVATE') {
+            Write-Log "Existing repo $org/$($Names.RepoName) is $($existing.visibility); switching to PRIVATE..." -Severity "WARNING"
+            $null = gh repo edit "$org/$($Names.RepoName)" --visibility private --accept-visibility-change-consequences 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "Could not switch visibility to private. Set it manually in GitHub and re-run." -Severity "ERROR"
+                return $false
+            }
+        }
     }
-    Write-Log "Repository: $org/$($Names.RepoName)" -Severity "SUCCESS"
+    Write-Log "Repository: $org/$($Names.RepoName) (private)" -Severity "SUCCESS"
 
-    $templateRepoCheck = gh repo view "$org/$($Names.TemplateRepoName)" --json name 2>&1
+    $templateRepoCheck = gh repo view "$org/$($Names.TemplateRepoName)" --json name,visibility 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Log "Creating repository $org/$($Names.TemplateRepoName)..." -Severity "INFO"
-        $createResult2 = gh repo create "$org/$($Names.TemplateRepoName)" --public -d "AKS Application Landing Zone - CI/CD workflow templates" 2>&1
-        if ($LASTEXITCODE -ne 0) { Write-Log "Failed to create template repo: $createResult2" -Severity "ERROR"; return $false }
+        Write-Log "Creating private repository $org/$($Names.TemplateRepoName)..." -Severity "INFO"
+        $createResult2 = gh repo create "$org/$($Names.TemplateRepoName)" --private -d "AKS Application Landing Zone - CI/CD workflow templates" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "Failed to create template repo: $createResult2" -Severity "ERROR"
+            if ("$createResult2" -match 'does not have the correct permissions to execute .CreateRepository') {
+                Write-Log "Remediation: see the repo-creation remediation hint printed above." -Severity "ERROR"
+            }
+            return $false
+        }
+    } else {
+        $existingTpl = $templateRepoCheck | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if ($existingTpl -and $existingTpl.visibility -and $existingTpl.visibility -ne 'PRIVATE') {
+            Write-Log "Existing repo $org/$($Names.TemplateRepoName) is $($existingTpl.visibility); switching to PRIVATE..." -Severity "WARNING"
+            $null = gh repo edit "$org/$($Names.TemplateRepoName)" --visibility private --accept-visibility-change-consequences 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "Could not switch visibility to private. Set it manually in GitHub and re-run." -Severity "ERROR"
+                return $false
+            }
+        }
     }
-    Write-Log "Repository: $org/$($Names.TemplateRepoName)" -Severity "SUCCESS"
+    Write-Log "Repository: $org/$($Names.TemplateRepoName) (private)" -Severity "SUCCESS"
 
     # Team (check before create) — use lowercase slug for API consistency
     $teamSlug = ($Names.TeamName -replace '[^a-zA-Z0-9-]', '-').ToLower()
@@ -1663,6 +1725,15 @@ function New-SelfHostedRunner {
     # =================================================================
     # 4a. Resource Groups (agents + network)
     # =================================================================
+    # Ensure the ContainerInstance resource provider is registered (idempotent).
+    # New subscriptions often need this; the failure is otherwise opaque.
+    $rpState = az provider show -n Microsoft.ContainerInstance --subscription $subscriptionId --query registrationState -o tsv 2>$null
+    if ($rpState -ne 'Registered') {
+        Write-Log "Registering resource provider Microsoft.ContainerInstance (current: $rpState)..." -Severity "INFO"
+        az provider register --namespace Microsoft.ContainerInstance --subscription $subscriptionId --wait 2>&1 | Out-Null
+        Write-Log "Resource provider registered: Microsoft.ContainerInstance" -Severity "SUCCESS"
+    }
+
     az group create --name $agentsRgName --location $location --subscription $subscriptionId --output none 2>$null
     Write-Log "Resource group: $agentsRgName" -Severity "SUCCESS"
 
@@ -1938,8 +2009,8 @@ function New-SelfHostedRunner {
     # Secure environment variables (PAT)
     $aciArgs += @("--secure-environment-variables", "GH_RUNNER_TOKEN=$runnerPat")
 
-    # Execute
-    az @aciArgs 2>$null
+    # Execute (capture stderr so failures aren't silent)
+    $aciOutput = az @aciArgs 2>&1
 
     if ($LASTEXITCODE -eq 0) {
         Write-Log "ACI runner deployed: $aciName" -Severity "SUCCESS"
@@ -1948,8 +2019,13 @@ function New-SelfHostedRunner {
             Write-Log "Runner is deployed with private networking (VNet: $vnetName)" -Severity "SUCCESS"
         }
     } else {
-        Write-Log "ACI runner deployment failed. You can deploy manually or re-run the bootstrap." -Severity "WARNING"
-        Write-Log "Check: az container logs --name $aciName --resource-group $agentsRgName --subscription $subscriptionId" -Severity "INFO"
+        Write-Log "ACI runner deployment FAILED (exit $LASTEXITCODE)." -Severity "ERROR"
+        Write-Log "az container create output:" -Severity "ERROR"
+        foreach ($line in ($aciOutput | Out-String -Stream | Where-Object { $_ })) {
+            Write-Log "  $line" -Severity "ERROR"
+        }
+        Write-Log "Re-run the bootstrap after fixing the issue; ACI creation is idempotent." -Severity "INFO"
+        Write-Log "Manual retry: az container show --name $aciName --resource-group $agentsRgName --subscription $subscriptionId" -Severity "INFO"
     }
     Write-Host ""
 }
@@ -2052,7 +2128,9 @@ override.tf.json
 
     Push-Location $tempDir
     git add -A
-    git commit -m "AKS Application Landing Zone configuration" 2>$null
+    # [skip ci] prevents the CD workflow from auto-triggering on the bootstrap push.
+    # The user runs the first deploy manually via workflow_dispatch; future pushes trigger normally.
+    git commit -m "AKS Application Landing Zone configuration [skip ci]" 2>$null
     git push origin main 2>$null
     Pop-Location
 
@@ -2086,7 +2164,7 @@ function Push-TemplateWorkflows {
 
     Push-Location $tempDir
     git add -A
-    git commit -m "CI/CD workflow templates" 2>$null
+    git commit -m "CI/CD workflow templates [skip ci]" 2>$null
     git push origin main 2>$null
     Pop-Location
 
@@ -2292,6 +2370,24 @@ function Deploy-AKSLandingZone {
             Write-Log "Auto-resolved tenant_id: $($config.tenant_id)" -Severity "INFO"
         }
 
+        # Validate required string inputs that the bootstrap cannot recover from on its own.
+        $requiredStrings = @(
+            'github_organization_name',
+            'service_name',
+            'environment_name',
+            'bootstrap_location',
+            'aks_landing_zone_subscription_id',
+            'connectivity_subscription_id',
+            'bootstrap_subscription_id',
+            'hub_vnet_resource_id'
+        )
+        $missingRequired = $requiredStrings | Where-Object { [string]::IsNullOrWhiteSpace([string]$config.$_) }
+        if ($missingRequired.Count -gt 0) {
+            Write-Log "Configuration is missing required values: $($missingRequired -join ', ')" -Severity "ERROR"
+            Write-Log "Edit $InputConfigPath and set the missing value(s), or re-run the wizard to regenerate it." -Severity "ERROR"
+            return
+        }
+
         # Auto-resolve grafana_admin_group_object_id from admin groups or current user
         if ([string]::IsNullOrEmpty($config.grafana_admin_group_object_id) -or $config.grafana_admin_group_object_id -eq "REPLACE_ME") {
             if ($config.aks_admin_group_object_ids -and $config.aks_admin_group_object_ids.Count -gt 0 -and $config.aks_admin_group_object_ids[0] -ne "REPLACE_ME") {
@@ -2307,11 +2403,6 @@ function Deploy-AKSLandingZone {
         if ($null -eq $config.grafana_zone_redundancy) {
             $config.grafana_zone_redundancy = $grafanaZrRegions -contains $config.bootstrap_location
             Write-Log "Auto-resolved grafana_zone_redundancy: $($config.grafana_zone_redundancy) (region: $($config.bootstrap_location))" -Severity "INFO"
-        }
-
-        # Default landing_zone_type if not set
-        if ([string]::IsNullOrEmpty($config.landing_zone_type)) {
-            $config.landing_zone_type = "corp"
         }
 
         # Derive target root from config path (config file is at {target}/config/inputs.yaml)

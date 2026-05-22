@@ -71,8 +71,6 @@ enable_node_auto_provisioning = false
 # --- Networking Features ---
 enable_app_gateway                        = true
 enable_istio_service_mesh                 = false
-enable_application_gateway_for_containers = false
-enable_nginx_ingress                      = false
 
 # --- Storage ---
 enable_blob_csi_driver    = true

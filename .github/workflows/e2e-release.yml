@@ -6,15 +6,6 @@ name: E2E Release
 
 on:
   workflow_dispatch:
-    inputs:
-      landing_zone_type:
-        description: "Landing zone type"
-        required: true
-        default: online
-        type: choice
-        options:
-          - online
-          - corp
 
 permissions:
   id-token: write
@@ -70,9 +61,10 @@ jobs:
           subscription_id   = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           tenant_id         = "${{ secrets.AZURE_TENANT_ID }}"
           location          = "${{ env.LOCATION }}"
-          landing_zone_type = "${{ inputs.landing_zone_type }}"
           workload_name     = "${{ env.WORKLOAD_NAME }}"
           environment       = "${{ env.ENVIRONMENT }}"
+          aks_admin_group_object_ids   = ["${{ secrets.AZURE_CLIENT_OBJECT_ID }}"]
+          grafana_admin_group_object_id = "${{ secrets.AZURE_CLIENT_OBJECT_ID }}"
           tags = {
             createdAt = "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             createdBy = "github-actions"

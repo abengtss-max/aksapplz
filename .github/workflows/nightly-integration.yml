@@ -22,14 +22,6 @@ on:
           - single_region_regulated
           - multi_region_baseline
           - multi_region_regulated
-      landing_zone_type:
-        description: "Landing zone type"
-        required: true
-        default: online
-        type: choice
-        options:
-          - online
-          - corp
 
 permissions:
   id-token: write
@@ -43,7 +35,6 @@ env:
   TF_VERSION: "1.11.4"
   TF_DIR: ALZ.AKS/templates/terraform
   SCENARIO: ${{ inputs.scenario || 'single_region_baseline' }}
-  LANDING_ZONE_TYPE: ${{ inputs.landing_zone_type || 'online' }}
   LOCATION: swedencentral
   # Janitor uses the rg-akstest- prefix to find expired resource groups.
   RG_NAME: rg-akstest-nightly-${{ github.run_id }}
@@ -80,9 +71,10 @@ jobs:
           subscription_id   = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           tenant_id         = "${{ secrets.AZURE_TENANT_ID }}"
           location          = "${{ env.LOCATION }}"
-          landing_zone_type = "${{ env.LANDING_ZONE_TYPE }}"
           workload_name     = "${{ env.WORKLOAD_NAME }}"
           environment       = "${{ env.ENVIRONMENT }}"
+          aks_admin_group_object_ids   = ["${{ secrets.AZURE_CLIENT_OBJECT_ID }}"]
+          grafana_admin_group_object_id = "${{ secrets.AZURE_CLIENT_OBJECT_ID }}"
           tags = {
             createdAt   = "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             createdBy   = "github-actions"

@@ -1,0 +1,36 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Sensitive variable files (allow checked-in template tfvars under config/scenarios)
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Office temp / lock files
+~$*
+
+# PowerShell
+*.psd1.bak
+*.psm1.bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/*.log
+
+# Local secrets (never commit)
+.env
+.env.*
+secrets.*
+*.pem
+*.key

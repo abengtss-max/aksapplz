@@ -7,7 +7,8 @@
 # -----------------------------------------------------------------------------
 
 locals {
-  is_corp = var.landing_zone_type == "corp"
+  # This accelerator deploys a corp (hub-spoke, private) landing zone.
+  is_corp = true
 }
 
 # Resource Group

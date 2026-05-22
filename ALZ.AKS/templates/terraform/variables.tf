@@ -6,23 +6,6 @@
 # Core Settings
 # =============================================================================
 
-variable "landing_zone_type" {
-  description = <<-EOT
-    The type of Azure Landing Zone subscription to deploy into:
-    - "corp"   : Connected to hub VNet via peering, forced tunneling through 
-                 firewall (UDR), private cluster, private endpoints. Platform 
-                 team manages hub networking.
-    - "online" : Internet-facing, no hub connectivity, public endpoints, 
-                 AKS outbound via load balancer. No peering or UDR required.
-  EOT
-  type        = string
-  default     = "corp"
-  validation {
-    condition     = contains(["corp", "online"], var.landing_zone_type)
-    error_message = "landing_zone_type must be either 'corp' or 'online'."
-  }
-}
-
 variable "subscription_id" {
   description = "The Azure subscription ID for the AKS landing zone."
   type        = string
@@ -448,18 +431,6 @@ variable "istio_internal_ingress_gateway" {
 
 variable "istio_external_ingress_gateway" {
   description = "Enable Istio external ingress gateway."
-  type        = bool
-  default     = false
-}
-
-variable "enable_application_gateway_for_containers" {
-  description = "Enable Application Gateway for Containers (AGC) as advanced ingress."
-  type        = bool
-  default     = false
-}
-
-variable "enable_nginx_ingress" {
-  description = "Enable the Web Application Routing (managed NGINX ingress) add-on."
   type        = bool
   default     = false
 }

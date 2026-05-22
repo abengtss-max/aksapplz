@@ -14,9 +14,6 @@ scenario = "single_region_baseline"
 # Secondary region (multi-region scenarios only)
 secondary_location = ""
 
-# Landing zone type (corp = hub peering, online = standalone)
-landing_zone_type = "online"
-
 # -----------------------------------------------------------------------------
 # Core Settings
 # -----------------------------------------------------------------------------
@@ -162,8 +159,6 @@ enable_app_gateway                        = true
 enable_istio_service_mesh                 = false
 istio_internal_ingress_gateway            = false
 istio_external_ingress_gateway            = false
-enable_application_gateway_for_containers = false
-enable_nginx_ingress                      = false
 
 # -----------------------------------------------------------------------------
 # Storage

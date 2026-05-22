@@ -10,11 +10,6 @@
 # Options: single_region_baseline, multi_region_baseline, single_region_regulated, multi_region_regulated
 scenario: "single_region_baseline"
 
-## Landing Zone Type
-# corp:   Connected to hub VNet via peering, UDR through firewall, private cluster
-# online: Internet-facing, no hub connectivity, public endpoints
-landing_zone_type: "corp"
-
 ## Decision 1: Bootstrap Resource Azure Region
 bootstrap_location: "swedencentral"
 
@@ -35,14 +30,16 @@ hub_firewall_private_ip: ""           # Private IP of hub firewall for UDR, e.g.
 # System and user node pools use separate subnets (AKS baseline best practice)
 spoke_vnet_address_space: "10.10.0.0/16"
 subnet_address_prefix_aks_system_nodes: "10.10.0.0/24"
-subnet_address_prefix_aks_user_nodes: "10.10.1.0/22"
-subnet_address_prefix_aks_api_server: "10.10.5.0/28"
-subnet_address_prefix_app_gateway: "10.10.6.0/24"
-subnet_address_prefix_private_endpoints: "10.10.7.0/24"
-subnet_address_prefix_ingress: "10.10.8.0/24"
+subnet_address_prefix_aks_user_nodes:   "10.10.16.0/22"
+subnet_address_prefix_aks_api_server:   "10.10.20.0/28"
+subnet_address_prefix_app_gateway:      "10.10.21.0/24"
+subnet_address_prefix_private_endpoints: "10.10.22.0/24"
+subnet_address_prefix_ingress:          "10.10.23.0/24"
 
 ## Decision 6: AKS Configuration
-kubernetes_version: "1.31"
+# Run `az aks get-versions -l <region> -o table` for the current list.
+# The wizard auto-selects the latest patch in the target region; this is just the fallback.
+kubernetes_version: "1.33.6"
 aks_sku_tier: "Standard"                          # Free, Standard, or Premium
 aks_private_cluster: true
 aks_admin_group_object_ids: []                    # Entra ID group Object IDs for cluster admin access
@@ -77,14 +74,12 @@ enable_prometheus: true
 enable_grafana: true
 # Supporting resources
 enable_app_gateway: true
-enable_acr: true
-enable_key_vault: true
 # Scaling
 enable_keda: true
 enable_vpa: false
+enable_node_auto_provisioning: false
 # Networking
 enable_istio: false
-enable_nginx_ingress: false
 # GitOps
 enable_flux: false
 enable_dapr: false
@@ -92,6 +87,10 @@ enable_dapr: false
 enable_fips: false
 enable_backup: false
 enable_cost_analysis: false
+
+# Note: Azure Container Registry and Azure Key Vault are always deployed
+# (not exposed as toggles). ACR geo-replication is enabled automatically
+# for multi-region scenarios.
 
 # Basic Inputs (Do not modify)
 iac_type: "terraform"

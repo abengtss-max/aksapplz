@@ -33,7 +33,7 @@ subnet_address_prefixes = {
 aks_sku_tier       = "Standard"
 availability_zones = ["1", "2", "3"]
 
-# Private cluster (corp) or public API (online) — controlled by landing_zone_type
+# Private cluster
 private_cluster_enabled             = true
 private_cluster_public_fqdn_enabled = false
 private_dns_zone_id                 = "system"
@@ -64,8 +64,6 @@ enable_node_auto_provisioning = false
 # --- Networking Features ---
 enable_app_gateway                        = true
 enable_istio_service_mesh                 = false
-enable_application_gateway_for_containers = false
-enable_nginx_ingress                      = false
 
 # --- Storage ---
 enable_blob_csi_driver    = true

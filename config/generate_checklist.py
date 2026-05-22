@@ -1,26 +1,30 @@
 """
-Generate the AKS Application Landing Zone Accelerator planning checklist (checklist.xlsx).
-Mirrors the ALZ accelerator checklist format with tabs for Bootstrap and AKS Landing Zone decisions.
+Generate the AKS Application Landing Zone planning checklist (checklist.xlsx).
+
+The workbook is the planning artifact for `Deploy-AKSLandingZone`. Each yellow
+"Your Value" cell in Tab 1 maps 1:1 to a prompt in the wizard and to a setting
+in config/inputs.yaml.
+
+Regenerate with:
+    pip install openpyxl
+    python config/generate_checklist.py
 """
 
+import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 wb = openpyxl.Workbook()
 
-# ============================================================================
-# Styles
-# ============================================================================
-header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
-header_fill = PatternFill(start_color="0078D4", end_color="0078D4", fill_type="solid")  # Azure blue
-section_font = Font(name="Segoe UI", size=11, bold=True, color="0078D4")
-section_fill = PatternFill(start_color="DEEBF7", end_color="DEEBF7", fill_type="solid")  # Light blue
-normal_font = Font(name="Segoe UI", size=10)
-input_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # Light yellow (user input)
-note_font = Font(name="Segoe UI", size=9, italic=True, color="666666")
-title_font = Font(name="Segoe UI", size=14, bold=True, color="0078D4")
+# ─── Styles ────────────────────────────────────────────────────────────────
+header_font   = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+header_fill   = PatternFill(start_color="0078D4", end_color="0078D4", fill_type="solid")
+section_font  = Font(name="Segoe UI", size=11, bold=True, color="0078D4")
+section_fill  = PatternFill(start_color="DEEBF7", end_color="DEEBF7", fill_type="solid")
+normal_font   = Font(name="Segoe UI", size=10)
+input_fill    = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+title_font    = Font(name="Segoe UI", size=14, bold=True, color="0078D4")
 subtitle_font = Font(name="Segoe UI", size=10, italic=True, color="555555")
 
 thin_border = Border(
@@ -29,646 +33,503 @@ thin_border = Border(
     top=Side(style="thin", color="D9D9D9"),
     bottom=Side(style="thin", color="D9D9D9"),
 )
-
-wrap_alignment = Alignment(wrap_text=True, vertical="top")
+wrap_alignment   = Alignment(wrap_text=True, vertical="top")
 center_alignment = Alignment(horizontal="center", vertical="center")
 
 
-def style_header_row(ws, row, max_col):
-    for col in range(1, max_col + 1):
-        cell = ws.cell(row=row, column=col)
+def style_header(ws, row, cols):
+    for c in range(1, cols + 1):
+        cell = ws.cell(row=row, column=c)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.border = thin_border
 
 
-def style_section_row(ws, row, max_col):
-    for col in range(1, max_col + 1):
-        cell = ws.cell(row=row, column=col)
+def style_section(ws, row, cols):
+    for c in range(1, cols + 1):
+        cell = ws.cell(row=row, column=c)
         cell.font = section_font
         cell.fill = section_fill
         cell.border = thin_border
 
 
-def style_data_row(ws, row, max_col, is_input_col=None):
-    for col in range(1, max_col + 1):
-        cell = ws.cell(row=row, column=col)
+def style_data(ws, row, cols, input_col=None):
+    for c in range(1, cols + 1):
+        cell = ws.cell(row=row, column=c)
         cell.font = normal_font
         cell.alignment = wrap_alignment
         cell.border = thin_border
-        if is_input_col and col == is_input_col:
+        if input_col and c == input_col:
             cell.fill = input_fill
 
 
+def dropdown(ws, row, col, values):
+    dv = DataValidation(type="list", formula1='"' + ",".join(values) + '"', allow_blank=True)
+    ws.add_data_validation(dv)
+    dv.add(ws.cell(row=row, column=col))
+
+
 # ============================================================================
-# TAB 1: Accelerator - Bootstrap
+# TAB 1 — Bootstrap Decisions
 # ============================================================================
 ws1 = wb.active
-ws1.title = "Accelerator - Bootstrap"
+ws1.title = "Bootstrap Decisions"
 
-# Title
 ws1.merge_cells("A1:F1")
-ws1["A1"].value = "AKS Application Landing Zone Accelerator - Bootstrap Decisions"
+ws1["A1"].value = "AKS Application Landing Zone — Planning Checklist"
 ws1["A1"].font = title_font
 ws1["A1"].alignment = Alignment(vertical="center")
 ws1.row_dimensions[1].height = 30
 
 ws1.merge_cells("A2:F2")
-ws1["A2"].value = "Fill in the 'Your Value' column (yellow) for each decision. Each decision maps to a setting in config/inputs.yaml."
+ws1["A2"].value = "Fill in the yellow column. Each row matches one question the wizard will ask you."
 ws1["A2"].font = subtitle_font
 ws1.row_dimensions[2].height = 20
 
-# Headers (row 4)
-headers = ["Decision #", "Setting", "Description", "Options / Guidance", "Default", "Your Value"]
-for col, h in enumerate(headers, 1):
+for col, h in enumerate(["#", "Setting", "What it is", "Example / options", "Default", "Your value"], 1):
     ws1.cell(row=4, column=col, value=h)
-style_header_row(ws1, 4, 6)
+style_header(ws1, 4, 6)
 
-# Column widths
-ws1.column_dimensions["A"].width = 12
-ws1.column_dimensions["B"].width = 40
-ws1.column_dimensions["C"].width = 50
+ws1.column_dimensions["A"].width = 6
+ws1.column_dimensions["B"].width = 38
+ws1.column_dimensions["C"].width = 55
 ws1.column_dimensions["D"].width = 55
-ws1.column_dimensions["E"].width = 20
-ws1.column_dimensions["F"].width = 30
+ws1.column_dimensions["E"].width = 22
+ws1.column_dimensions["F"].width = 28
 
-# --- Decision rows ---
+# (number, setting, what it is, example/options, default)
 decisions = [
-    # (decision#, setting, description, options, default)
-    ("", "BOOTSTRAP CONFIGURATION", "", "", ""),  # Section header
+    ("", "SCENARIO", "", "", ""),
+    ("0a", "scenario",
+        "Pick a starting point. Each one chooses sensible defaults for cluster size, security, and add-ons. You can still change anything afterwards.",
+        "single_region_baseline  (standard, one region)\n"
+        "multi_region_baseline   (two regions, GitOps)\n"
+        "single_region_regulated (PCI / FIPS / Istio)\n"
+        "multi_region_regulated  (PCI, two regions)",
+        "single_region_baseline"),
+    ("0b", "secondary_location",
+        "Second Azure region (only for multi-region scenarios). Leave blank otherwise.",
+        "westeurope, northeurope, eastus2 ...",
+        ""),
 
+    ("", "WHERE TO DEPLOY", "", "", ""),
     ("1", "bootstrap_location",
-     "Azure region for bootstrap resources (state storage, managed identity).",
-     "Any valid Azure region. E.g.: swedencentral, westeurope, northeurope, eastus, eastus2",
-     "swedencentral"),
-
+        "Main Azure region for the cluster and supporting resources.",
+        "swedencentral, westeurope, eastus2 ...",
+        "swedencentral"),
     ("2", "aks_landing_zone_subscription_id",
-     "The subscription where the AKS cluster and supporting resources will be deployed.",
-     "Azure subscription ID (GUID format). Leave empty to use the subscription connected to Azure CLI.",
-     "(current CLI subscription)"),
-
+        "Subscription where the AKS cluster will be created.",
+        "Subscription ID (GUID).\nLeave blank to use whatever `az` is logged into.",
+        "(current az subscription)"),
     ("3", "connectivity_subscription_id",
-     "The subscription containing the hub VNet and firewall (deployed by ALZ accelerator).",
-     "Azure subscription ID (GUID). This is the connectivity subscription from your ALZ deployment.",
-     ""),
+        "Subscription that holds your existing hub network (firewall, VPN).",
+        "Subscription ID (GUID).",
+        ""),
 
-    ("", "HUB NETWORKING", "", "", ""),  # Section header
-
+    ("", "HUB NETWORK (you already have this)", "", "", ""),
     ("4a", "hub_vnet_resource_id",
-     "Full ARM resource ID of the hub VNet for VNet peering.",
-     "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/virtualNetworks/{name}",
-     ""),
-
+        "Full ID of your hub VNet. The wizard lists hubs found in Decision 3 and fills this in.",
+        "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<name>",
+        ""),
     ("4b", "hub_firewall_private_ip",
-     "Private IP of the hub firewall. Used for UDR to route egress from AKS nodes.",
-     "IP address. E.g.: 10.0.0.4",
-     ""),
+        "Private IP of your hub firewall. Traffic leaving the cluster routes through this.",
+        "10.0.0.4",
+        "10.0.0.4"),
 
-    ("", "SPOKE NETWORKING", "", "", ""),  # Section header
-
+    ("", "SPOKE NETWORK (the new VNet for AKS)", "", "", ""),
     ("5a", "spoke_vnet_address_space",
-     "Address space for the spoke VNet. Must not overlap with hub or other spokes.",
-     "CIDR notation. Ensure /16 or larger for AKS scalability.",
-     "10.10.0.0/16"),
+        "Address range for the new spoke VNet. Must not overlap with any other VNet.",
+        "10.10.0.0/16",
+        "10.10.0.0/16"),
+    ("5b", "subnet_address_prefix_aks_system_nodes",
+        "Small subnet for the system node pool (runs cluster add-ons only).",
+        "10.10.0.0/24  (256 addresses)",
+        "10.10.0.0/24"),
+    ("5c", "subnet_address_prefix_aks_user_nodes",
+        "Bigger subnet for your application workloads.",
+        "10.10.16.0/22  (1024 addresses)",
+        "10.10.16.0/22"),
+    ("5d", "subnet_address_prefix_aks_api_server",
+        "Subnet for the private Kubernetes API server.",
+        "10.10.20.0/28  (Azure requires at least /28)",
+        "10.10.20.0/28"),
+    ("5e", "subnet_address_prefix_app_gateway",
+        "Subnet for Application Gateway (web traffic in).",
+        "10.10.21.0/24",
+        "10.10.21.0/24"),
+    ("5f", "subnet_address_prefix_private_endpoints",
+        "Subnet for private endpoints (ACR, Key Vault, storage).",
+        "10.10.22.0/24",
+        "10.10.22.0/24"),
+    ("5g", "subnet_address_prefix_ingress",
+        "Subnet for the internal load balancer that fronts your apps.",
+        "10.10.23.0/24",
+        "10.10.23.0/24"),
 
-    ("5b", "subnet_address_prefix_aks_nodes",
-     "Subnet for AKS node pools. Needs to be large enough for max node count.",
-     "CIDR notation. /20 supports ~4000 nodes with Azure CNI Overlay.",
-     "10.10.0.0/20"),
-
-    ("5c", "subnet_address_prefix_aks_api_server",
-     "Subnet for AKS API Server VNet Integration (private API server access).",
-     "CIDR notation. Minimum /28 required by Azure.",
-     "10.10.16.0/28"),
-
-    ("5d", "subnet_address_prefix_app_gateway",
-     "Subnet for Application Gateway WAF v2. Dedicated subnet required by Azure.",
-     "CIDR notation. /24 recommended.",
-     "10.10.17.0/24"),
-
-    ("5e", "subnet_address_prefix_private_endpoints",
-     "Subnet for private endpoints (ACR, Key Vault).",
-     "CIDR notation. /24 recommended.",
-     "10.10.18.0/24"),
-
-    ("5f", "subnet_address_prefix_ingress",
-     "Subnet for ingress controller internal load balancer.",
-     "CIDR notation. /24 recommended.",
-     "10.10.19.0/24"),
-
-    ("", "AKS CONFIGURATION", "", "", ""),  # Section header
-
+    ("", "CLUSTER SETTINGS", "", "", ""),
     ("6a", "kubernetes_version",
-     "Kubernetes version for the AKS cluster.",
-     "Check available versions: az aks get-versions -l <region> -o table",
-     "1.31"),
-
+        "Kubernetes version. The wizard lists the latest versions available in your region — usually just pick the top one.",
+        "Example: 1.33.6",
+        "(latest in region)"),
     ("6b", "aks_sku_tier",
-     "AKS pricing tier. Standard includes SLA, Premium adds more features.",
-     "Free | Standard | Premium",
-     "Standard"),
-
+        "Cluster pricing tier. Standard is fine for most clusters; Premium adds long-term support and is required for regulated scenarios.",
+        "Free | Standard | Premium",
+        "Standard"),
     ("6c", "aks_private_cluster",
-     "Enable private cluster with API Server VNet Integration.",
-     "true = API server accessible only via private network.\nfalse = API server has public endpoint.",
-     "true"),
-
+        "Hide the Kubernetes API behind your private network (no public endpoint).",
+        "true  (recommended)\nfalse (only for internet-facing demos)",
+        "true"),
     ("6d", "aks_admin_group_object_ids",
-     "Entra ID group Object ID(s) for Kubernetes cluster admin RBAC binding.",
-     "List of GUIDs. E.g.: [\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\"].\nCreate group in Entra ID first.",
-     "[]"),
+        "Entra ID group(s) whose members can manage the cluster. Create the group in Entra ID first and paste the object ID.",
+        '["00000000-0000-0000-0000-000000000000"]',
+        "[]"),
 
-    ("", "BOOTSTRAP RESOURCE SUBSCRIPTION", "", "", ""),  # Section header
-
+    ("", "WHERE STATE LIVES", "", "", ""),
     ("7", "bootstrap_subscription_id",
-     "Subscription for Terraform state storage and managed identity.",
-     "Azure subscription ID (GUID). Leave empty to use the AKS landing zone subscription.",
-     "(same as Decision 2)"),
+        "Subscription that holds the Terraform state storage and the runner. Usually the same as Decision 2.",
+        "Subscription ID (GUID), or leave blank.",
+        "(same as Decision 2)"),
 
-    ("", "BOOTSTRAP RESOURCE NAMING", "", "", ""),  # Section header
-
+    ("", "NAMING", "", "", ""),
     ("8a", "service_name",
-     "Service name used in resource naming convention: {service_name}-{environment_name}-{postfix}.",
-     "Short alphanumeric string. E.g.: aksapplz, myapp, workload1",
-     "aksapplz"),
-
+        "Short name of your workload. Used in every resource name.",
+        "aksapplz, payments, shop",
+        "aksapplz"),
     ("8b", "environment_name",
-     "Environment name used in resource naming convention.",
-     "E.g.: prod, staging, dev, test",
-     "prod"),
-
+        "Environment label. Used in every resource name.",
+        "prod, dev, test",
+        "prod"),
     ("8c", "postfix_number",
-     "Numeric postfix for resource uniqueness. Formatted as 3-digit: 001, 002, etc.",
-     "Integer. E.g.: 1, 2, 444",
-     "1"),
+        "Number that makes resource names unique. Bump this if you redeploy.",
+        "1, 2, 3 ...",
+        "1"),
 
-    ("", "BOOTSTRAP NETWORKING AND AGENTS", "", "", ""),  # Section header
-
+    ("", "RUNNERS", "", "", ""),
     ("9a", "use_self_hosted_runners",
-     "Use self-hosted GitHub Actions runners instead of GitHub-hosted runners.",
-     "true = Self-hosted (required for private clusters).\nfalse = GitHub-hosted (simpler, but no private network access).",
-     "true"),
-
+        "Run GitHub Actions on a small container inside Azure (needed for private clusters so CI/CD can reach the API).",
+        "true  (required for private clusters)\nfalse (use GitHub-hosted runners)",
+        "true"),
     ("9b", "use_private_networking",
-     "Deploy runners with private networking (VNet-connected).",
-     "true = Runners deployed in spoke VNet (required for private cluster).\nfalse = Runners use public networking.\nOnly applies when use_self_hosted_runners = true.",
-     "true"),
+        "Put the runner and Container Registry on a private network. Recommended.",
+        "true  (recommended)\nfalse (public networking, ACR Basic)",
+        "true"),
 
-    ("", "VERSION CONTROL SYSTEM SETTINGS", "", "", ""),  # Section header
-
+    ("", "GITHUB", "", "", ""),
     ("10a", "github_personal_access_token",
-     "GitHub PAT for repository and team management. Set via environment variable.",
-     "Set $env:TF_VAR_github_personal_access_token = \"ghp_...\"\nRequired scopes: repo, admin:org, workflow",
-     "(environment variable)"),
-
+        "GitHub token used to create the repos. You will be prompted (input is hidden); you do NOT need to put it here.",
+        "Scopes needed: repo, workflow, admin:org (Read & Write members).",
+        "(prompted in wizard)"),
     ("10b", "github_runners_personal_access_token",
-     "GitHub PAT for self-hosted runner registration. Only needed if use_self_hosted_runners = true.",
-     "Set $env:TF_VAR_github_runners_personal_access_token = \"ghp_...\"\nRequired scopes: admin:org",
-     "(environment variable)"),
-
+        "Second token used to register the self-hosted runner. Also prompted; only asked when 9a is true.",
+        "Scope needed: admin:org (full).",
+        "(prompted in wizard)"),
     ("10c", "github_organization_name",
-     "GitHub organization where repositories will be created.",
-     "Your GitHub org name. E.g.: abengtss-max-org, contoso",
-     ""),
-
+        "GitHub organisation name where the two repos will be created.",
+        "contoso",
+        ""),
     ("10d", "apply_approvers",
-     "GitHub usernames who can approve deployments in the apply environment.",
-     "List format: [\"user1\", \"user2\"]. These users are added to the approver team.",
-     "[]"),
+        "GitHub usernames who must approve before a deployment goes live.",
+        '["alice", "bob"]',
+        "[]"),
 
-    ("", "FEATURES", "", "", ""),  # Section header
-
+    ("", "ADD-ONS (turn things on or off)", "", "", ""),
     ("11a", "enable_defender",
-     "Enable Microsoft Defender for Containers on the AKS cluster.",
-     "true | false",
-     "true"),
-
-    ("11b", "enable_keda",
-     "Enable KEDA (Kubernetes Event-Driven Autoscaling) addon.",
-     "true | false",
-     "true"),
-
-    ("11c", "enable_prometheus",
-     "Enable Azure Managed Prometheus for metrics collection.",
-     "true | false",
-     "true"),
-
-    ("11d", "enable_grafana",
-     "Enable Azure Managed Grafana for dashboards and visualization.",
-     "true | false",
-     "true"),
-
-    ("11e", "enable_app_gateway",
-     "Enable Application Gateway with WAF v2 (OWASP 3.2 + Bot Manager rules).",
-     "true | false",
-     "true"),
-
-    ("11f", "enable_acr",
-     "Enable Azure Container Registry (Premium SKU with private endpoint).",
-     "true | false",
-     "true"),
-
-    ("11g", "enable_key_vault",
-     "Enable Azure Key Vault (RBAC mode with private endpoint and purge protection).",
-     "true | false",
-     "true"),
-
-    ("", "BASIC INPUTS (DO NOT MODIFY)", "", "", ""),  # Section header
-
-    ("—", "iac_type",
-     "Infrastructure as Code type. Fixed to terraform.",
-     "terraform",
-     "terraform"),
-
-    ("—", "bootstrap_module_name",
-     "Bootstrap module identifier.",
-     "aksapplz_github",
-     "aksapplz_github"),
-
-    ("—", "starter_module_name",
-     "Starter module identifier.",
-     "aks_landing_zone",
-     "aks_landing_zone"),
+        "Scans the cluster for security threats in real time.",
+        "true | false",
+        "true"),
+    ("11b", "enable_workload_identity",
+        "Lets pods talk to Azure services without passwords.",
+        "true | false",
+        "true"),
+    ("11c", "enable_azure_policy",
+        "Enforces rules in the cluster (e.g. block containers running as root).",
+        "true | false",
+        "true"),
+    ("11d", "enable_prometheus",
+        "Collects cluster metrics.",
+        "true | false",
+        "true"),
+    ("11e", "enable_grafana",
+        "Dashboards for the metrics above.",
+        "true | false",
+        "true"),
+    ("11f", "enable_app_gateway",
+        "Application Gateway with a Web Application Firewall in front of the cluster.",
+        "true | false",
+        "true"),
+    ("11g", "enable_keda",
+        "Auto-scales pods based on events (queue length, HTTP requests, etc.).",
+        "true | false",
+        "true"),
+    ("11h", "enable_vpa",
+        "Auto-adjusts CPU and memory requests for pods.",
+        "true | false",
+        "false  (true for regulated / multi-region)"),
+    ("11i", "enable_node_auto_provisioning",
+        "Cluster creates new node sizes on demand instead of using fixed pools.",
+        "true | false",
+        "false  (true for multi-region)"),
+    ("11j", "enable_istio",
+        "Service mesh with mTLS between pods. Needed for some compliance standards.",
+        "true | false",
+        "false  (true for regulated)"),
+    ("11k", "enable_flux",
+        "GitOps — the cluster pulls its configuration from a Git repo.",
+        "true | false",
+        "false  (true for multi-region)"),
+    ("11l", "enable_dapr",
+        "Building blocks for microservices (pub/sub, state, secrets).",
+        "true | false",
+        "false"),
+    ("11m", "enable_fips",
+        "Use FIPS 140-2 compliant node OS (US Federal / PCI).",
+        "true | false",
+        "false  (true for regulated)"),
+    ("11n", "enable_backup",
+        "Azure Backup for cluster resources and persistent volumes.",
+        "true | false",
+        "false  (true for regulated / multi-region)"),
+    ("11o", "enable_cost_analysis",
+        "Cost breakdown per namespace in the Azure portal.",
+        "true | false",
+        "false  (true for regulated)"),
 ]
 
 row = 5
-for d in decisions:
-    decision_num, setting, description, options, default = d
-
-    if decision_num == "":
-        # Section header row
+for num, setting, what, opts, default in decisions:
+    if num == "":
         ws1.cell(row=row, column=1, value="")
         ws1.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
         ws1.cell(row=row, column=2, value=setting)
-        style_section_row(ws1, row, 6)
+        style_section(ws1, row, 6)
     else:
-        ws1.cell(row=row, column=1, value=decision_num)
+        ws1.cell(row=row, column=1, value=num)
         ws1.cell(row=row, column=2, value=setting)
-        ws1.cell(row=row, column=3, value=description)
-        ws1.cell(row=row, column=4, value=options)
+        ws1.cell(row=row, column=3, value=what)
+        ws1.cell(row=row, column=4, value=opts)
         ws1.cell(row=row, column=5, value=default)
-        ws1.cell(row=row, column=6, value="")  # User input
-        style_data_row(ws1, row, 6, is_input_col=6)
+        ws1.cell(row=row, column=6, value="")
+        style_data(ws1, row, 6, input_col=6)
         ws1.cell(row=row, column=1).alignment = center_alignment
-
     row += 1
 
-# Add data validation for some cells
-# SKU tier dropdown
+bool_settings = {
+    "aks_private_cluster", "use_self_hosted_runners", "use_private_networking",
+    "enable_defender", "enable_workload_identity", "enable_azure_policy",
+    "enable_prometheus", "enable_grafana", "enable_app_gateway", "enable_keda",
+    "enable_vpa", "enable_node_auto_provisioning", "enable_istio",
+    "enable_flux", "enable_dapr", "enable_fips", "enable_backup",
+    "enable_cost_analysis",
+}
 for r in range(5, row):
-    if ws1.cell(row=r, column=2).value == "aks_sku_tier":
-        dv = DataValidation(type="list", formula1='"Free,Standard,Premium"', allow_blank=True)
-        dv.error = "Please select Free, Standard, or Premium"
-        dv.errorTitle = "Invalid SKU"
-        ws1.add_data_validation(dv)
-        dv.add(ws1.cell(row=r, column=6))
-
-    if ws1.cell(row=r, column=2).value in ("aks_private_cluster", "use_self_hosted_runners",
-                                             "use_private_networking", "enable_defender",
-                                             "enable_keda", "enable_prometheus", "enable_grafana",
-                                             "enable_app_gateway", "enable_acr", "enable_key_vault"):
-        dv = DataValidation(type="list", formula1='"true,false"', allow_blank=True)
-        ws1.add_data_validation(dv)
-        dv.add(ws1.cell(row=r, column=6))
+    s = ws1.cell(row=r, column=2).value
+    if s == "scenario":
+        dropdown(ws1, r, 6, ["single_region_baseline", "multi_region_baseline",
+                              "single_region_regulated", "multi_region_regulated"])
+    elif s == "aks_sku_tier":
+        dropdown(ws1, r, 6, ["Free", "Standard", "Premium"])
+    elif s in bool_settings:
+        dropdown(ws1, r, 6, ["true", "false"])
 
 
 # ============================================================================
-# TAB 2: Accelerator - AKS Landing Zone
+# TAB 2 — Advanced Cluster Settings
 # ============================================================================
-ws2 = wb.create_sheet("Accelerator - AKS Landing Zone")
+ws2 = wb.create_sheet("Advanced Cluster Settings")
 
-# Title
-ws2.merge_cells("A1:F1")
-ws2["A1"].value = "AKS Application Landing Zone - Scenario and Options Decisions"
+ws2.merge_cells("A1:E1")
+ws2["A1"].value = "Advanced Cluster Settings"
 ws2["A1"].font = title_font
 ws2["A1"].alignment = Alignment(vertical="center")
 ws2.row_dimensions[1].height = 30
 
-ws2.merge_cells("A2:F2")
-ws2["A2"].value = "Choose your AKS landing zone scenario and configure options. These map to settings in config/aks-landing-zone.tfvars."
+ws2.merge_cells("A2:E2")
+ws2["A2"].value = (
+    "These come from the scenario you picked (see Tab 1, Decision 0a). "
+    "Only change them if you have a specific reason. Edit `aks-landing-zone.auto.tfvars` "
+    "in the generated repo to override."
+)
 ws2["A2"].font = subtitle_font
-ws2.row_dimensions[2].height = 20
+ws2.row_dimensions[2].height = 30
 
-# Headers
-headers2 = ["Category", "Setting", "Description", "Options / Guidance", "Default", "Your Value"]
-for col, h in enumerate(headers2, 1):
+for col, h in enumerate(["Setting", "What it does", "Example / options", "Default", "Your value"], 1):
     ws2.cell(row=4, column=col, value=h)
-style_header_row(ws2, 4, 6)
+style_header(ws2, 4, 5)
 
-ws2.column_dimensions["A"].width = 18
-ws2.column_dimensions["B"].width = 38
-ws2.column_dimensions["C"].width = 50
-ws2.column_dimensions["D"].width = 55
-ws2.column_dimensions["E"].width = 20
-ws2.column_dimensions["F"].width = 30
+ws2.column_dimensions["A"].width = 38
+ws2.column_dimensions["B"].width = 55
+ws2.column_dimensions["C"].width = 45
+ws2.column_dimensions["D"].width = 22
+ws2.column_dimensions["E"].width = 28
 
-# AKS Landing Zone options
-options_data = [
-    ("", "SCENARIO", "", "", ""),
+advanced = [
+    ("", "SYSTEM NODE POOL  (small pool that runs Kubernetes itself)", "", "", ""),
+    ("system_node_pool.vm_size",
+        "Size of each system node.",
+        "Standard_D4ds_v5 (4 vCPU)\nStandard_D8ds_v5 (8 vCPU)",
+        "Standard_D4ds_v5"),
+    ("system_node_pool.min_count",
+        "Smallest number of system nodes.",
+        "2 keeps the cluster healthy if one node fails.",
+        "2"),
+    ("system_node_pool.max_count",
+        "Largest number of system nodes.",
+        "3–5 is plenty for system pods.",
+        "5"),
 
-    ("Scenario", "deployment_topology",
-     "The network topology for the AKS landing zone.",
-     "hub_spoke = Spoke VNet peered to existing ALZ hub with UDR to firewall.\nThis is the only supported scenario for aksapplz.",
-     "hub_spoke"),
-
-    ("", "COMPUTE - SYSTEM NODE POOL", "", "", ""),
-
-    ("Compute", "system_node_pool_vm_size",
-     "VM SKU for the system node pool (runs critical system pods).",
-     "Standard_D4ds_v5, Standard_D8ds_v5, Standard_D4s_v5, etc.\nMust support ephemeral OS disks.",
-     "Standard_D4ds_v5"),
-
-    ("Compute", "system_node_pool_min_count",
-     "Minimum number of nodes in the system pool (autoscaler lower bound).",
-     "Integer >= 2 for production high availability.",
-     "2"),
-
-    ("Compute", "system_node_pool_max_count",
-     "Maximum number of nodes in the system pool.",
-     "Integer. Typically 3-5 for system workloads.",
-     "5"),
-
-    ("Compute", "system_node_pool_os_disk_type",
-     "OS disk type for system nodes.",
-     "Ephemeral = Local SSD (faster, no cost).\nManaged = Azure managed disk.",
-     "Ephemeral"),
-
-    ("", "COMPUTE - USER NODE POOL", "", "", ""),
-
-    ("Compute", "user_node_pool_vm_size",
-     "VM SKU for the user node pool (runs application workloads).",
-     "Standard_D4ds_v5, Standard_D8ds_v5, Standard_D16ds_v5, etc.\nChoose based on application requirements.",
-     "Standard_D4ds_v5"),
-
-    ("Compute", "user_node_pool_min_count",
-     "Minimum number of nodes in the user pool.",
-     "Integer >= 2 for production. KEDA/HPA will autoscale above this.",
-     "2"),
-
-    ("Compute", "user_node_pool_max_count",
-     "Maximum number of nodes in the user pool (autoscaler upper bound).",
-     "Integer. Set based on peak workload requirements.",
-     "20"),
-
-    ("Compute", "user_node_pool_os_disk_type",
-     "OS disk type for user nodes.",
-     "Ephemeral | Managed",
-     "Ephemeral"),
+    ("", "USER NODE POOL  (where your apps actually run)", "", "", ""),
+    ("user_node_pool.vm_size",
+        "Size of each application node.",
+        "Standard_D4ds_v5, Standard_D8ds_v5, Standard_D16ds_v5",
+        "Standard_D4ds_v5"),
+    ("user_node_pool.min_count",
+        "Smallest number of application nodes.",
+        "2 or more for production.",
+        "2"),
+    ("user_node_pool.max_count",
+        "Largest number of application nodes (autoscaler limit).",
+        "Size to your peak traffic.",
+        "20"),
 
     ("", "NETWORKING", "", "", ""),
+    ("network_policy",
+        "Which pod-to-pod firewall to use inside the cluster.",
+        "calico  (baseline)\nazure   (regulated; NPM)",
+        "calico (azure for regulated)"),
+    ("service_cidr",
+        "IP range Kubernetes uses for its internal services. Must not overlap any VNet.",
+        "172.16.0.0/16",
+        "172.16.0.0/16"),
+    ("dns_service_ip",
+        "IP of the cluster DNS. Must sit inside service_cidr.",
+        "172.16.0.10",
+        "172.16.0.10"),
+    ("pod_cidr",
+        "IP range for pods (used by Azure CNI Overlay).",
+        "192.168.0.0/16",
+        "192.168.0.0/16"),
 
-    ("Networking", "network_plugin",
-     "Kubernetes network plugin for pod networking.",
-     "azure (Azure CNI Overlay) = Pods get overlay IPs, no VNet IP exhaustion.\nkubenet = Basic networking (not recommended for production).",
-     "azure"),
+    ("", "UPGRADES", "", "", ""),
+    ("automatic_upgrade_channel",
+        "When AKS should auto-install Kubernetes patches.",
+        "patch | stable | rapid | node-image | none",
+        "patch"),
+    ("node_os_upgrade_channel",
+        "When AKS should auto-patch the node OS.",
+        "NodeImage | SecurityPatch | None",
+        "NodeImage"),
 
-    ("Networking", "network_plugin_mode",
-     "Network plugin mode when using Azure CNI.",
-     "overlay = Recommended. Separates pod IPs from VNet IPs.",
-     "overlay"),
+    ("", "APPLICATION GATEWAY (web traffic + WAF)", "", "", ""),
+    ("app_gateway_sku",
+        "Application Gateway tier. WAF_v2 includes the Web Application Firewall.",
+        "WAF_v2 | Standard_v2",
+        "WAF_v2"),
+    ("app_gateway_min_capacity",
+        "Always-on capacity.",
+        "1",
+        "1"),
+    ("app_gateway_max_capacity",
+        "Maximum capacity under load.",
+        "Pick based on expected traffic.",
+        "10"),
 
-    ("Networking", "network_dataplane",
-     "Network dataplane technology.",
-     "cilium = eBPF-based (better performance, network policies).\nazure = Standard Azure networking.",
-     "azure"),
-
-    ("Networking", "service_cidr",
-     "CIDR for Kubernetes services. Must not overlap with any VNet ranges.",
-     "CIDR notation. E.g.: 172.16.0.0/16",
-     "172.16.0.0/16"),
-
-    ("Networking", "dns_service_ip",
-     "IP for the Kubernetes DNS service. Must be within service_cidr.",
-     "IP address. E.g.: 172.16.0.10",
-     "172.16.0.10"),
-
-    ("", "SECURITY", "", "", ""),
-
-    ("Security", "acr_sku",
-     "Azure Container Registry SKU. Premium required for private endpoints and geo-replication.",
-     "Premium (recommended) | Standard | Basic",
-     "Premium"),
-
-    ("Security", "acr_zone_redundancy",
-     "Enable zone redundancy for ACR. Premium SKU only.",
-     "true | false",
-     "true"),
-
-    ("Security", "key_vault_purge_protection",
-     "Enable purge protection on Key Vault. Prevents permanent deletion.",
-     "true (recommended for production) | false",
-     "true"),
-
-    ("Security", "key_vault_soft_delete_days",
-     "Number of days to retain soft-deleted Key Vault items.",
-     "7 - 90 days.",
-     "30"),
-
-    ("", "APPLICATION GATEWAY WAF", "", "", ""),
-
-    ("App Gateway", "app_gateway_sku",
-     "Application Gateway SKU.",
-     "WAF_v2 (recommended — includes Web Application Firewall).\nStandard_v2 (no WAF).",
-     "WAF_v2"),
-
-    ("App Gateway", "app_gateway_min_capacity",
-     "Minimum autoscale capacity for Application Gateway.",
-     "Integer >= 1.",
-     "1"),
-
-    ("App Gateway", "app_gateway_max_capacity",
-     "Maximum autoscale capacity for Application Gateway.",
-     "Integer. Set based on expected traffic.",
-     "10"),
-
-    ("App Gateway", "waf_rule_set_type",
-     "WAF managed rule set type.",
-     "OWASP (standard web protection rules).",
-     "OWASP"),
-
-    ("App Gateway", "waf_rule_set_version",
-     "WAF managed rule set version.",
-     "3.2 (latest recommended) | 3.1 | 3.0",
-     "3.2"),
-
-    ("", "MONITORING", "", "", ""),
-
-    ("Monitoring", "log_analytics_retention_days",
-     "Log retention period in Log Analytics workspace.",
-     "30 - 730 days. Longer retention increases cost.",
-     "30"),
-
-    ("Monitoring", "grafana_sku",
-     "Azure Managed Grafana SKU.",
-     "Standard (includes all features, 10 users free).",
-     "Standard"),
-
-    ("", "AKS ADVANCED", "", "", ""),
-
-    ("AKS", "auto_upgrade_channel",
-     "AKS auto-upgrade channel for Kubernetes patches.",
-     "patch = Auto-apply patch versions (e.g., 1.31.1 → 1.31.2).\nstable = Auto-apply stable versions.\nnone = Manual upgrades only.",
-     "patch"),
-
-    ("AKS", "image_cleaner_enabled",
-     "Enable Image Cleaner to remove unused container images from nodes.",
-     "true | false",
-     "true"),
-
-    ("AKS", "image_cleaner_interval_hours",
-     "How often Image Cleaner runs (in hours).",
-     "Integer. E.g.: 48, 24, 168",
-     "48"),
-
-    ("AKS", "azure_policy_enabled",
-     "Enable Azure Policy addon for AKS governance.",
-     "true (recommended) | false",
-     "true"),
-
-    ("AKS", "workload_identity_enabled",
-     "Enable Workload Identity for pod-level Azure authentication.",
-     "true (recommended — eliminates stored credentials) | false",
-     "true"),
-
-    ("AKS", "oidc_issuer_enabled",
-     "Enable OIDC issuer for federated identity scenarios.",
-     "true (required for Workload Identity) | false",
-     "true"),
+    ("", "LOGS & DASHBOARDS", "", "", ""),
+    ("log_analytics_retention_days",
+        "How long to keep cluster logs. Longer = more cost.",
+        "30, 90, 365 ...",
+        "30"),
 ]
 
 row2 = 5
-for d in options_data:
-    cat, setting, description, opts, default = d
-
-    if cat == "":
-        ws2.cell(row=row2, column=1, value="")
-        ws2.merge_cells(start_row=row2, start_column=2, end_row=row2, end_column=6)
-        ws2.cell(row=row2, column=2, value=setting)
-        style_section_row(ws2, row2, 6)
+for tup in advanced:
+    if tup[0] == "":
+        # section header row uses column B for label
+        ws2.merge_cells(start_row=row2, start_column=1, end_row=row2, end_column=5)
+        ws2.cell(row=row2, column=1, value=tup[1])
+        style_section(ws2, row2, 5)
     else:
-        ws2.cell(row=row2, column=1, value=cat)
-        ws2.cell(row=row2, column=2, value=setting)
-        ws2.cell(row=row2, column=3, value=description)
-        ws2.cell(row=row2, column=4, value=opts)
-        ws2.cell(row=row2, column=5, value=default)
-        ws2.cell(row=row2, column=6, value="")
-        style_data_row(ws2, row2, 6, is_input_col=6)
-
+        setting, what, example, default = tup
+        ws2.cell(row=row2, column=1, value=setting)
+        ws2.cell(row=row2, column=2, value=what)
+        ws2.cell(row=row2, column=3, value=example)
+        ws2.cell(row=row2, column=4, value=default)
+        ws2.cell(row=row2, column=5, value="")
+        style_data(ws2, row2, 5, input_col=5)
     row2 += 1
 
-# Add dropdowns for boolean fields in tab 2
 for r in range(5, row2):
-    setting_val = ws2.cell(row=r, column=2).value
-    if setting_val in ("acr_zone_redundancy", "key_vault_purge_protection",
-                       "image_cleaner_enabled", "azure_policy_enabled",
-                       "workload_identity_enabled", "oidc_issuer_enabled"):
-        dv = DataValidation(type="list", formula1='"true,false"', allow_blank=True)
-        ws2.add_data_validation(dv)
-        dv.add(ws2.cell(row=r, column=6))
-
-    if setting_val == "system_node_pool_os_disk_type" or setting_val == "user_node_pool_os_disk_type":
-        dv = DataValidation(type="list", formula1='"Ephemeral,Managed"', allow_blank=True)
-        ws2.add_data_validation(dv)
-        dv.add(ws2.cell(row=r, column=6))
-
-    if setting_val == "acr_sku":
-        dv = DataValidation(type="list", formula1='"Premium,Standard,Basic"', allow_blank=True)
-        ws2.add_data_validation(dv)
-        dv.add(ws2.cell(row=r, column=6))
-
-    if setting_val == "app_gateway_sku":
-        dv = DataValidation(type="list", formula1='"WAF_v2,Standard_v2"', allow_blank=True)
-        ws2.add_data_validation(dv)
-        dv.add(ws2.cell(row=r, column=6))
-
-    if setting_val == "auto_upgrade_channel":
-        dv = DataValidation(type="list", formula1='"patch,stable,none"', allow_blank=True)
-        ws2.add_data_validation(dv)
-        dv.add(ws2.cell(row=r, column=6))
+    s = ws2.cell(row=r, column=1).value
+    if s == "network_policy":
+        dropdown(ws2, r, 5, ["calico", "azure", "cilium"])
+    elif s == "app_gateway_sku":
+        dropdown(ws2, r, 5, ["WAF_v2", "Standard_v2"])
+    elif s == "automatic_upgrade_channel":
+        dropdown(ws2, r, 5, ["patch", "stable", "rapid", "node-image", "none"])
+    elif s == "node_os_upgrade_channel":
+        dropdown(ws2, r, 5, ["NodeImage", "SecurityPatch", "None"])
 
 
 # ============================================================================
-# TAB 3: Instructions
+# TAB 3 — How to use this workbook
 # ============================================================================
-ws3 = wb.create_sheet("Instructions")
+ws3 = wb.create_sheet("How to use")
+ws3.column_dimensions["A"].width = 110
 
-ws3.column_dimensions["A"].width = 80
+intro = [
+    ("AKS Application Landing Zone — Planning Checklist", title_font),
+    ("", normal_font),
+    ("This workbook is the planning sheet for `Deploy-AKSLandingZone`.", normal_font),
+    ("Fill it in with your team before you run the wizard, then keep it for the record.", normal_font),
+    ("", normal_font),
 
-instructions = [
-    ("AKS Application Landing Zone Accelerator - Planning Checklist", title_font),
+    ("How to use it", section_font),
     ("", normal_font),
-    ("This workbook helps you plan your AKS Application Landing Zone deployment.", normal_font),
-    ("It mirrors the Azure Landing Zone Accelerator Phase 0 planning process.", normal_font),
+    ("1. Open the 'Bootstrap Decisions' tab and fill in every yellow cell.", normal_font),
+    ("   - Pick a scenario first (row 0a) — it sets sensible defaults for the rest.", normal_font),
+    ("   - Don't put GitHub tokens in the workbook. The wizard asks for them with hidden input.", normal_font),
     ("", normal_font),
-    ("HOW TO USE THIS WORKBOOK", section_font),
+    ("2. Open 'Advanced Cluster Settings' only if you need to change cluster sizing, networking,", normal_font),
+    ("   or upgrade behaviour. Most teams leave this tab alone.", normal_font),
     ("", normal_font),
-    ("1. Start with the 'Accelerator - Bootstrap' tab.", normal_font),
-    ("   Fill in the yellow 'Your Value' column for each decision.", normal_font),
-    ("   Each decision number maps to a decision in config/inputs.yaml.", normal_font),
+    ("3. Run the wizard and use the workbook as your reference:", normal_font),
+    ("       Import-Module .\\ALZ.AKS\\ALZ.AKS.psd1 -Force", normal_font),
+    ("       Deploy-AKSLandingZone", normal_font),
     ("", normal_font),
-    ("2. Then go to the 'Accelerator - AKS Landing Zone' tab.", normal_font),
-    ("   Review and customize the AKS-specific settings.", normal_font),
-    ("   These map to settings in config/aks-landing-zone.tfvars.", normal_font),
+
+    ("What the wizard does", section_font),
     ("", normal_font),
-    ("3. Use your completed checklist when running the bootstrap:", normal_font),
-    ("   - Interactive mode: Use the values as reference while prompted", normal_font),
-    ("   - Advanced mode: Copy values directly into config/inputs.yaml", normal_font),
+    ("Phase A — asks you the questions in this workbook and writes config files.", normal_font),
+    ("Phase B — creates the Azure resources, GitHub repos, runner, and pushes the Terraform code.", normal_font),
+    ("Phase C — your PRs in the new GitHub repo run plan/apply and deploy the cluster.", normal_font),
     ("", normal_font),
-    ("DEPLOYMENT PHASES", section_font),
+
+    ("GitHub tokens — scopes you need", section_font),
     ("", normal_font),
-    ("Phase 0 - Planning (this checklist)", normal_font),
-    ("  Choose bootstrapping options, AKS scenario, and customization options.", normal_font),
+    ("Main token (always):    repo, workflow, admin:org (Members Read & Write)", normal_font),
+    ("Runner token (if 9a is true):  admin:org (full)", normal_font),
     ("", normal_font),
-    ("Phase 1 - Prerequisites", normal_font),
-    ("  - Azure CLI login (az login)", normal_font),
-    ("  - GitHub PATs set as environment variables", normal_font),
-    ("  - Entra ID admin group created for AKS cluster access", normal_font),
-    ("  - Subscriptions available (AKS landing zone + connectivity)", normal_font),
+
+    ("Resource names you will see", section_font),
     ("", normal_font),
-    ("Phase 2 - Bootstrap", normal_font),
-    ("  Run: .\\bootstrap\\Deploy-AKSLandingZone.ps1", normal_font),
-    ("  Or:  .\\bootstrap\\Deploy-AKSLandingZone.ps1 -InputConfigPath .\\config\\inputs.yaml", normal_font),
-    ("", normal_font),
-    ("Phase 3 - Run", normal_font),
-    ("  Create PR → CI runs plan → Merge → CD runs plan → Approve → Apply", normal_font),
-    ("", normal_font),
-    ("REQUIRED GITHUB PAT SCOPES", section_font),
-    ("", normal_font),
-    ("github_personal_access_token:", normal_font),
-    ("  - repo (Full control of private repositories)", normal_font),
-    ("  - admin:org → Members (Read and Write)", normal_font),
-    ("  - workflow (Update GitHub Action workflows)", normal_font),
-    ("", normal_font),
-    ("github_runners_personal_access_token (only if use_self_hosted_runners = true):", normal_font),
-    ("  - admin:org (Full control of orgs and teams)", normal_font),
-    ("", normal_font),
-    ("NAMING CONVENTION", section_font),
-    ("", normal_font),
-    ("Bootstrap resources are named: {service_name}-{environment_name}-{location_shortcode}-{postfix}", normal_font),
-    ("Example: aksapplz-prod-sc-001", normal_font),
-    ("", normal_font),
-    ("Resource Group:      rg-aksapplz-prod-sc-001", normal_font),
-    ("Storage Account:     staksapplzprodsc001", normal_font),
-    ("Managed Identity:    id-aksapplz-prod-sc-001", normal_font),
-    ("GitHub Repository:   aksapplz-prod", normal_font),
-    ("Templates Repo:      aksapplz-prod-templates", normal_font),
-    ("GitHub Team:          aksapplz-prod-approvers", normal_font),
-    ("Plan Environment:    aksapplz-plan", normal_font),
-    ("Apply Environment:   aksapplz-apply", normal_font),
+    ("Pattern: {service}-{env}-{region-short}-{number}", normal_font),
+    ("Example with defaults (aksapplz, prod, swedencentral, 1):", normal_font),
+    ("  Resource group for state:     rg-aksapplz-prod-sc-001", normal_font),
+    ("  Resource group for identity:  rg-aksapplz-prod-sc-identity", normal_font),
+    ("  Resource group for runner:    rg-aksapplz-prod-sc-agents     (only with self-hosted runners)", normal_font),
+    ("  GitHub repository:            aksapplz-prod", normal_font),
+    ("  GitHub templates repo:        aksapplz-prod-templates", normal_font),
+    ("  Approver team:                aksapplz-prod-approvers", normal_font),
 ]
 
-for i, (text, font) in enumerate(instructions, 1):
+for i, (text, font) in enumerate(intro, 1):
     cell = ws3.cell(row=i, column=1, value=text)
     cell.font = font
     cell.alignment = Alignment(wrap_text=True, vertical="top")
 
-# Move Instructions tab to front
-wb.move_sheet("Instructions", offset=-2)
+wb.move_sheet("How to use", offset=-2)
 
-# ============================================================================
-# Save
-# ============================================================================
-output_path = r"c:\Users\alibengtsson\aksapplz\config\checklist.xlsx"
+# ─── Save ──────────────────────────────────────────────────────────────────
+output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checklist.xlsx")
 wb.save(output_path)
 print(f"Checklist saved to: {output_path}")

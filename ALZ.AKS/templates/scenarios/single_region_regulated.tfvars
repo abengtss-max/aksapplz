@@ -71,8 +71,6 @@ enable_app_gateway                        = true
 enable_istio_service_mesh                 = true   # mTLS for PCI-DSS cardholder data encryption in transit
 istio_internal_ingress_gateway            = true
 istio_external_ingress_gateway            = false
-enable_application_gateway_for_containers = false
-enable_nginx_ingress                      = false
 
 # --- Storage ---
 enable_blob_csi_driver    = true

@@ -2,12 +2,12 @@
 # Networking - Spoke VNet, Subnets, NSGs, UDR, VNet Peering
 # Uses Azure Verified Module: avm-res-network-virtualnetwork
 #
-# Corp:   UDR to hub firewall, VNet peering, private endpoints subnet
-# Online: No UDR, no peering, direct internet egress
+# Corp landing zone: UDR to hub firewall, VNet peering, private endpoints
 # -----------------------------------------------------------------------------
 
 locals {
-  is_corp = var.landing_zone_type == "corp"
+  # This accelerator deploys a corp (hub-spoke, private) landing zone.
+  is_corp = true
 }
 
 # Resource Group

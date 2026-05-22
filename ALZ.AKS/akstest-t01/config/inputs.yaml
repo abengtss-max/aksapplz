@@ -1,7 +1,6 @@
 ---
-# T01: single_region_baseline (all defaults, online mode)
+# T01: single_region_baseline (all defaults)
 scenario: "single_region_baseline"
-landing_zone_type: "online"
 bootstrap_location: "swedencentral"
 aks_landing_zone_subscription_id: "f96403ae-7ef3-4e36-81a7-cb74a12ce667"
 connectivity_subscription_id: "1722f280-2f89-42c1-a80f-9a4773491727"
@@ -41,7 +40,6 @@ enable_key_vault: true
 enable_keda: true
 enable_vpa: false
 enable_istio: false
-enable_nginx_ingress: false
 enable_flux: false
 enable_dapr: false
 enable_fips: false

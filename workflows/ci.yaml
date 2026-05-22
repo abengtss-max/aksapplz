@@ -1,5 +1,5 @@
-# CI Caller Workflow - Triggered on Pull Requests
-# Calls the reusable CI template from the templates repository
+# CI Caller Workflow - Triggered on Pull Requests to validate changes
+# Runs terraform plan to preview infrastructure changes before merge
 name: "01 AKS Landing Zone Continuous Integration"
 
 on:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   CI:
-    uses: ${{ github.repository_owner }}/aksapplz-templates/.github/workflows/ci-template.yaml@main
+    uses: __ORG_NAME__/__TEMPLATE_REPO_NAME__/.github/workflows/ci-template.yaml@main
     with:
-      environment: aksapplz-plan
+      environment: __PLAN_ENVIRONMENT__
     secrets: inherit

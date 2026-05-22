@@ -18,27 +18,32 @@ locals {
   name_prefix = "${var.workload_name}-${var.environment}-${local.loc_short}"
 
   # Resource names
-  resource_group_name     = "rg-${local.name_prefix}"
-  vnet_name               = "vnet-${local.name_prefix}"
-  aks_name                = "aks-${local.name_prefix}"
-  acr_name                = replace("acr${var.workload_name}${var.environment}${local.loc_short}", "-", "")
-  key_vault_name          = "kv-${local.name_prefix}"
-  app_gateway_name        = "agw-${local.name_prefix}"
-  waf_policy_name         = "waf-${local.name_prefix}"
-  log_analytics_name      = "log-${local.name_prefix}"
-  monitor_workspace_name  = "amon-${local.name_prefix}"
-  grafana_name            = "grafana-${local.name_prefix}"
-  route_table_name        = "rt-${local.name_prefix}"
-  nsg_aks_name            = "nsg-aks-${local.name_prefix}"
-  nsg_appgw_name          = "nsg-agw-${local.name_prefix}"
-  nsg_pe_name             = "nsg-pe-${local.name_prefix}"
-  managed_identity_name   = "id-${local.name_prefix}"
+  resource_group_name    = "rg-${local.name_prefix}"
+  vnet_name              = "vnet-${local.name_prefix}"
+  aks_name               = "aks-${local.name_prefix}"
+  acr_name               = replace("acr${var.workload_name}${var.environment}${local.loc_short}", "-", "")
+  key_vault_name         = "kv-${local.name_prefix}"
+  app_gateway_name       = "agw-${local.name_prefix}"
+  waf_policy_name        = "waf-${local.name_prefix}"
+  log_analytics_name     = "log-${local.name_prefix}"
+  monitor_workspace_name = "amon-${local.name_prefix}"
+  grafana_name           = "grf-${local.name_prefix}"
+  route_table_name       = "rt-${local.name_prefix}"
+  nsg_appgw_name         = "nsg-agw-${local.name_prefix}"
+  nsg_pe_name            = "nsg-pe-${local.name_prefix}"
+  managed_identity_name  = "id-${local.name_prefix}"
+  nsg_aks_system_name    = "nsg-aks-system-${local.name_prefix}"
+  nsg_aks_user_name      = "nsg-aks-user-${local.name_prefix}"
 
-  # Subnet configurations
+  # Subnet configurations — system and user node pools on separate subnets (AKS baseline best practice)
   subnets = {
-    aks_nodes = {
-      name             = "snet-aks-nodes-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.aks_nodes]
+    aks_system_nodes = {
+      name             = "snet-aks-system-${local.name_prefix}"
+      address_prefixes = [var.subnet_address_prefixes.aks_system_nodes]
+    }
+    aks_user_nodes = {
+      name             = "snet-aks-user-${local.name_prefix}"
+      address_prefixes = [var.subnet_address_prefixes.aks_user_nodes]
     }
     aks_api_server = {
       name             = "snet-aks-apiserver-${local.name_prefix}"
@@ -74,13 +79,13 @@ locals {
     project     = "aksapplz"
   })
 
-  # Hub firewall private IP for UDR
-  hub_firewall_private_ip = var.hub_firewall_private_ip
+  # Hub firewall private IP for UDR (only used in Corp)
+  hub_firewall_private_ip = var.hub_firewall_private_ip != "" ? var.hub_firewall_private_ip : "0.0.0.0"
 
   # DNS zone names for private endpoints
   private_dns_zones = {
-    acr       = "privatelink.azurecr.io"
-    keyvault  = "privatelink.vaultcore.azure.net"
-    aks       = "privatelink.${var.location}.azmk8s.io"
+    acr      = "privatelink.azurecr.io"
+    keyvault = "privatelink.vaultcore.azure.net"
+    aks      = "privatelink.${var.location}.azmk8s.io"
   }
 }

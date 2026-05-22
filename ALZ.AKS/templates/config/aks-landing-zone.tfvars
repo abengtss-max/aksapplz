@@ -154,8 +154,6 @@ enable_app_gateway                        = true    # Application Gateway with W
 enable_istio_service_mesh                 = false   # Istio service mesh (mTLS)
 istio_internal_ingress_gateway            = false
 istio_external_ingress_gateway            = false
-enable_application_gateway_for_containers = false   # AGC (advanced ingress)
-enable_nginx_ingress                      = false   # Web App Routing (managed NGINX)
 
 # -----------------------------------------------------------------------------
 # Storage

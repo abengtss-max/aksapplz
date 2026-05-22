@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="18" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="1" invalid="0" date="2026-05-15" time="21:39:01">
+  <environment user-domain="EUROPE" cwd="C:\Users\alibengtsson\aksapplz" platform="Microsoft Windows 11 Enterprise|C:\Windows|\Device\Harddisk0\Partition3" user="alibengtsson" nunit-version="2.5.8.0" machine-name="ALIS-STATION" os-version="10.0.26200" clr-version="10.0.6" />
+  <culture-info current-culture="en-SE" current-uiculture="en-GB" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Ignored" success="True" time="8.1296" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\unit\Deploy-AKSLandingZone.Tests.ps1" executed="True" result="Success" success="True" time="7.346" asserts="0" description="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\unit\Deploy-AKSLandingZone.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Deploy-AKSLandingZone parameter contract" executed="True" result="Success" success="True" time="0.2817" asserts="0" description="Deploy-AKSLandingZone parameter contract">
+            <results>
+              <test-case description="is exported from the module" name="Deploy-AKSLandingZone parameter contract.is exported from the module" time="0.1597" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="accepts -InputConfigPath as a string parameter" name="Deploy-AKSLandingZone parameter contract.accepts -InputConfigPath as a string parameter" time="0.0185" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="accepts -Force switch (TEST-PLAN Fix #4)" name="Deploy-AKSLandingZone parameter contract.accepts -Force switch (TEST-PLAN Fix #4)" time="0.0089" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="accepts -Destroy switch" name="Deploy-AKSLandingZone parameter contract.accepts -Destroy switch" time="0.0098" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Deploy-AKSLandingZone -InputConfigPath validation" executed="True" result="Success" success="True" time="6.6274" asserts="0" description="Deploy-AKSLandingZone -InputConfigPath validation">
+            <results>
+              <test-case description="errors out gracefully when the config file does not exist" name="Deploy-AKSLandingZone -InputConfigPath validation.errors out gracefully when the config file does not exist" time="6.323" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\unit\Write-TfvarsFile.Tests.ps1" executed="True" result="Success" success="True" time="0.389" asserts="0" description="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\unit\Write-TfvarsFile.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Write-TfvarsFile" executed="True" result="Success" success="True" time="0.2451" asserts="0" description="Write-TfvarsFile">
+            <results>
+              <test-case description="writes a non-empty tfvars file to the requested path" name="Write-TfvarsFile.writes a non-empty tfvars file to the requested path" time="0.0798" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="emits landing_zone_type from the config (TEST-PLAN Fix #1)" name="Write-TfvarsFile.emits landing_zone_type from the config (TEST-PLAN Fix #1)" time="0.0497" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="does not contain literal REPLACE_ME placeholders when admin groups are provided" name="Write-TfvarsFile.does not contain literal REPLACE_ME placeholders when admin groups are provided" time="0.027" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="emits the resolved tenant_id (TEST-PLAN Fix #2)" name="Write-TfvarsFile.emits the resolved tenant_id (TEST-PLAN Fix #2)" time="0.0237" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="uses azure network policy for regulated scenarios" name="Write-TfvarsFile.uses azure network policy for regulated scenarios" time="0.0254" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\contract\InputsYamlSchema.Tests.ps1" executed="True" result="Success" success="True" time="0.2441" asserts="0" description="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\contract\InputsYamlSchema.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="templates/config/inputs.yaml contract" executed="True" result="Success" success="True" time="0.0764" asserts="0" description="templates/config/inputs.yaml contract">
+            <results>
+              <test-case description="exists in the module templates folder" name="templates/config/inputs.yaml contract.exists in the module templates folder" time="0.0244" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="declares landing_zone_type (TEST-PLAN Fix #1)" name="templates/config/inputs.yaml contract.declares landing_zone_type (TEST-PLAN Fix #1)" time="0.0083" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="declares all required top-level decisions" name="templates/config/inputs.yaml contract.declares all required top-level decisions" time="0.0172" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="never ships hardcoded production secrets" name="templates/config/inputs.yaml contract.never ships hardcoded production secrets" time="0.0118" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="templates/scenarios/*.tfvars contract" executed="True" result="Success" success="True" time="0.106" asserts="0" description="templates/scenarios/*.tfvars contract">
+            <results>
+              <test-case description="contains the four canonical scenarios" name="templates/scenarios/*.tfvars contract.contains the four canonical scenarios" time="0.0158" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\contract\TerraformValidate.Tests.ps1" executed="True" result="Ignored" success="True" time="0.1505" asserts="0" description="C:\Users\alibengtsson\aksapplz\ALZ.AKS\tests\contract\TerraformValidate.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Terraform templates" executed="True" result="Ignored" success="True" time="0.056" asserts="0" description="Terraform templates">
+            <results>
+              <test-case description="has a terraform.tf with required providers" name="Terraform templates.has a terraform.tf with required providers" time="0.012" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="declares all expected modules" name="Terraform templates.declares all expected modules" time="0.0157" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="passes terraform fmt -check" name="Terraform templates.passes terraform fmt -check" time="0.0072" asserts="0" success="False" result="Ignored" executed="False" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>

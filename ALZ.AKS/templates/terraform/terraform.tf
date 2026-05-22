@@ -38,11 +38,11 @@ provider "azurerm" {
 }
 
 # -----------------------------------------------------------------------------
-# Provider: Connectivity subscription (hub) — only used for Corp peering
+# Provider: Connectivity subscription (hub) — used for hub VNet peering
 # -----------------------------------------------------------------------------
 provider "azurerm" {
   alias                           = "connectivity"
-  subscription_id                 = var.landing_zone_type == "corp" ? var.connectivity_subscription_id : var.subscription_id
+  subscription_id                 = var.connectivity_subscription_id
   resource_provider_registrations = "core"
   features {}
 }
