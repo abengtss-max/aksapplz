@@ -1,7 +1,6 @@
 # AKS Application Landing Zone — Bootstrap (Terraform)
 
-This folder contains the **Terraform-based bootstrap** that replaces the legacy
-PowerShell `Step 1..6` flow in `ALZ.AKS/ALZ.AKS.psm1`.
+This folder contains the Terraform composition applied by the `Deploy-AKSLandingZone` cmdlet (in `ALZ.AKS/ALZ.AKS.psm1`).
 
 It is modelled on the official
 [Azure Landing Zones Terraform Accelerator](https://github.com/Azure/alz-terraform-accelerator)
@@ -33,11 +32,11 @@ bootstrap/
 
 ```pwsh
 Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force
-Deploy-AKSLandingZone
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
 ```
 
-The wizard:
-1. Prompts for / loads `config/inputs.yaml`.
+The cmdlet:
+1. Loads `config/inputs.yaml`.
 2. Renders `bootstrap/alz/github/terraform.tfvars.json`.
 3. Runs `terraform init` + `terraform apply` in `bootstrap/alz/github/`.
 4. Migrates state from local to the bootstrap storage account.

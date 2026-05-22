@@ -2979,4 +2979,4 @@ function Deploy-AKSLandingZoneLegacy {
 # =============================================================================
 # Export the public function
 # =============================================================================
-Export-ModuleMember -Function Deploy-AKSLandingZone, Deploy-AKSLandingZoneLegacy
+Export-ModuleMember -Function Deploy-AKSLandingZone

@@ -171,27 +171,22 @@ Both subnets share the same route table for corp landing zones (UDR to hub firew
 
 ## Usage
 
-### Interactive mode (recommended)
-
-```powershell
-Deploy-AKSLandingZone
-```
-
-The wizard will ask you to select a scenario first, then walk through all decisions with scenario-appropriate defaults.
-
-### Non-interactive mode
-
-Edit `inputs.yaml` and set the `scenario` field:
+Set the scenario in `config/inputs.yaml`:
 
 ```yaml
 scenario: "single_region_regulated"
 ```
 
-Or use a pre-built scenario tfvars file:
+Then run:
 
 ```powershell
-# Copy scenario defaults
-Copy-Item templates/scenarios/single_region_regulated.tfvars config/aks-landing-zone.tfvars
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
+```
+
+For a quick start, copy one of the pre-built scenario tfvars files:
+
+```powershell
+Copy-Item templates\scenarios\single_region_regulated.tfvars config\aks-landing-zone.tfvars
 ```
 
 ### Customizing options
