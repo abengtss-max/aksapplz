@@ -36,3 +36,8 @@ Thumbs.db
 secrets.*
 *.pem
 *.key
+
+bootstrap/alz/github/*.log
+bootstrap/alz/github/.terraform/
+bootstrap/alz/github/*.tfstate*
+bootstrap/alz/github/*.tfplan

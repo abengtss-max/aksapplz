@@ -21,13 +21,13 @@
     Copyright         = '(c) 2026 abengtss-max. All rights reserved.'
 
     # Description of the functionality provided by this module
-    Description       = 'AKS Application Landing Zone Accelerator. Deploys a production-ready AKS cluster into an existing Azure Landing Zone using the ALZ Accelerator pattern. Run Deploy-AKSLandingZone to start the interactive wizard.'
+    Description       = 'AKS Application Landing Zone Accelerator. Deploys a production-ready AKS cluster into an existing Azure Landing Zone using the ALZ Accelerator pattern. Run Deploy-AKSLandingZone (Terraform-based) or Deploy-AKSLandingZoneLegacy (imperative wizard).'
 
     # Minimum version of the PowerShell engine required by this module
     PowerShellVersion = '7.0'
 
     # Functions to export from this module
-    FunctionsToExport = @('Deploy-AKSLandingZone', 'Invoke-AKSLandingZoneTerraform')
+    FunctionsToExport = @('Deploy-AKSLandingZone', 'Deploy-AKSLandingZoneLegacy')
 
     # Cmdlets to export from this module
     CmdletsToExport   = @()

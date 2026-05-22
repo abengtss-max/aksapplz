@@ -36,15 +36,15 @@ cd aksapplz
 Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force
 
 # Verify both commands are available
-Get-Command Deploy-AKSLandingZone, Invoke-AKSLandingZoneTerraform
+Get-Command Deploy-AKSLandingZone, Deploy-AKSLandingZoneLegacy
 ```
 
 > The module ships **two cmdlets**:
 >
 > | Cmdlet | Bootstrap engine |
 > |---|---|
-> | `Deploy-AKSLandingZone` | Original imperative implementation (PowerShell + `az` + `gh` calls). Kept for backwards compatibility. |
-> | `Invoke-AKSLandingZoneTerraform` | **Recommended.** Renders `terraform.tfvars.json` and drives a Terraform composition under `bootstrap/alz/github/` (Azure + GitHub modules, AVM-first). Idempotent and matches the upstream ALZ accelerator pattern. |
+> | `Deploy-AKSLandingZone` | **Recommended.** Renders `terraform.tfvars.json` and drives a Terraform composition under `bootstrap/alz/github/` (Azure + GitHub modules, AVM-first). Idempotent and matches the upstream ALZ accelerator pattern. |
+> | `Deploy-AKSLandingZoneLegacy` | Original imperative implementation (PowerShell + `az` + `gh` calls), including the interactive wizard that generates `inputs.yaml`. Kept for backwards compatibility. |
 >
 > The `bootstrap/Deploy-AKSLandingZone.ps1` script in the repo root is the older standalone version retained for reference. **Use the `ALZ.AKS` module** — it is the canonical implementation and is kept in sync with the embedded templates.
 
@@ -97,7 +97,7 @@ This is a stricter subset of the upstream [ALZ permissions doc](https://azure.gi
 - **GitHub org plan matters:**
   - **Free org** — supported. The Terraform composition detects the plan via `data.github_organization` and **automatically skips** features the Free plan does not support on private repos: `github_branch_protection.main` and the `required_reviewers` + `deployment_branch_policy` blocks on the `apply` environment. The bootstrap still creates the repo as **private** with workflows, OIDC, environments, and federated identity credentials.
   - **Team / Enterprise org** — full feature set: `main` branch protection (PR + linear history + conversation resolution), and the `apply` environment is gated on the approver team with `deployment_branch_policy.protected_branches = true`.
-  - To upgrade later, upgrade the org plan on github.com, then re-run `Invoke-AKSLandingZoneTerraform` — Terraform will create the previously-skipped resources without touching the rest.
+  - To upgrade later, upgrade the org plan on github.com, then re-run `Deploy-AKSLandingZone` — Terraform will create the previously-skipped resources without touching the rest.
 
 ### 2.3 GitHub Personal Access Tokens — fine-grained
 
@@ -228,7 +228,7 @@ $env:TF_VAR_github_runners_personal_access_token = "github_pat_..."   # fine-gra
 ### Step 5.2 — Run the wizard
 
 ```powershell
-Deploy-AKSLandingZone
+Deploy-AKSLandingZoneLegacy
 ```
 
 You will be prompted in this order:
@@ -275,7 +275,7 @@ The wizard offers to open `~/aksapplz/config/` in VS Code. Review both files.
 If you answered "yes" to the final "Ready to bootstrap now?" prompt, the bootstrap starts immediately. Otherwise, run it explicitly:
 
 ```powershell
-Deploy-AKSLandingZone -InputConfigPath ~\aksapplz\config\inputs.yaml
+Deploy-AKSLandingZoneLegacy -InputConfigPath ~\aksapplz\config\inputs.yaml
 ```
 
 Useful flags:
@@ -285,9 +285,9 @@ Useful flags:
 
 You'll see headers for **Pre-flight + Steps 1/6 … 6/6** and a final summary box with all created resources.
 
-### Step 5.5 — Alternative: Terraform-based bootstrap (`Invoke-AKSLandingZoneTerraform`)
+### Step 5.5 — Alternative: Terraform-based bootstrap (`Deploy-AKSLandingZone`)
 
-`Invoke-AKSLandingZoneTerraform` is the new, recommended bootstrap engine. Instead of running `az` and `gh` imperatively, it renders `bootstrap/alz/github/terraform.tfvars.json` from your `inputs.yaml` and runs Terraform against the `bootstrap/alz/github/` composition (AVM modules for ACR, VNet, NAT gateway, storage; native resources for managed identities, federated credentials, GitHub repo/team/environments/files).
+`Deploy-AKSLandingZone` is the new, recommended bootstrap engine. Instead of running `az` and `gh` imperatively, it renders `bootstrap/alz/github/terraform.tfvars.json` from your `inputs.yaml` and runs Terraform against the `bootstrap/alz/github/` composition (AVM modules for ACR, VNet, NAT gateway, storage; native resources for managed identities, federated credentials, GitHub repo/team/environments/files).
 
 ```powershell
 # Pre-set both PATs (the cmdlet does not prompt)
@@ -295,10 +295,10 @@ $env:TF_VAR_github_personal_access_token         = "github_pat_..."   # token-1 
 $env:TF_VAR_github_runners_personal_access_token = "github_pat_..."   # token-2 (only when use_self_hosted_runners = true)
 
 # Plan-only (no changes applied)
-Invoke-AKSLandingZoneTerraform -PlanOnly
+Deploy-AKSLandingZone -InputConfigPath ~/aksapplz/config/inputs.yaml -PlanOnly
 
 # Apply
-Invoke-AKSLandingZoneTerraform -AutoApprove
+Deploy-AKSLandingZone -InputConfigPath ~/aksapplz/config/inputs.yaml -AutoApprove
 ```
 
 Notable flags:
@@ -549,20 +549,20 @@ The Pre-flight step registers all required providers (ContainerService, Network,
 - Happens on re-runs when ACR is already locked down. The module temporarily flips `public-network-enabled true` + `default-action Allow` for the build, then re-locks. If your environment forbids the public toggle, run `az acr build` from a peered network.
 
 ### Branch protection fails to set
-- Free GitHub orgs do not support `github_branch_protection` or environment `required_reviewers` on private repos. `Invoke-AKSLandingZoneTerraform` detects this and silently skips both. Upgrade to Team/Enterprise and re-run to enable them.
+- Free GitHub orgs do not support `github_branch_protection` or environment `required_reviewers` on private repos. `Deploy-AKSLandingZone` detects this and silently skips both. Upgrade to Team/Enterprise and re-run to enable them.
 
 ### ACR Tasks fail with `client with IP '…' is not allowed access`
 - ACR Tasks run on Azure-managed public agents and cannot reach a registry that has `public_network_access_enabled = false`. The composition therefore keeps ACR public access **enabled** while still provisioning the private endpoint for in-VNet traffic (`network_rule_bypass_option = "AzureServices"`). If your environment forbids public ACR endpoints, switch to a dedicated ACR Tasks agent pool inside the spoke VNet or build the runner image out-of-band.
 
 ### `azurerm_resource_provider_registration: provider is already registered`
-- `Microsoft.ContainerInstance` is often pre-registered at the subscription level by other tooling. `Invoke-AKSLandingZoneTerraform` runs `az provider register --namespace Microsoft.ContainerInstance` in preflight (idempotent) instead of letting Terraform own the registration.
+- `Microsoft.ContainerInstance` is often pre-registered at the subscription level by other tooling. `Deploy-AKSLandingZone` runs `az provider register --namespace Microsoft.ContainerInstance` in preflight (idempotent) instead of letting Terraform own the registration.
 
 ---
 
 ## Destroy
 
 ```powershell
-Deploy-AKSLandingZone -Destroy
+Deploy-AKSLandingZoneLegacy -Destroy
 ```
 
 This prints (but does not execute) the destroy procedure so you stay in control:
@@ -608,7 +608,7 @@ aksapplz/
 ├── bootstrap/                       # ← Terraform bootstrap composition + legacy script
 │   ├── Deploy-AKSLandingZone.ps1    #   legacy standalone PowerShell bootstrap (reference)
 │   ├── alz/
-│   │   └── github/                  #   root composition driven by Invoke-AKSLandingZoneTerraform
+│   │   └── github/                  #   root composition driven by Deploy-AKSLandingZone (Terraform cmdlet)
 │   │       ├── main.tf              #     wires modules/azure + modules/github + modules/resource_names
 │   │       ├── variables.tf
 │   │       ├── outputs.tf
