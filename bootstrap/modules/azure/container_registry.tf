@@ -12,7 +12,10 @@ module "container_registry" {
   location            = var.azure_location
   sku                 = local.acr_sku
 
-  public_network_access_enabled = var.use_private_networking ? false : true
+  # ACR Tasks run on Azure-managed public agents and cannot reach a private-only
+  # registry. Keep public access enabled (with AzureServices bypass) so the runner
+  # image can be built; private endpoint still provides in-VNet routing.
+  public_network_access_enabled = true
   network_rule_bypass_option    = "AzureServices"
   zone_redundancy_enabled       = var.use_private_networking
 

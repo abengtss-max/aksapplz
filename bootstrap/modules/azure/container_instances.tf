@@ -58,6 +58,5 @@ resource "azurerm_container_group" "runner" {
   depends_on = [
     azurerm_container_registry_task_schedule_run_now.runner_image,
     azurerm_role_assignment.aci_runner_acrpull,
-    azurerm_resource_provider_registration.container_instance,
   ]
 }

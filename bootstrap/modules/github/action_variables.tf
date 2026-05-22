@@ -1,6 +1,7 @@
 # Per-environment OIDC client ID (one UAMI per environment).
+# Only iterate identities that map to a real GitHub environment (skip e.g. aci_runner).
 resource "github_actions_environment_variable" "azure_client_id" {
-  for_each      = var.managed_identity_client_ids
+  for_each      = { for k, v in var.managed_identity_client_ids : k => v if contains(keys(var.environments), k) }
   repository    = github_repository.this.name
   environment   = github_repository_environment.this[each.key].environment
   variable_name = "AZURE_CLIENT_ID"

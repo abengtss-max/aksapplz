@@ -4,3 +4,4 @@ backend.tf
 *.tfstate
 *.tfstate.backup
 *.tfplan
+apply*.log

@@ -2415,6 +2415,17 @@ function Invoke-AKSLandingZoneTerraform {
         if (-not $acct) { Write-Log "az not logged in. Run 'az login'." -Severity "ERROR"; return }
         Write-Log "az logged in as $($acct.user.name), tenant $($acct.tenantId)" -Severity "SUCCESS"
 
+        # Register Microsoft.ContainerInstance (idempotent — Terraform cannot
+        # cleanly own this because the RP is often already registered).
+        Write-Log "Ensuring Microsoft.ContainerInstance resource provider is registered..." -Severity "INFO"
+        $rpState = (az provider show --namespace Microsoft.ContainerInstance --query registrationState -o tsv 2>$null)
+        if ($rpState -ne 'Registered') {
+            az provider register --namespace Microsoft.ContainerInstance --wait | Out-Null
+            Write-Log "Microsoft.ContainerInstance registered." -Severity "SUCCESS"
+        } else {
+            Write-Log "Microsoft.ContainerInstance already registered." -Severity "SUCCESS"
+        }
+
         if ([string]::IsNullOrEmpty($env:TF_VAR_github_personal_access_token)) {
             Write-Log "TF_VAR_github_personal_access_token is not set." -Severity "ERROR"
             Write-Log "Export a fine-grained PAT (admin:org + repo) before re-running." -Severity "INFO"
@@ -2447,12 +2458,14 @@ function Invoke-AKSLandingZoneTerraform {
     Push-Location $BootstrapRoot
     try {
         Write-Log "Running terraform init..." -Severity "INFO"
-        terraform init -input=false -upgrade
+        $initArgs = @('init','-input=false','-upgrade')
+        & terraform @initArgs
         if ($LASTEXITCODE -ne 0) { Write-Log "terraform init failed." -Severity "ERROR"; return }
 
         if ($PlanOnly) {
             Write-Log "Running terraform plan (-PlanOnly mode)..." -Severity "INFO"
-            terraform plan -input=false -out=bootstrap.tfplan
+            $planArgs = @('plan','-input=false','-out=bootstrap.tfplan')
+            & terraform @planArgs
             if ($LASTEXITCODE -ne 0) { Write-Log "terraform plan failed." -Severity "ERROR"; return }
             Write-Log "Plan saved to bootstrap.tfplan. Exiting (PlanOnly)." -Severity "SUCCESS"
             return
@@ -2461,11 +2474,11 @@ function Invoke-AKSLandingZoneTerraform {
         $applyArgs = @('apply','-input=false')
         if ($AutoApprove) { $applyArgs += '-auto-approve' }
         Write-Log "Running terraform apply..." -Severity "INFO"
-        terraform @applyArgs
+        & terraform @applyArgs
         if ($LASTEXITCODE -ne 0) { Write-Log "terraform apply failed." -Severity "ERROR"; return }
 
         # ── Capture outputs ──
-        $outputs = terraform output -json | ConvertFrom-Json
+        $outputs = (& terraform output -json) | ConvertFrom-Json
         $rg      = $outputs.backend_resource_group_name.value
         $sa      = $outputs.backend_storage_account_name.value
         $ct      = $outputs.backend_container_name.value
@@ -2492,7 +2505,8 @@ terraform {
         Write-Log "Wrote $backendPath" -Severity "SUCCESS"
 
         Write-Log "Migrating state to azurerm backend..." -Severity "INFO"
-        terraform init -migrate-state -force-copy -input=false
+        $migrateArgs = @('init','-migrate-state','-force-copy','-input=false')
+        & terraform @migrateArgs
         if ($LASTEXITCODE -ne 0) {
             Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight." -Severity "WARNING"
         } else {

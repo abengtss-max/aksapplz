@@ -15,6 +15,7 @@ resource "github_repository_vulnerability_alerts" "this" {
 }
 
 resource "github_branch_protection" "main" {
+  count         = local.supports_protected_branches ? 1 : 0
   depends_on    = [github_repository_file.this]
   repository_id = github_repository.this.name
   pattern       = "main"
