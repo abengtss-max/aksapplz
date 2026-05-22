@@ -1,0 +1,3 @@
+locals {
+  approvers = var.approvers
+}

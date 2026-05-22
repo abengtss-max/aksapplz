@@ -4,6 +4,8 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+# Commit bootstrap lock files for reproducible provider versions
+!bootstrap/**/.terraform.lock.hcl
 crash.log
 crash.*.log
 override.tf
