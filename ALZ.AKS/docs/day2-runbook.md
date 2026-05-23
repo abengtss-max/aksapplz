@@ -87,17 +87,48 @@ identities), then the hub composition is destroyed.
 
 ## 6. State recovery
 
-If the bootstrap remote state blob is lost (deleted, corrupted, container
-rotation gone wrong):
+If the bootstrap remote state blob is lost, corrupted, or diverged from
+reality (failed apply/destroy, manual rotation gone wrong, accidental
+overwrite), recover from a known-good state file using the cmdlet — no need
+to import resources one at a time.
 
-1. **Stop** all automation against the affected env (disable CD workflows).
-2. List the actual deployed resources with `az resource list -g rg-<workload>-<env>-<region> -o json`.
-3. For each resource, `terraform import azurerm_<type>.<addr> <resource_id>`
-   against the workload module.
-4. Run `terraform plan` and reconcile any drift.
-5. Re-enable automation.
+```powershell
+# Auto-discover: cmdlet looks for an errored.tfstate left behind in the
+# bootstrap composition by a failed apply/destroy.
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action import -AutoApprove
 
-(`Import-AKSLandingZoneState` cmdlet is planned for v1.5.0.)
+# Explicit: pass a known-good state file (e.g. produced by `terraform state pull`
+# before the corruption, or a backup downloaded from the storage account).
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action import `
+    -StateBackup .\backup.tfstate -AutoApprove
+```
+
+The import path:
+1. Validates the source JSON has `version`, `terraform_version`, and `resources`.
+2. **Always re-discovers** the state RG and storage account for the resolved
+   environment — never trusts on-disk `backend.tf`. Errors out cleanly with
+   "the backend storage account is gone" if the state RG was wiped.
+3. Re-grants `Storage Blob Data Contributor` to the operator (idempotent) with
+   a 30s RBAC propagation wait.
+4. Re-renders `terraform.tfvars.json` (workspace operations still evaluate
+   required variables — `TF_VAR_github_personal_access_token` etc. must be set).
+5. Selects the per-env workspace, or creates it if missing.
+6. Runs `terraform state push <source>` and post-verifies with
+   `terraform state list` (aborts if the remote ends up empty).
+7. Auto-removes the local `errored.tfstate` after a successful push.
+
+After recovery, run `Deploy-AKSLandingZone -InputConfigPath … -Action plan`
+(or the workload CD pipeline's plan job) to confirm the recovered state
+matches Azure, then proceed normally.
+
+**Backup recommendation**: snapshot remote state with `terraform state pull >
+backup-$(Get-Date -Format yyyyMMdd-HHmm).tfstate` before any high-risk
+operation (provider major-version bump, large refactor, container rotation).
+
+> ⚠ `terraform state push` rejects a source whose `serial` is lower than the
+> current remote serial. If you hit this on a serially-bumped corrupted state,
+> bump the source file's `serial` field above the remote's and retry, or
+> manually `terraform state push -force <source>` from the bootstrap dir.
 
 ## 7. Drift detection
 

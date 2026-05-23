@@ -1,6 +1,6 @@
 # Known Issues & Limitations
 
-Last reviewed: 2026-05-23 — applies to `1.4.0-rc2`.
+Last reviewed: 2026-05-23 — applies to `1.4.0-rc4`.
 
 ## Pre-GA limitations (planned for v1.4.0 / v1.5.0)
 
@@ -9,7 +9,7 @@ Treat the current release as **preview / release-candidate** if you need any of 
 
 | Area | Limitation | Workaround | Target |
 |---|---|---|---|
-| State recovery | No `Import-AKSLandingZoneState` cmdlet | Manual `terraform import` against the Storage account backend | v1.5.0 |
+| Self-referential teardown leftovers | `-Action destroy` leaves the state RG and identity RG as empty shells because terraform loses access to its own backend mid-destroy when it deletes the state storage account. All resources inside the RGs are destroyed correctly. | Run `az group delete -n rg-<svc>-<env>-state-* --yes --no-wait` and `az group delete -n rg-<svc>-<env>-identity-* --yes --no-wait` after `-Action destroy` completes. | v1.5.0 |
 | Re-run contract | `Deploy-AKSLandingZone` re-render behaviour on existing repos is undocumented | Don't re-run with changed inputs against a populated env; manually reconcile | v1.4.0 |
 | Secrets — PAT-less | OIDC-only mode for the GitHub provider is not supported (Terraform `github` provider still needs a PAT) | Provide a fine-scoped PAT via `TF_VAR_github_personal_access_token` | v1.5.0 |
 | Secrets — Key Vault | No `-PatFromKeyVault` switch for retrieving PATs from Key Vault at run-time | Pre-export PATs into shell env vars before invoking the wizard | v1.5.0 |

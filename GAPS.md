@@ -53,8 +53,8 @@ Owner: @abengtss-max
 - [ ] **Idempotency / re-run**: define the upgrade contract for re-running `Deploy-AKSLandingZone` with changed inputs
   - [ ] Decide: does re-render overwrite user edits in the workload repo?
   - [ ] Add `-Refresh` (re-render + git push only) vs `-Apply` (full bootstrap) distinction, or document a single safe-merge story
-- [ ] **State recovery**: `Import-AKSLandingZoneState` cmdlet or a documented manual recovery runbook for lost tfstate
-- [ ] **Destroy path**: `Remove-AKSLandingZone` cmdlet (drains GitHub repo, runs `terraform destroy`, deletes bootstrap RGs)
+- [x] **State recovery**: `-Action import` on `Deploy-AKSLandingZone` (v1.4.0-rc4) pushes a known-good state file to the remote backend; auto-discovers `errored.tfstate` or accepts explicit `-StateBackup <path>`
+- [x] **Destroy path**: `-Action destroy` on `Deploy-AKSLandingZone` (v1.4.0-rc3) drains GitHub repo + GHA identities, runs `terraform destroy`, deletes bootstrap RGs (state and identity RG shells remain empty due to self-referential teardown — documented in KNOWN-ISSUES)
 - [ ] **Secrets handling**:
   - [ ] Optional Key Vault integration for PATs (`-PatFromKeyVault`)
   - [ ] OIDC-only mode (no PATs at all) using GitHub App or Workload Identity Federation for the GitHub provider

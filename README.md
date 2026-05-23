@@ -15,7 +15,7 @@ The accelerator ships as a PowerShell module (`ALZ.AKS`) that exposes a single c
 
 Then GitHub Actions deploys the AKS landing zone.
 
-> **Status:** `1.4.0-rc1` — release candidate. Render + plan paths are fully tested across 12 scenarios; apply path verified for `01-standalone-baseline`. Not yet on PSGallery — install from the cloned repo. See [KNOWN-ISSUES.md](KNOWN-ISSUES.md) for preview-grade limitations.
+> **Status:** `1.4.0-rc4` — release candidate. Render + plan paths are fully tested across 12 scenarios; apply path verified for `01-standalone-baseline`. Destroy and state-recovery (`-Action import`) verified end-to-end on Azure 2026-05-23. Not yet on PSGallery — install from the cloned repo. See [KNOWN-ISSUES.md](KNOWN-ISSUES.md) for preview-grade limitations.
 
 ## Maturity matrix
 
@@ -25,8 +25,8 @@ Then GitHub Actions deploys the AKS landing zone.
 | `terraform validate` + `plan` | ✅ verified | [L2 tests](ALZ.AKS/tests/e2e/Scenarios.L2.Tests.ps1) — 60 pass across 12 scenarios |
 | `terraform apply` + `destroy` | 🟡 1/12 cloud-verified | [L3 tests](ALZ.AKS/tests/e2e/Scenarios.L3.Tests.ps1) — `01-standalone-baseline` apply (11 min) + destroy (10 min) both pass on Azure. Surfaced and fixed an invalid-CIDR bug ([CHANGELOG](CHANGELOG.md)); remaining 11 scenarios scheduled before GA |
 | Wizard end-to-end (`Deploy-AKSLandingZone`) | 🟡 manually verified | `standalone` + `hub_and_spoke` topologies cloud-tested 2026-05-23; automated [L4 tests](ALZ.AKS/tests/e2e/Scenarios.L4.Tests.ps1) scheduled before GA |
-| Destroy (`Deploy-AKSLandingZone -Action destroy`) | ✅ shipped in v1.4.0-rc2 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — automated spoke-then-hub teardown with `-AutoApprove` support |
-| State recovery cmdlet | ❌ planned v1.5 | [Day-2 runbook §6](ALZ.AKS/docs/day2-runbook.md#6-state-recovery) — manual procedure |
+| Destroy (`Deploy-AKSLandingZone -Action destroy`) | ✅ shipped in v1.4.0-rc3 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — automated spoke-then-hub teardown with `-AutoApprove` support |
+| State recovery (`Deploy-AKSLandingZone -Action import`) | ✅ shipped in v1.4.0-rc4 | Pushes a known-good terraform state file to the remote azurerm backend. Auto-discovers `errored.tfstate` or accepts explicit `-StateBackup <path>`. Verified e2e against a corrupted-blob scenario on Azure |
 | PSGallery publication | ❌ planned v1.4 | Install via `Import-Module .\ALZ.AKS\ALZ.AKS.psd1` |
 | Static analysis (PSSA / tfsec / checkov) | ✅ wired | [.github/workflows/static-analysis.yml](.github/workflows/static-analysis.yml) — 0 PSSA errors |
 | LICENSE / SECURITY / CHANGELOG | ✅ shipped | [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md) |
@@ -331,6 +331,28 @@ Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action destro
 
 See [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) for the
 caveats around ordering and the AKS workload teardown.
+
+## State recovery
+
+If the remote terraform state for the bootstrap composition gets corrupted,
+deleted, or diverges from reality, push a known-good state file back to the
+azurerm backend without leaving the cmdlet:
+
+```powershell
+# Auto-discover: looks for an errored.tfstate left behind by a failed apply/destroy
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action import -AutoApprove
+
+# Explicit: push a specific state backup
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action import `
+    -StateBackup .\backup.tfstate -AutoApprove
+```
+
+The import path always re-discovers the state RG/storage account, re-grants
+`Storage Blob Data Contributor` to the operator, validates the source JSON,
+creates the per-env workspace if missing, pushes the state, and post-verifies
+with `terraform state list`. After a successful recovery, run
+`Deploy-AKSLandingZone -Action plan` (or `apply`) to confirm the state
+matches Azure.
 
 ---
 
