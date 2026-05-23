@@ -17,7 +17,7 @@
 
 $script:ModuleRoot    = $PSScriptRoot
 $script:TemplateRoot  = Join-Path $PSScriptRoot "templates"
-$script:ScriptVersion = "1.2.0"
+$script:ScriptVersion = "1.3.0"
 
 # =============================================================================
 # Helper Functions (Private — not exported)
@@ -465,8 +465,9 @@ function Get-InteractiveInputs {
     Write-Host "How should the AKS landing zone connect to the network?"
     Write-Host ""
     $topoItems = @(
-        [pscustomobject]@{ label = "Spoke         - Peer to an existing ALZ hub VNet (UDR egress via hub firewall). Requires Decisions 3 & 4."; value = "spoke" }
-        [pscustomobject]@{ label = "Standalone    - No hub, no VNet peering. NAT gateway egress only. Skips Decisions 3 & 4."; value = "standalone" }
+        [pscustomobject]@{ label = "Spoke           - Peer to an existing ALZ hub VNet (UDR egress via hub firewall). Requires Decisions 3 & 4."; value = "spoke" }
+        [pscustomobject]@{ label = "Standalone      - No hub, no VNet peering. NAT gateway egress only. Skips Decisions 3 & 4."; value = "standalone" }
+        [pscustomobject]@{ label = "Hub-and-Spoke   - Greenfield: this run also creates a new hub VNet (+ optional Azure Firewall) in the connectivity subscription."; value = "hub_and_spoke" }
     )
     Show-NumberedList -Items $topoItems -LabelProperty "label" -ValueProperty "value"
     $config.topology = Read-NumberedSelection -Items $topoItems -ValueProperty "value" -DefaultIndex 0 -PromptLabel "Enter selection"
@@ -480,6 +481,64 @@ function Get-InteractiveInputs {
         $config.hub_vnet_resource_group_name  = ""
         $config.hub_firewall_private_ip       = ""
         Write-Host ""
+    }
+    elseif ($config.topology -eq "hub_and_spoke") {
+        Write-Log "Topology 'hub_and_spoke' selected — bootstrap will provision a new hub VNet." -Severity "INFO"
+
+        # Connectivity subscription is still required (this is where the hub lives).
+        Write-Log "connectivity_subscription_id" -Severity "INPUT REQUIRED"
+        Write-Host "Subscription where the new hub VNet (and optional Azure Firewall) will be created."
+        Write-Host "Required: Yes"
+        Write-Host "Available subscriptions:"
+        Show-NumberedList -Items $subs -LabelProperty "name" -ValueProperty "id" -CurrentValue $currentSub
+        $config.connectivity_subscription_id = Read-NumberedSelection -Items $subs -ValueProperty "id" `
+            -DefaultIndex $defaultSubIdx -PromptLabel "Enter selection"
+        Write-Host ""
+
+        Write-Log "hub_vnet_address_space" -Severity "INPUT REQUIRED"
+        Write-Host "Hub VNet address space (CIDR list, comma-separated). Must not overlap with the spoke."
+        Write-Host "Default: 10.0.0.0/16"
+        $v = Read-Host "Enter value (press enter to accept default)"
+        if ([string]::IsNullOrWhiteSpace($v)) {
+            $config.hub_vnet_address_space = @("10.0.0.0/16")
+        } else {
+            $config.hub_vnet_address_space = ($v -split '\s*,\s*') | Where-Object { $_ }
+        }
+        Write-Host ""
+
+        Write-Log "hub_firewall_subnet_address_prefix" -Severity "INPUT REQUIRED"
+        Write-Host "AzureFirewallSubnet prefix (must be /26 or larger and inside the hub address space)."
+        Write-Host "Default: 10.0.0.0/26"
+        $v = Read-Host "Enter value (press enter to accept default)"
+        $config.hub_firewall_subnet_address_prefix = if ([string]::IsNullOrWhiteSpace($v)) { "10.0.0.0/26" } else { $v }
+        Write-Host ""
+
+        Write-Log "hub_deploy_firewall" -Severity "INPUT REQUIRED"
+        Write-Host "Deploy an Azure Firewall in the hub? (y/N)"
+        Write-Host "  y = Provision Azure Firewall + policy + zonal public IP. UDR from spoke will route through it."
+        Write-Host "  n = Hub VNet + AzureFirewallSubnet only. You can attach a firewall later."
+        $fw = Read-Host "Enter value (default: y)"
+        $config.hub_deploy_firewall = if ($fw -eq 'n' -or $fw -eq 'no') { $false } else { $true }
+        Write-Host ""
+
+        if ($config.hub_deploy_firewall) {
+            Write-Log "hub_firewall_sku_tier" -Severity "INPUT REQUIRED"
+            $skuItems = @(
+                [pscustomobject]@{ label = "Standard  - L3/L4 + threat intel. Recommended default."; value = "Standard" }
+                [pscustomobject]@{ label = "Premium   - Adds TLS inspection, IDPS, URL filtering. Higher cost."; value = "Premium" }
+            )
+            Show-NumberedList -Items $skuItems -LabelProperty "label" -ValueProperty "value"
+            $config.hub_firewall_sku_tier = Read-NumberedSelection -Items $skuItems -ValueProperty "value" -DefaultIndex 0 -PromptLabel "Enter selection"
+            Write-Host ""
+        } else {
+            $config.hub_firewall_sku_tier = "Standard"
+        }
+
+        # Hub_* values that the spoke needs will be auto-populated after the hub apply runs.
+        $config.hub_vnet_resource_id          = ""
+        $config.hub_vnet_name                 = ""
+        $config.hub_vnet_resource_group_name  = ""
+        $config.hub_firewall_private_ip       = ""
     }
     else {
     # ── Decision 3: Connectivity Subscription ──
@@ -2604,6 +2663,127 @@ function Deploy-AKSLandingZone {
         Write-Log "Derived tenant_id from az context: $($config.tenant_id)" -Severity "INFO"
     }
 
+    # ── Topology validation ──
+    if ([string]::IsNullOrWhiteSpace([string]$config.topology)) {
+        $config.topology = 'spoke'
+        Write-Log "topology not set in inputs — defaulting to 'spoke' for back-compat." -Severity "WARNING"
+    }
+    $allowedTopologies = @('spoke','standalone','hub_and_spoke')
+    if ($allowedTopologies -notcontains $config.topology) {
+        Write-Log "topology '$($config.topology)' is invalid. Allowed: $($allowedTopologies -join ', ')." -Severity "ERROR"
+        return
+    }
+    if ($config.topology -eq 'spoke') {
+        $reqSpoke = @('connectivity_subscription_id','hub_vnet_resource_id','hub_vnet_name','hub_vnet_resource_group_name','hub_firewall_private_ip')
+        $missing = $reqSpoke | Where-Object { [string]::IsNullOrWhiteSpace([string]$config.$_) }
+        if ($missing.Count -gt 0) {
+            Write-Log "topology=spoke is missing required hub fields: $($missing -join ', ')" -Severity "ERROR"
+            return
+        }
+    }
+    if ($config.topology -eq 'standalone') {
+        $hubFields = @('connectivity_subscription_id','hub_vnet_resource_id','hub_vnet_name','hub_vnet_resource_group_name','hub_firewall_private_ip')
+        $stale = $hubFields | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$config.$_) }
+        if ($stale.Count -gt 0) {
+            Write-Log "topology=standalone but hub fields were set; clearing: $($stale -join ', ')" -Severity "WARNING"
+            foreach ($f in $stale) { $config.$f = "" }
+        }
+    }
+    if ($config.topology -eq 'hub_and_spoke') {
+        if ([string]::IsNullOrWhiteSpace([string]$config.connectivity_subscription_id)) {
+            Write-Log "topology=hub_and_spoke requires connectivity_subscription_id (where the new hub will be created)." -Severity "ERROR"
+            return
+        }
+        if (-not $config.hub_vnet_address_space -or $config.hub_vnet_address_space.Count -eq 0) {
+            $config.hub_vnet_address_space = @("10.0.0.0/16")
+            Write-Log "hub_vnet_address_space not set — defaulting to 10.0.0.0/16." -Severity "WARNING"
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$config.hub_firewall_subnet_address_prefix)) {
+            $config.hub_firewall_subnet_address_prefix = "10.0.0.0/26"
+        }
+        if ($null -eq $config.hub_deploy_firewall) {
+            $config.hub_deploy_firewall = $true
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$config.hub_firewall_sku_tier)) {
+            $config.hub_firewall_sku_tier = "Standard"
+        }
+    }
+
+    # ── Hub composition (greenfield) ──
+    # When topology=hub_and_spoke, run bootstrap/alz/hub/ first to create the hub VNet
+    # (+ optional Azure Firewall), then populate $config.hub_* from its outputs so the
+    # downstream render + spoke bootstrap pick them up transparently.
+    if ($config.topology -eq 'hub_and_spoke') {
+        $repoRootForHub = Split-Path -Parent $script:ModuleRoot
+        $hubRoot        = Join-Path $repoRootForHub "bootstrap/alz/hub"
+        if (!(Test-Path $hubRoot)) {
+            Write-Log "Hub composition not found at $hubRoot." -Severity "ERROR"; return
+        }
+        Write-Log "Hub composition: $hubRoot" -Severity "INFO"
+
+        $hubTfvars = [ordered]@{
+            connectivity_subscription_id   = [string]$config.connectivity_subscription_id
+            tenant_id                      = [string]$config.tenant_id
+            location                       = [string]$config.bootstrap_location
+            service_name                   = [string]$config.service_name
+            environment_name               = [string]$config.environment_name
+            postfix_number                 = if ($config.postfix_number) { [int]$config.postfix_number } else { 1 }
+            hub_vnet_address_space         = @($config.hub_vnet_address_space)
+            deploy_firewall                = [bool]$config.hub_deploy_firewall
+            firewall_sku_tier              = [string]$config.hub_firewall_sku_tier
+            firewall_subnet_address_prefix = [string]$config.hub_firewall_subnet_address_prefix
+        }
+        $hubTfvarsPath = Join-Path $hubRoot "terraform.tfvars.json"
+        $hubTfvars | ConvertTo-Json -Depth 10 | Set-Content -Path $hubTfvarsPath -Encoding UTF8
+        Write-Log "Wrote $hubTfvarsPath" -Severity "SUCCESS"
+
+        Push-Location $hubRoot
+        try {
+            Write-Log "Initialising hub composition..." -Severity "INFO"
+            & terraform @('init','-input=false','-upgrade')
+            if ($LASTEXITCODE -ne 0) { Write-Log "Hub terraform init failed." -Severity "ERROR"; return }
+
+            # Per-env workspace for hub state too.
+            $hubWs = if (-not [string]::IsNullOrWhiteSpace($Environment)) { $Environment } else { $config.environment_name }
+            if (-not [string]::IsNullOrWhiteSpace($hubWs)) {
+                & terraform workspace select $hubWs 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    & terraform workspace new $hubWs
+                    if ($LASTEXITCODE -ne 0) { Write-Log "Hub workspace new failed." -Severity "ERROR"; return }
+                }
+            }
+
+            if ($PlanOnly) {
+                Write-Log "Hub: terraform plan (-PlanOnly mode)..." -Severity "INFO"
+                & terraform @('plan','-input=false','-out=hub.tfplan')
+                if ($LASTEXITCODE -ne 0) { Write-Log "Hub terraform plan failed." -Severity "ERROR"; return }
+            } else {
+                $applyArgs = @('apply','-input=false')
+                if ($AutoApprove) { $applyArgs += '-auto-approve' }
+                Write-Log "Hub: terraform apply..." -Severity "INFO"
+                & terraform @applyArgs
+                if ($LASTEXITCODE -ne 0) { Write-Log "Hub terraform apply failed." -Severity "ERROR"; return }
+
+                $hubOut = (& terraform output -json) | ConvertFrom-Json
+                $config.hub_vnet_resource_id          = [string]$hubOut.hub_vnet_resource_id.value
+                $config.hub_vnet_name                 = [string]$hubOut.hub_vnet_name.value
+                $config.hub_vnet_resource_group_name  = [string]$hubOut.hub_vnet_resource_group_name.value
+                $config.hub_firewall_private_ip       = [string]$hubOut.hub_firewall_private_ip.value
+                Write-Log "Hub ready:" -Severity "SUCCESS"
+                Write-Host "    hub_vnet_resource_id    = $($config.hub_vnet_resource_id)" -ForegroundColor White
+                Write-Host "    hub_vnet_name           = $($config.hub_vnet_name)" -ForegroundColor White
+                Write-Host "    hub_vnet_resource_group = $($config.hub_vnet_resource_group_name)" -ForegroundColor White
+                Write-Host "    hub_firewall_private_ip = $($config.hub_firewall_private_ip)" -ForegroundColor White
+            }
+        }
+        finally { Pop-Location }
+
+        if ($PlanOnly) {
+            Write-Log "PlanOnly: skipping spoke phase (hub_* are not populated without an apply). Re-run without -PlanOnly to continue." -Severity "INFO"
+            return
+        }
+    }
+
     # ── Build repository_files map ──
     Write-Log "Building repository_files map from /terraform and /workflows templates..." -Severity "INFO"
     $repoFiles = Get-RepositoryFilesMap -Config $config
@@ -2682,11 +2862,43 @@ terraform {
         Set-Content -Path $backendPath -Value $backendTf -Encoding UTF8
         Write-Log "Wrote $backendPath" -Severity "SUCCESS"
 
+        # ── Grant the local operator data-plane access on the SA before migrating ──
+        # The bootstrap composition only assigns Storage Blob Data Contributor to the
+        # 'apply' / 'plan' managed identities. The local user running this cmdlet owns
+        # the SA at the control plane but has no data-plane RBAC, so
+        # `terraform init -migrate-state` (which uses use_azuread_auth=true) returns
+        # 403 AuthorizationPermissionMismatch. Grant the role idempotently and wait
+        # briefly for propagation.
+        $saResourceId = "/subscriptions/$($config.bootstrap_subscription_id)/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$sa"
+        $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
+        if ([string]::IsNullOrWhiteSpace($signedInId)) {
+            $signedInId = (az account show --query user.name -o tsv 2>$null)
+            Write-Log "Could not resolve signed-in user objectId; falling back to UPN '$signedInId' for role assignment." -Severity "WARNING"
+        }
+        if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
+            Write-Log "Granting Storage Blob Data Contributor on $sa to current operator ($signedInId)..." -Severity "INFO"
+            $raOutput = az role assignment create `
+                --assignee-object-id $signedInId `
+                --assignee-principal-type User `
+                --role "Storage Blob Data Contributor" `
+                --scope $saResourceId `
+                --subscription $config.bootstrap_subscription_id 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Role assignment created. Waiting 30s for RBAC propagation..." -Severity "SUCCESS"
+                Start-Sleep -Seconds 30
+            } elseif ($raOutput -match 'already exists|RoleAssignmentExists') {
+                Write-Log "Role assignment already exists; continuing." -Severity "INFO"
+            } else {
+                Write-Log "Could not create role assignment: $raOutput" -Severity "WARNING"
+                Write-Log "Migration may still fail with 403; fall back to: az role assignment create --assignee <you> --role 'Storage Blob Data Contributor' --scope $saResourceId" -Severity "WARNING"
+            }
+        }
+
         Write-Log "Migrating state to azurerm backend..." -Severity "INFO"
         $migrateArgs = @('init','-migrate-state','-force-copy','-input=false')
         & terraform @migrateArgs
         if ($LASTEXITCODE -ne 0) {
-            Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight." -Severity "WARNING"
+            Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight after RBAC propagates." -Severity "WARNING"
         } else {
             Write-Log "State migrated to $sa/$ct/bootstrap.tfstate" -Severity "SUCCESS"
         }

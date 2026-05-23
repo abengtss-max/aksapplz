@@ -19,12 +19,14 @@ Owner: @abengtss-max
 - [ ] Doc: README Phase 2 + checklist tab on env strategy
 
 ### A2. Step 3 — `hub_and_spoke` (greenfield) topology
-- [ ] Add 3rd wizard option `hub_and_spoke`
-- [ ] New module: `bootstrap/modules/azure/hub/` (hub VNet + optional Azure Firewall + Route Table)
-- [ ] Wizard questions: hub address space, firewall yes/no, firewall SKU (Basic/Standard/Premium)
-- [ ] Workload TF consumes freshly-created hub outputs (auto-populates `hub_vnet_resource_id`, etc.)
-- [ ] Conditional Firewall policy + rule collection groups
-- [ ] Update README/checklist/scenarios doc
+- [x] Add 3rd wizard option `hub_and_spoke` — v1.3.0
+- [x] New module: `bootstrap/modules/azure_hub/` (hub VNet + AzureFirewallSubnet + optional Azure Firewall, policy, zonal PIP) — v1.3.0
+- [x] New composition root: `bootstrap/alz/hub/` (separate state, targets connectivity subscription) — v1.3.0
+- [x] Wizard questions: hub address space, firewall yes/no, firewall SKU (Standard/Premium), AzureFirewallSubnet prefix — v1.3.0 (Basic SKU intentionally not supported in v1.3 — requires Mgmt subnet+IP)
+- [x] Workload TF consumes freshly-created hub outputs — cmdlet captures `terraform output -json` from hub apply and populates `$config.hub_*` before the spoke render — v1.3.0
+- [x] Conditional Firewall policy + (no rule collection groups yet — empty policy ships by default, user adds rules post-deploy) — v1.3.0
+- [ ] Cloud test the `hub_and_spoke` topology end-to-end (needs a fresh sub/RG slot)
+- [ ] Update README/checklist/scenarios doc with the new topology and the per-tier prereqs
 
 ---
 
@@ -32,7 +34,7 @@ Owner: @abengtss-max
 
 - [x] **Cloud test the standalone path** end-to-end: `Deploy-AKSLandingZone` → `terraform apply`. Bootstrap (27 resources) created successfully against sub `029039e3-…` / org `abengtss-max-org` on 2026-05-23. Workload repo + GH Actions environments live. **AKS cluster apply not yet verified** — needs to run the workload `cd.yaml` workflow.
 - [ ] Confirm AKS cluster boots and reaches the internet via NAT gateway (no UDR, no peering) — pending workflow run.
-- [ ] **NEW** — Fix `terraform init -migrate-state` 403 in bootstrap. The state-migration step fails because the local Azure principal lacks `Storage Blob Data Contributor` on the just-created storage account. Either auto-assign the role inside the bootstrap composition (preferred) or document a manual `az role assignment create` step.
+- [ ] **NEW** — Fix `terraform init -migrate-state` 403 in bootstrap. ✅ FIXED in v1.3.0 — cmdlet now grants the signed-in operator `Storage Blob Data Contributor` on the bootstrap SA + waits 30 s for AAD propagation before the migration. Idempotent.
 - [ ] Decide & implement standalone-appropriate defaults for AKS — currently `is_corp = false` flips:
   - `outbound_type` → `loadBalancer` (instead of `userDefinedRouting`) ✅ probably correct
   - `private_cluster_enabled` → `false` (public API server) ⚠ may or may not be what we want
