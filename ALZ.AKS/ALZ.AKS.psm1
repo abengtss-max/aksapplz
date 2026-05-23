@@ -2981,6 +2981,23 @@ terraform {
         }
         Write-Host ""
         Write-Host "  Next: open the workload repo, review files, then trigger the CD workflow." -ForegroundColor Yellow
+
+        # ── Multi-env loop: offer to deploy another environment without leaving the shell ──
+        if (-not $AutoApprove -and -not $PlanOnly) {
+            Write-Host ""
+            Write-Log "Deploy another environment now? (e.g. dev/test/qa/prod)" -Severity "INPUT REQUIRED"
+            $another = Read-Host "Enter an environment name to bootstrap next, or press Enter to finish"
+            if (-not [string]::IsNullOrWhiteSpace($another)) {
+                if ($another -notmatch '^[a-z0-9]{1,8}$') {
+                    Write-Log "Environment '$another' is invalid (must be 1-8 lowercase alphanumeric). Skipping loop." -Severity "WARNING"
+                } else {
+                    Write-Log "Re-invoking wizard for environment '$another'..." -Severity "INFO"
+                    Pop-Location
+                    Deploy-AKSLandingZone -Environment $another
+                    return
+                }
+            }
+        }
     }
     finally {
         Pop-Location

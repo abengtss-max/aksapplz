@@ -13,10 +13,10 @@ Owner: @abengtss-max
 ### A1. Step 2 — Multi-environment support (dev / test / qa / prod)
 - [x] Add `-Environment <name>` parameter to `Deploy-AKSLandingZone` — v1.2.0
 - [x] Per-env config files: `config/inputs.<env>.yaml` + `config/aks-landing-zone.<env>.tfvars` — v1.2.0
-- [ ] Wizard "deploy another env?" loop after each iteration (deferred — re-invoke cmdlet per env)
+- [x] Wizard "deploy another env?" loop after each iteration — appended a prompt to `Deploy-AKSLandingZone` success path (`ALZ.AKS.psm1`) that re-invokes the cmdlet with `-Environment <next>` until the user presses Enter. Skipped under `-AutoApprove`/`-PlanOnly`.
 - [x] Per-env workload repo naming: `{service}-{env}` — v1.2.0 (locals.tf template)
 - [x] Per-env bootstrap state isolation via Terraform workspaces — v1.2.0
-- [ ] Doc: README Phase 2 + checklist tab on env strategy
+- [x] Doc: README Phase 2 + checklist tab on env strategy — added "Multi-environment strategy" subsection under Phase 2 (commands, naming tip for `environment_short`, scope table).
 
 ### A2. Step 3 — `hub_and_spoke` (greenfield) topology
 - [x] Add 3rd wizard option `hub_and_spoke` — v1.3.0
@@ -80,12 +80,12 @@ Owner: @abengtss-max
 ## F. NEW (2026-05-23) — Enterprise readiness gaps surfaced during standalone CD validation
 
 - [~] **Apply environment lacks approval gate** — `cd-template.yaml` Apply job already uses `environment: ${{ inputs.apply_environment }}`, and bootstrap's [github module](bootstrap/modules/github/environment.tf) wires required reviewers from `apply_approvers`. **However**: GitHub free-plan orgs do NOT support environment protection rules on private repos, so the reviewers block is silently skipped (`supports_protected_branches = plan != "free"`). Confirmed `abengtss-max-org` is on free plan + private repo → reviewers ignored. **Path forward**: upgrade to GitHub Team plan, OR make the repo public, OR add CODEOWNERS + branch-protection (paid only too). Module behavior is correct; documenting the constraint here.
-- [~] **Resource name length safety — broader audit needed**. Fixed Key Vault (24), Grafana (23), and added DCE (44) + DCR (64) length-safe handling this session via `length(...) <= max ? full : "<prefix>-<truncated><sha3>"` pattern. Still pending: extract a reusable Terraform module / pre-commit lint to catch new resources that don't follow the pattern. Audited resources today: AKS (63), App Gateway (80), Log Analytics (63), Monitor workspace (63), VNet (64), NSGs (80), Managed Identity (128), Subnets (80), Public IP (80), Route Table (80), WAF (128), ACR (50 alphanumeric) — all safe at current naming envelope (≤80 with name_prefix up to ~55).
+- [x] **Resource name length safety — broader audit needed**. Fixed Key Vault (24), Grafana (23), and added DCE (44) + DCR (64) length-safe handling this session via `length(...) <= max ? full : "<prefix>-<truncated><sha3>"` pattern. Regression test added: [ALZ.AKS/tests/Naming.Lengths.Tests.ps1](ALZ.AKS/tests/Naming.Lengths.Tests.ps1) (18/18 passing) asserts the pattern is preserved across both `terraform/locals.tf` and `ALZ.AKS/templates/terraform/locals.tf`. Audited resources: AKS (63), App Gateway (80), Log Analytics (63), Monitor workspace (63), VNet (64), NSGs (80), Managed Identity (128), Subnets (80), Public IP (80), Route Table (80), WAF (128), ACR (50 alphanumeric) — all safe at current naming envelope (≤80 with name_prefix up to ~55).
 - [x] **`environment` naming convention vs. tag value split** — added optional `environment_short` var (1-6 lowercase alphanumeric, validated). `locals.tf` resolves `env_short = environment_short != "" ? environment_short : environment`, and `name_prefix` + `acr_name` now use `env_short` while `default_tags` keep the full `environment`. Sandbox plan verified: empty `environment_short` ⇒ existing names (`rg-<wl>-standalone-swc`) unchanged; `environment_short="stnd"` ⇒ names compact to `rg-<wl>-stnd-swc` with tag still showing `environment=standalone`. Commit `c638d93`.
 - [x] **CD state-lock race when multiple commits land quickly** — added `concurrency: { group: cd-<apply_env>-<ref>, cancel-in-progress: false }` to `cd.yaml` (template + local copy). Later runs queue instead of racing for tfstate. (Commit pending.)
-- [ ] **Provider deprecation warnings** (surfaced during multi_region+standalone plan validation 2026-05-23) — non-blocking but should be cleaned up before AzureRM v5:
-  - `azurerm_application_gateway.enable_http2` → `http2_enabled` (main.appgateway.tf:58)
-  - `log_analytics` AVM module emits deprecated `local_authentication_disabled` — wait for upstream module fix
+- [~] **Provider deprecation warnings** (surfaced during multi_region+standalone plan validation 2026-05-23) — non-blocking but should be cleaned up before AzureRM v5:
+  - [x] `azurerm_application_gateway.enable_http2` → `http2_enabled` (main.appgateway.tf:58)
+  - [ ] `log_analytics` AVM module emits deprecated `local_authentication_disabled` — wait for upstream module fix
 
 ---
 

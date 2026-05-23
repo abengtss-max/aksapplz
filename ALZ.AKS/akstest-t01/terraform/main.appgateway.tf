@@ -55,7 +55,7 @@ resource "azurerm_application_gateway" "main" {
   resource_group_name = azurerm_resource_group.main.name
   tags                = local.default_tags
   zones               = var.availability_zones
-  enable_http2        = true
+  http2_enabled       = true
   firewall_policy_id  = azurerm_web_application_firewall_policy.main[0].id
 
   sku {

@@ -258,6 +258,36 @@ To make changes later: edit Terraform in the workload repo, open a PR, merge →
 - Apply config drift (e.g. add a feature flag).
 - Pick up Free → Team plan upgrade (branch protection + required reviewers get created).
 
+### Multi-environment strategy (dev / test / qa / prod)
+
+Each environment lives in **its own bootstrap state and its own workload repo** (`<service>-<env>-aks-landing-zone`). State isolation comes from Terraform workspaces; nothing is shared across environments.
+
+**Bootstrap a new environment:**
+
+```powershell
+# Wizard → writes config/inputs.<env>.yaml + config/aks-landing-zone.<env>.tfvars
+Deploy-AKSLandingZone -Environment dev
+Deploy-AKSLandingZone -Environment test
+Deploy-AKSLandingZone -Environment prod
+```
+
+After a successful bootstrap, the cmdlet prompts **"Deploy another environment now?"** — type the next env name (`dev`, `test`, `qa`, `prod`, …) to chain runs without leaving the shell. Press Enter to finish.
+
+**Re-run an existing environment (idempotent):**
+
+```powershell
+Deploy-AKSLandingZone -Environment prod -AutoApprove   # uses config/inputs.prod.yaml automatically
+```
+
+**Naming tip:** if `<env>` is longer than 6 characters (e.g. `production`, `sandbox1`), set `environment_short` in the per-env `aks-landing-zone.<env>.tfvars` to a 1-6 char alias (`prod`, `sbx1`) so resource names stay within Azure limits (Key Vault 24, Grafana 23). Tags continue to use the full `environment` value for clarity.
+
+| File | Scope | Purpose |
+|---|---|---|
+| `config/inputs.<env>.yaml` | Bootstrap wizard | Decisions captured per env |
+| `config/aks-landing-zone.<env>.tfvars` | Workload | Renders into the workload repo on bootstrap |
+| Bootstrap RGs `rg-<service>-bootstrap-<env>-<region>` | Azure | One per env, isolated state container |
+| Workload repo `<service>-<env>-aks-landing-zone` | GitHub | One per env, separate CI/CD lanes |
+
 ---
 
 ## Destroy
