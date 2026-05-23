@@ -1,0 +1,105 @@
+name: Scenario Tests L3 (apply+destroy)
+
+# Manual / scheduled L3 harness — REAL Azure resources.
+# Each scenario is applied, asserted, and destroyed.
+#
+# Requires environment 'apply' (manual approval) and secrets:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   GH_PAT_LZ, GH_PAT_RUNNERS (PATs the workload module requires)
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Comma-separated scenario base names (e.g. 01-standalone-baseline). Use 'all' for the full matrix."
+        required: true
+        default: '01-standalone-baseline'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: scenario-tests-l3
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.11.4"
+
+jobs:
+  expand-matrix:
+    name: Expand scenario list
+    runs-on: ubuntu-latest
+    outputs:
+      scenarios: ${{ steps.expand.outputs.scenarios }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: expand
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.scenarios }}" == "all" ]]; then
+            list=$(ls ALZ.AKS/tests/e2e/scenarios/*.yaml | xargs -n1 basename | sed 's/.yaml$//' | jq -R . | jq -s -c .)
+          else
+            list=$(echo "${{ inputs.scenarios }}" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | jq -R . | jq -s -c .)
+          fi
+          echo "scenarios=$list" >> "$GITHUB_OUTPUT"
+          echo "Selected scenarios: $list"
+
+  l3-apply:
+    name: L3 — apply+destroy (${{ matrix.scenario }})
+    needs: expand-matrix
+    runs-on: ubuntu-latest
+    environment: apply
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario: ${{ fromJson(needs.expand-matrix.outputs.scenarios) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Pester 5
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Run L3 apply+destroy for ${{ matrix.scenario }}
+        shell: pwsh
+        env:
+          ALZ_AKS_E2E_APPLY: "1"
+          ALZ_AKS_E2E_SCENARIO: ${{ matrix.scenario }}
+          ALZ_AKS_E2E_SUFFIX: r${{ github.run_number }}
+          ALZ_AKS_E2E_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_github_personal_access_token: ${{ secrets.GH_PAT_LZ }}
+          TF_VAR_github_runners_personal_access_token: ${{ secrets.GH_PAT_RUNNERS }}
+        run: |
+          $r = Invoke-Pester -Path ./ALZ.AKS/tests/e2e/Scenarios.L3.Tests.ps1 -Output Detailed -PassThru
+          if ($r.FailedCount -gt 0) { exit 1 }
+          if ($r.PassedCount -eq 0) { Write-Error "No tests matched"; exit 1 }
+
+      - name: Upload sandbox logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l3-sandbox-${{ matrix.scenario }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/alz-l3-*
+          if-no-files-found: ignore

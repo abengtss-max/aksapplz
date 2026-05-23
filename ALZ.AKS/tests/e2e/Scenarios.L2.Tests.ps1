@@ -28,17 +28,21 @@
 BeforeDiscovery {
     $Script:RepoRoot     = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
     $Script:ScenarioDir  = Join-Path $PSScriptRoot 'scenarios'
-    $Script:Scenarios    = Get-ChildItem -Path $Script:ScenarioDir -Filter '*.yaml' | ForEach-Object {
-        $raw       = Get-Content $_.FullName -Raw
-        $topology  = if ($raw -match '(?m)^topology:\s*"([^"]+)"') { $Matches[1] } else { 'unknown' }
-        $scenario  = if ($raw -match '(?m)^scenario:\s*"([^"]+)"') { $Matches[1] } else { 'unknown' }
-        @{
-            Name     = $_.BaseName
-            Path     = $_.FullName
-            Topology = $topology
-            Scenario = $scenario
+    # Optional discovery-time filter (env: ALZ_AKS_E2E_SCENARIO = wildcard against BaseName)
+    $scenarioFilter      = if ($env:ALZ_AKS_E2E_SCENARIO) { $env:ALZ_AKS_E2E_SCENARIO } else { '*' }
+    $Script:Scenarios    = Get-ChildItem -Path $Script:ScenarioDir -Filter '*.yaml' |
+        Where-Object { $_.BaseName -like $scenarioFilter } |
+        ForEach-Object {
+            $raw       = Get-Content $_.FullName -Raw
+            $topology  = if ($raw -match '(?m)^topology:\s*"([^"]+)"') { $Matches[1] } else { 'unknown' }
+            $scenario  = if ($raw -match '(?m)^scenario:\s*"([^"]+)"') { $Matches[1] } else { 'unknown' }
+            @{
+                Name     = $_.BaseName
+                Path     = $_.FullName
+                Topology = $topology
+                Scenario = $scenario
+            }
         }
-    }
 }
 
 BeforeAll {

@@ -1,0 +1,105 @@
+name: Scenario Tests (L1 + L2)
+
+# PR gate — runs the e2e scenario render (L1) and terraform-plan (L2) tests across
+# the 12-scenario matrix. NO real Azure resources created (plan only).
+#
+# Required secrets (already provisioned for nightly-integration):
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ALZ.AKS/**'
+      - 'terraform/**'
+      - '.github/workflows/test-scenarios.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: scenario-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.11.4"
+
+jobs:
+  l1-render:
+    name: L1 — render (all 12 scenarios)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester 5
+        shell: pwsh
+        run: |
+          Install-Module Pester -RequiredVersion 5.7.1 -Force -SkipPublisherCheck -Scope CurrentUser
+      - name: Run L1 tests
+        shell: pwsh
+        run: |
+          $r = Invoke-Pester -Path ./ALZ.AKS/tests/e2e/Scenarios.L1.Tests.ps1 -Output Detailed -PassThru
+          if ($r.FailedCount -gt 0) { exit 1 }
+
+  l2-plan:
+    name: L2 — terraform plan (${{ matrix.scenario }})
+    needs: l1-render
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        scenario:
+          - 01-standalone-baseline
+          - 02-spoke-baseline
+          - 03-hub-and-spoke-baseline
+          - 04-standalone-regulated
+          - 05-spoke-regulated
+          - 06-hub-and-spoke-regulated
+          - 07-multi-region-baseline-standalone
+          - 08-multi-region-baseline-spoke
+          - 09-multi-region-baseline-hub-and-spoke
+          - 10-multi-region-regulated-hub-and-spoke
+          - 11-features-minimal-standalone
+          - 12-features-maximal-spoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Pester 5
+        shell: pwsh
+        run: |
+          Install-Module Pester -RequiredVersion 5.7.1 -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Run L2 plan for ${{ matrix.scenario }}
+        shell: pwsh
+        env:
+          ALZ_AKS_E2E_SCENARIO: ${{ matrix.scenario }}
+          ALZ_AKS_E2E_SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_github_personal_access_token: dummy_plan_only
+          TF_VAR_github_runners_personal_access_token: dummy_plan_only
+        run: |
+          $r = Invoke-Pester `
+                -Path ./ALZ.AKS/tests/e2e/Scenarios.L2.Tests.ps1 `
+                -Output Detailed `
+                -PassThru
+          if ($r.FailedCount -gt 0) { exit 1 }
+          if ($r.PassedCount -eq 0) { Write-Error "No tests matched filter"; exit 1 }
