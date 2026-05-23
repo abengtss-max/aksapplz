@@ -169,6 +169,20 @@ Both subnets share the same route table for corp landing zones (UDR to hub firew
 
 > **Note (topology):** The route table and the spoke↔hub VNet peerings are only created when `topology: spoke` or `topology: hub_and_spoke` (i.e. `hub_vnet_resource_id` is set). When `topology: standalone` is selected, no route table is created, no peering is attempted, and egress leaves the cluster through the spoke's NAT gateway instead. For `hub_and_spoke`, the cmdlet runs `bootstrap/alz/hub/` first — creating a new hub VNet plus an optional Azure Firewall (Standard or Premium SKU; Basic is intentionally not supported in v1.3 because it requires a Management subnet and Management IP) — and captures the hub outputs into the spoke render automatically.
 
+### Standalone topology — security defaults & trade-offs
+
+Standalone deployments have no hub for private connectivity, so AKS defaults are tuned for **dev/test reachability**, not production. Review and harden these for any production-bound standalone cluster:
+
+| Setting | Standalone default | Production recommendation |
+| --- | --- | --- |
+| `private_cluster_enabled` | `false` (public API server) | `true` if you have VPN/Bastion/jumpbox; else lock down `api_server_authorized_ip_ranges` |
+| `api_server_authorized_ip_ranges` | `[]` (open to internet) | **Always populate** with your corporate egress + CI runner CIDRs |
+| `private_dns_zone_id` | `"system"` (Azure-managed) | `"system"` is fine for standalone; use a hub-owned zone for spoke topologies |
+| `outbound_type` | `loadBalancer` (NAT gateway egress) | Acceptable; switch to `userDefinedRouting` if you add an egress firewall |
+| `enable_api_server_vnet_integration` | `true` | Keep `true` — API server gets a private IP inside the spoke VNet |
+
+**Why these defaults?** A truly-private cluster (no public FQDN, no public IP) is unreachable without an existing VPN/Bastion. Standalone is most often used for greenfield POCs where the deployer wants `kubectl` access immediately after apply. Production users should override these via `aks-landing-zone.<env>.tfvars` (or the wizard) before going live.
+
 ---
 
 ## Usage
