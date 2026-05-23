@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-rc2] - 2026-05-23
+
+API hardening release. Replaces the previously-planned standalone
+`Remove-AKSLandingZone` cmdlet with an `-Action` switch on the existing
+`Deploy-AKSLandingZone` cmdlet, mirroring the upstream Azure Landing Zone
+Accelerator pattern (`Deploy-Accelerator -Action apply|destroy`).
+
+### Added
+- **`-Action apply|plan|destroy`** parameter on `Deploy-AKSLandingZone`.
+  - `apply` (default) — unchanged behaviour.
+  - `plan` — equivalent to legacy `-PlanOnly`.
+  - `destroy` — self-contained teardown of the bootstrap (spoke) composition
+    followed by the hub composition (when `topology=hub_and_spoke`). Requires
+    `-InputConfigPath` or `-Environment` to locate the existing config; prompts
+    for the literal word `destroy` unless `-AutoApprove` is passed.
+- New examples in the cmdlet help block for `-Action destroy` invocation
+  (interactive and non-interactive).
+
+### Changed
+- **`-PlanOnly` is now an alias** for `-Action plan` (back-compat preserved).
+  Combining `-PlanOnly` with `-Action destroy` is rejected with a clear error.
+- **README maturity matrix** — destroy row flipped from "planned" to "shipped",
+  pointing at the new `-Action destroy` flow.
+- **KNOWN-ISSUES.md** — removed the destroy pre-GA item (now implemented).
+- **Day-2 runbook §5** — manual 4-step destroy procedure replaced with the
+  one-liner `Deploy-AKSLandingZone -Action destroy`. The "destroy workload
+  first via the CD pipeline" guidance is preserved.
+
+### Notes
+- The cmdlet only destroys the bootstrap-owned resources (generated GitHub
+  repo, GHA federated identities, bootstrap storage account, hub VNet/firewall).
+  Spoke Azure resources owned by the workload repo (AKS, App Gateway, NAT GW,
+  etc.) must still be destroyed by the workload repo's CD `destroy.yaml`
+  workflow first — otherwise the bootstrap-destroy will delete the workflow
+  itself before it can clean up those resources.
+
 ## [1.4.0-rc1] - 2026-05-23
 
 First release candidate of the v1.4.0 line. Focus is **publish-readiness**:

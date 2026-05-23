@@ -1,6 +1,6 @@
 # Known Issues & Limitations
 
-Last reviewed: 2026-05-23 — applies to `1.4.0-rc1`.
+Last reviewed: 2026-05-23 — applies to `1.4.0-rc2`.
 
 ## Pre-GA limitations (planned for v1.4.0 / v1.5.0)
 
@@ -9,7 +9,6 @@ Treat the current release as **preview / release-candidate** if you need any of 
 
 | Area | Limitation | Workaround | Target |
 |---|---|---|---|
-| Destroy | No `Remove-AKSLandingZone` cmdlet | Manual `terraform destroy` in `bootstrap/alz/github/` + `bootstrap/alz/hub/` + delete the generated workload repo | v1.4.0 |
 | State recovery | No `Import-AKSLandingZoneState` cmdlet | Manual `terraform import` against the Storage account backend | v1.5.0 |
 | Re-run contract | `Deploy-AKSLandingZone` re-render behaviour on existing repos is undocumented | Don't re-run with changed inputs against a populated env; manually reconcile | v1.4.0 |
 | Secrets — PAT-less | OIDC-only mode for the GitHub provider is not supported (Terraform `github` provider still needs a PAT) | Provide a fine-scoped PAT via `TF_VAR_github_personal_access_token` | v1.5.0 |

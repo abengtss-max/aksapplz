@@ -60,30 +60,30 @@ When `enable_backup = false`, you are responsible for any PV snapshots
 
 ## 5. Destroy
 
-There is **no `Remove-AKSLandingZone` cmdlet in v1.4.0-rc1** (see KNOWN-ISSUES).
-Use this manual procedure:
+As of v1.4.0-rc2 the public cmdlet supports tear-down via `-Action destroy`
+(mirroring the upstream `Deploy-Accelerator -Action destroy` pattern):
 
 ```powershell
-# 1. Tear down the workload
+# 1. First, tear down the workload (AKS, spoke VNet, App Gateway, ...) via its CD pipeline
 gh workflow run destroy.yaml -R <org>/<workload-repo> -f environment=<env>
 
-# 2. Destroy the GitHub bootstrap state (creates org repo + envs + OIDC)
-cd bootstrap/alz/github
-terraform workspace select <env>
-terraform destroy -auto-approve
-
-# 3. If hub_and_spoke topology was used, destroy the hub
-cd ../hub
-terraform workspace select <env>
-terraform destroy -auto-approve
-
-# 4. Delete the workload repo (final step — destroys the destroy workflow itself)
-gh repo delete <org>/<workload-repo> --yes
+# 2. Then destroy the bootstrap (GitHub repo + GHA identities + bootstrap storage) and,
+#    for hub_and_spoke topology, the hub composition. Order is handled automatically:
+#    spoke-bootstrap first, then hub.
+Deploy-AKSLandingZone -Environment <env> -Action destroy
+# Or non-interactive:
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action destroy -AutoApprove
 ```
 
-> **Order matters.** Workload first, then bootstrap, then hub. Reverse order
-> leaves orphaned resources because the workload CD pipeline depends on the
-> GHA env identities provisioned by bootstrap.
+The cmdlet will prompt for the literal word `destroy` unless `-AutoApprove`
+is passed. For `hub_and_spoke` topology the spoke bootstrap is destroyed
+first (which deletes the generated workload repo + GHA federated
+identities), then the hub composition is destroyed.
+
+> **Order matters.** Step 1 (workload CD `destroy` workflow) must run before
+> step 2, otherwise the bootstrap destroy will delete the workflow itself
+> before it has had a chance to clean up the spoke Azure resources, leaving
+> orphans.
 
 ## 6. State recovery
 

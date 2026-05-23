@@ -2527,10 +2527,22 @@ function Get-RepositoryFilesMap {
     Optional. Defaults to `<repo>/bootstrap/alz/github` (the Terraform composition shipped with this module).
 
 .PARAMETER AutoApprove
-    Pass `-auto-approve` to `terraform apply` (and skip the post-wizard "ready to bootstrap?" prompt).
+    Pass `-auto-approve` to the chosen terraform action (and skip the post-wizard
+    "ready to bootstrap?" / "ready to destroy?" prompts).
+
+.PARAMETER Action
+    What terraform action to run against the bootstrap composition. One of:
+      - 'apply'   (default) — render templates, init, plan, apply, migrate state.
+      - 'plan'   — render templates, init, plan only. Equivalent to legacy -PlanOnly.
+      - 'destroy' — load existing inputs file, init against the already-migrated
+                    azurerm backend, then terraform destroy. For hub_and_spoke
+                    topology, the spoke bootstrap is destroyed first (which
+                    deletes the generated workload repo + GHA env identities),
+                    then the hub composition. Requires -InputConfigPath or
+                    -Environment.
 
 .PARAMETER PlanOnly
-    Run `terraform init` + `terraform plan` and stop.
+    DEPRECATED. Equivalent to -Action plan. Kept for backward compatibility.
 
 .PARAMETER SkipPreflight
     Skip tool / `az login` / Microsoft.ContainerInstance RP / PAT checks. Advanced.
@@ -2544,6 +2556,14 @@ function Get-RepositoryFilesMap {
     $env:TF_VAR_github_personal_access_token         = 'github_pat_...'
     $env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'
     Deploy-AKSLandingZone -InputConfigPath .\config\inputs.yaml -AutoApprove
+
+.EXAMPLE
+    # Tear down a previously bootstrapped environment
+    Deploy-AKSLandingZone -Environment dev -Action destroy
+
+.EXAMPLE
+    # Same, non-interactive
+    Deploy-AKSLandingZone -InputConfigPath .\config\inputs.dev.yaml -Action destroy -AutoApprove
 #>
 function Deploy-AKSLandingZone {
     [CmdletBinding()]
@@ -2552,12 +2572,26 @@ function Deploy-AKSLandingZone {
         [Parameter()][string]$BootstrapRoot,
         [Parameter()][string]$Environment,
         [Parameter()][switch]$AutoApprove,
+        [Parameter()][ValidateSet('apply','plan','destroy')][string]$Action = 'apply',
         [Parameter()][switch]$PlanOnly,
         [Parameter()][switch]$SkipPreflight
     )
 
+    # Backward compatibility: -PlanOnly is equivalent to -Action plan.
+    if ($PlanOnly -and $Action -eq 'apply') { $Action = 'plan' }
+    if ($PlanOnly -and $Action -eq 'destroy') {
+        Write-Log "-PlanOnly and -Action destroy are mutually exclusive." -Severity "ERROR"; return
+    }
+
     Show-Banner
-    Write-Log "=== AKS Application Landing Zone — Bootstrap ===" -Severity "INFO"
+    $headerLabel = switch ($Action) { 'apply' { 'Bootstrap' } 'plan' { 'Bootstrap (PLAN)' } 'destroy' { 'TEARDOWN' } }
+    Write-Log "=== AKS Application Landing Zone — $headerLabel ===" -Severity "INFO"
+
+    # -Action destroy requires an existing inputs file (no wizard fallback).
+    if ($Action -eq 'destroy' -and [string]::IsNullOrEmpty($InputConfigPath) -and [string]::IsNullOrWhiteSpace($Environment)) {
+        Write-Log "-Action destroy requires either -InputConfigPath or -Environment (to locate the existing config)." -Severity "ERROR"
+        return
+    }
 
     # Validate -Environment naming (matches workload-side validation: 1-8 lowercase alphanumeric)
     if (-not [string]::IsNullOrWhiteSpace($Environment)) {
@@ -2742,11 +2776,93 @@ function Deploy-AKSLandingZone {
         }
     }
 
+    # ── DESTROY PATH ──
+    # Self-contained teardown: spoke first (deletes the generated workload repo +
+    # GHA federated identities), then hub (if topology=hub_and_spoke). Returns
+    # before the apply path so the rest of the function is apply/plan-only.
+    if ($Action -eq 'destroy') {
+        $workspaceName = if (-not [string]::IsNullOrWhiteSpace($Environment)) { $Environment } else { [string]$config.environment_name }
+        if (-not $AutoApprove) {
+            Write-Host ""
+            Write-Log "ABOUT TO DESTROY the AKS Application Landing Zone bootstrap for environment '$workspaceName'." -Severity "WARNING"
+            Write-Log "This will delete the generated GitHub workload repo, GHA federated identities, and the bootstrap storage account." -Severity "WARNING"
+            Write-Log "Any Azure resources managed by the workload repo (AKS, spoke VNet, App Gateway, etc.) MUST already have been destroyed by its CD pipeline." -Severity "WARNING"
+            $confirm = Read-Host "Type 'destroy' to confirm"
+            if ($confirm -ne 'destroy') { Write-Log "Aborted." -Severity "INFO"; return }
+        }
+
+        # Spoke / bootstrap destroy
+        Push-Location $BootstrapRoot
+        try {
+            Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
+            $initArgs = @('init','-input=false','-reconfigure')
+            & terraform @initArgs
+            if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform init failed (backend may already be gone)." -Severity "ERROR"; return }
+
+            if (-not [string]::IsNullOrWhiteSpace($workspaceName)) {
+                & terraform workspace select $workspaceName 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "Workspace '$workspaceName' not found in bootstrap state — nothing to destroy at the spoke layer." -Severity "WARNING"
+                } else {
+                    Write-Log "Selected workspace '$workspaceName'." -Severity "INFO"
+                }
+            }
+
+            $destroyArgs = @('destroy','-input=false')
+            if ($AutoApprove) { $destroyArgs += '-auto-approve' }
+            Write-Log "Running terraform destroy against bootstrap composition..." -Severity "INFO"
+            & terraform @destroyArgs
+            if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform destroy failed." -Severity "ERROR"; return }
+            Write-Log "Bootstrap composition destroyed." -Severity "SUCCESS"
+        }
+        finally { Pop-Location }
+
+        # Hub destroy (only for hub_and_spoke topology)
+        if ($config.topology -eq 'hub_and_spoke') {
+            $repoRootForHub = Split-Path -Parent $script:ModuleRoot
+            $hubRoot        = Join-Path $repoRootForHub "bootstrap/alz/hub"
+            if (!(Test-Path $hubRoot)) {
+                Write-Log "Hub composition not found at $hubRoot — skipping hub destroy." -Severity "WARNING"
+            } else {
+                Push-Location $hubRoot
+                try {
+                    Write-Log "Initialising hub composition..." -Severity "INFO"
+                    & terraform @('init','-input=false','-reconfigure')
+                    if ($LASTEXITCODE -ne 0) { Write-Log "hub terraform init failed." -Severity "ERROR"; return }
+
+                    if (-not [string]::IsNullOrWhiteSpace($workspaceName)) {
+                        & terraform workspace select $workspaceName 2>$null
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Log "Hub workspace '$workspaceName' not found — skipping hub destroy." -Severity "WARNING"
+                            return
+                        }
+                    }
+
+                    $hubDestroyArgs = @('destroy','-input=false')
+                    if ($AutoApprove) { $hubDestroyArgs += '-auto-approve' }
+                    Write-Log "Running terraform destroy against hub composition..." -Severity "INFO"
+                    & terraform @hubDestroyArgs
+                    if ($LASTEXITCODE -ne 0) { Write-Log "hub terraform destroy failed." -Severity "ERROR"; return }
+                    Write-Log "Hub composition destroyed." -Severity "SUCCESS"
+                }
+                finally { Pop-Location }
+            }
+        }
+
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "  ║   Teardown Complete                                          ║" -ForegroundColor Green
+        Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+        return
+    }
+
     # ── Hub composition (greenfield) ──
     # When topology=hub_and_spoke, run bootstrap/alz/hub/ first to create the hub VNet
     # (+ optional Azure Firewall), then populate $config.hub_* from its outputs so the
     # downstream render + spoke bootstrap pick them up transparently.
-    if ($config.topology -eq 'hub_and_spoke') {
+    # Skipped when -Action destroy — for destroy, hub teardown runs AFTER the spoke
+    # bootstrap is destroyed (so the workload repo + identities are gone first).
+    if ($config.topology -eq 'hub_and_spoke' -and $Action -ne 'destroy') {
         $repoRootForHub = Split-Path -Parent $script:ModuleRoot
         $hubRoot        = Join-Path $repoRootForHub "bootstrap/alz/hub"
         if (!(Test-Path $hubRoot)) {
@@ -2818,12 +2934,15 @@ function Deploy-AKSLandingZone {
     }
 
     # ── Build repository_files map ──
-    Write-Log "Building repository_files map from /terraform and /workflows templates..." -Severity "INFO"
-    $repoFiles = Get-RepositoryFilesMap -Config $config
-    Write-Log "Repository files: $($repoFiles.Keys.Count) entries" -Severity "SUCCESS"
+    # Skipped for destroy: terraform reads from existing state, no template render needed.
+    if ($Action -ne 'destroy') {
+        Write-Log "Building repository_files map from /terraform and /workflows templates..." -Severity "INFO"
+        $repoFiles = Get-RepositoryFilesMap -Config $config
+        Write-Log "Repository files: $($repoFiles.Keys.Count) entries" -Severity "SUCCESS"
 
-    # ── Render terraform.tfvars.json ──
-    $tfvarsJson = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFiles
+        # ── Render terraform.tfvars.json ──
+        $tfvarsJson = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFiles
+    }
 
     # ── terraform init + workspace + plan/apply ──
     Push-Location $BootstrapRoot

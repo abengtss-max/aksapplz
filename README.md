@@ -25,7 +25,7 @@ Then GitHub Actions deploys the AKS landing zone.
 | `terraform validate` + `plan` | ✅ verified | [L2 tests](ALZ.AKS/tests/e2e/Scenarios.L2.Tests.ps1) — 60 pass across 12 scenarios |
 | `terraform apply` + `destroy` | 🟡 1/12 cloud-verified | [L3 tests](ALZ.AKS/tests/e2e/Scenarios.L3.Tests.ps1) — `01-standalone-baseline` apply (11 min) + destroy (10 min) both pass on Azure. Surfaced and fixed an invalid-CIDR bug ([CHANGELOG](CHANGELOG.md)); remaining 11 scenarios scheduled before GA |
 | Wizard end-to-end (`Deploy-AKSLandingZone`) | 🟡 manually verified | `standalone` + `hub_and_spoke` topologies cloud-tested 2026-05-23; automated [L4 tests](ALZ.AKS/tests/e2e/Scenarios.L4.Tests.ps1) scheduled before GA |
-| Destroy cmdlet (`Remove-AKSLandingZone`) | ❌ planned v1.4 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — manual procedure |
+| Destroy (`Deploy-AKSLandingZone -Action destroy`) | ✅ shipped in v1.4.0-rc2 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — automated spoke-then-hub teardown with `-AutoApprove` support |
 | State recovery cmdlet | ❌ planned v1.5 | [Day-2 runbook §6](ALZ.AKS/docs/day2-runbook.md#6-state-recovery) — manual procedure |
 | PSGallery publication | ❌ planned v1.4 | Install via `Import-Module .\ALZ.AKS\ALZ.AKS.psd1` |
 | Static analysis (PSSA / tfsec / checkov) | ✅ wired | [.github/workflows/static-analysis.yml](.github/workflows/static-analysis.yml) — 0 PSSA errors |
@@ -317,14 +317,20 @@ Deploy-AKSLandingZone -Environment prod -AutoApprove   # uses config/inputs.prod
 Run in reverse order:
 
 ```powershell
-# 1. Destroy AKS landing zone (run from the workload repo's terraform/ folder)
-cd <workload-repo>/terraform
-terraform destroy
+# 1. Destroy the AKS landing zone (Azure resources) via the workload repo's CD pipeline.
+#    This MUST happen first — step 2 deletes the destroy workflow itself.
+gh workflow run destroy.yaml -R <org>/<workload-repo> -f environment=<env>
 
-# 2. Destroy the bootstrap (Azure RGs + GitHub repo + identities)
-cd <accelerator-repo>/bootstrap/alz/github
-terraform destroy
+# 2. Destroy the bootstrap (GitHub repo + GHA identities + bootstrap storage account)
+#    and, for hub_and_spoke topology, the hub composition. The order is handled
+#    automatically: spoke-bootstrap first, then hub.
+Deploy-AKSLandingZone -Environment <env> -Action destroy
+# or non-interactively:
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.<env>.yaml -Action destroy -AutoApprove
 ```
+
+See [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) for the
+caveats around ordering and the AKS workload teardown.
 
 ---
 
