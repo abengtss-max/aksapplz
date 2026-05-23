@@ -22,7 +22,7 @@ pod_cidr            = "192.168.0.0/16"
 # --- Subnet address prefixes (system & user on separate subnets) ---
 subnet_address_prefixes = {
   aks_system_nodes  = "10.10.0.0/24"
-  aks_user_nodes    = "10.10.1.0/22"
+  aks_user_nodes    = "10.10.16.0/22"
   aks_api_server    = "10.10.5.0/28"
   app_gateway       = "10.10.6.0/24"
   private_endpoints = "10.10.7.0/24"
