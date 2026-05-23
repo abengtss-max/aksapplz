@@ -59,14 +59,22 @@ Then GitHub Actions deploys the AKS landing zone.
 | `multi_region_baseline` | Active/active across two regions | Adds `secondary_location` + ACR geo-replication |
 | `multi_region_regulated` | Multi-region, regulated workloads | Combines both |
 
-### 0.3 Decisions to record in the checklist
+### 0.3 Pick a network topology
+
+| Topology | Use when | What it does |
+|---|---|---|
+| `spoke` *(default)* | You have an ALZ hub already | Peers the AKS spoke VNet to your existing hub, routes egress through the hub firewall via UDR |
+| `standalone` | Isolated subscription, sandbox, PoC, or workloads with sub-level isolation | No hub, no peering, NAT gateway egress only. Skips Decisions 3 & 4. |
+
+### 0.4 Decisions to record in the checklist
 
 | # | Decision | Who decides |
 |---|---|---|
 | 1 | Bootstrap Azure region | Platform |
 | 2 | AKS landing-zone subscription ID | Platform |
-| 3 | Connectivity subscription ID (hub) | Platform / Networking |
-| 4 | Hub VNet resource ID, name, RG, firewall private IP | Networking |
+| 2.5 | **Topology** — `spoke` (peer to an existing ALZ hub) or `standalone` (no hub, NAT egress only) | Networking / Security |
+| 3 | Connectivity subscription ID (hub) *(only when topology = spoke)* | Platform / Networking |
+| 4 | Hub VNet resource ID, name, RG, firewall private IP *(only when topology = spoke)* | Networking |
 | 5 | Spoke VNet + 6 subnet CIDRs (no overlap with hub/other spokes) | Networking |
 | 6 | Kubernetes version, SKU tier, private cluster yes/no, Entra cluster-admin group object ID | Platform / Security |
 | 7 | Bootstrap subscription ID (usually = decision 2) | Platform |
@@ -170,8 +178,9 @@ For CI/CD pipelines or when you want to manage `inputs.yaml` in source control, 
    |---|---|
    | 1 | `bootstrap_location` |
    | 2 | `aks_landing_zone_subscription_id` |
-   | 3 | `connectivity_subscription_id` |
-   | 4 | `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip` |
+   | 2.5 | `topology` (`spoke` or `standalone`) |
+   | 3 | `connectivity_subscription_id` *(only when `topology: spoke`)* |
+   | 4 | `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip` *(only when `topology: spoke`)* |
    | 5 | `spoke_vnet_address_space`, `subnet_address_prefix_*` (6 subnets) |
    | 6 | `kubernetes_version`, `aks_sku_tier`, `aks_private_cluster`, `aks_admin_group_object_ids` |
    | 7 | `bootstrap_subscription_id` |

@@ -6,8 +6,10 @@
 # -----------------------------------------------------------------------------
 
 locals {
-  # This accelerator deploys a corp (hub-spoke, private) landing zone.
-  is_corp = true
+  # Topology is derived from inputs: when hub_vnet_resource_id is supplied,
+  # this is a spoke landing zone (UDR + VNet peering enabled). When empty, this
+  # is a standalone landing zone (no peering, no firewall UDR, NAT egress only).
+  is_corp = var.hub_vnet_resource_id != ""
 }
 
 # Resource Group

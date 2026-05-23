@@ -10,6 +10,11 @@
 scenario: "single_region_baseline"
 secondary_location: ""
 
+## Topology: standalone | spoke
+# - standalone : no hub, no VNet peering, NAT gateway egress only (Decisions 3 & 4 are ignored)
+# - spoke      : peer to an existing ALZ hub VNet, UDR egress via hub firewall (Decisions 3 & 4 required)
+topology: "spoke"
+
 ## Decision 1: Bootstrap Resource Azure Region
 bootstrap_location: "swedencentral"
 
@@ -17,11 +22,11 @@ bootstrap_location: "swedencentral"
 # The subscription where the AKS cluster and supporting resources will be deployed
 aks_landing_zone_subscription_id: "029039e3-76a6-4c2e-b3c0-1473059b0193"
 
-## Decision 3: Connectivity Subscription
+## Decision 3: Connectivity Subscription (only used when topology = spoke)
 # The subscription containing the hub VNet and firewall (deployed by ALZ)
 connectivity_subscription_id: "1722f280-2f89-42c1-a80f-9a4773491727"
 
-## Decision 4: Hub Networking
+## Decision 4: Hub Networking (only used when topology = spoke)
 # Required for VNet peering and UDR to route egress through the hub firewall
 hub_vnet_resource_id: "/subscriptions/1722f280-2f89-42c1-a80f-9a4773491727/resourceGroups/rg-hub-swedencentral/providers/Microsoft.Network/virtualNetworks/vnet-hub-swedencentral"
 hub_vnet_name: "vnet-hub-swedencentral"

@@ -460,6 +460,28 @@ function Get-InteractiveInputs {
         -DefaultIndex $defaultSubIdx -PromptLabel "Enter selection"
     Write-Host ""
 
+    # ── Decision 2.5: Topology ──
+    Write-Log "topology" -Severity "INPUT REQUIRED"
+    Write-Host "How should the AKS landing zone connect to the network?"
+    Write-Host ""
+    $topoItems = @(
+        [pscustomobject]@{ label = "Spoke         - Peer to an existing ALZ hub VNet (UDR egress via hub firewall). Requires Decisions 3 & 4."; value = "spoke" }
+        [pscustomobject]@{ label = "Standalone    - No hub, no VNet peering. NAT gateway egress only. Skips Decisions 3 & 4."; value = "standalone" }
+    )
+    Show-NumberedList -Items $topoItems -LabelProperty "label" -ValueProperty "value"
+    $config.topology = Read-NumberedSelection -Items $topoItems -ValueProperty "value" -DefaultIndex 0 -PromptLabel "Enter selection"
+    Write-Host ""
+
+    if ($config.topology -eq "standalone") {
+        Write-Log "Topology 'standalone' selected — skipping hub-related decisions (3 & 4)." -Severity "INFO"
+        $config.connectivity_subscription_id  = ""
+        $config.hub_vnet_resource_id          = ""
+        $config.hub_vnet_name                 = ""
+        $config.hub_vnet_resource_group_name  = ""
+        $config.hub_firewall_private_ip       = ""
+        Write-Host ""
+    }
+    else {
     # ── Decision 3: Connectivity Subscription ──
     Write-Log "connectivity_subscription_id" -Severity "INPUT REQUIRED"
     Write-Host "The subscription containing the hub VNet and firewall (deployed by ALZ)."
@@ -525,6 +547,7 @@ function Get-InteractiveInputs {
     $fwIp = Read-Host "Enter value (press enter to accept default)"
     $config.hub_firewall_private_ip = if ([string]::IsNullOrEmpty($fwIp)) { "10.0.0.4" } else { $fwIp }
     Write-Host ""
+    }
 
     # ── Decision 5: Spoke Networking ──
     Write-Log "spoke_vnet_address_space" -Severity "INPUT REQUIRED"
@@ -870,6 +893,11 @@ function Write-InputsYaml {
 scenario: "$($Config.scenario)"
 secondary_location: "$($Config.secondary_location)"
 
+## Topology: standalone | spoke
+# - standalone : no hub, no VNet peering, NAT gateway egress only
+# - spoke      : peer to an existing ALZ hub VNet, UDR egress via hub firewall (Decisions 3 & 4 required)
+topology: "$(if ($Config.topology) { $Config.topology } else { 'spoke' })"
+
 ## Decision 1: Bootstrap Resource Azure Region
 bootstrap_location: "$($Config.bootstrap_location)"
 
@@ -877,11 +905,11 @@ bootstrap_location: "$($Config.bootstrap_location)"
 # The subscription where the AKS cluster and supporting resources will be deployed
 aks_landing_zone_subscription_id: "$($Config.aks_landing_zone_subscription_id)"
 
-## Decision 3: Connectivity Subscription
+## Decision 3: Connectivity Subscription (only used when topology = spoke)
 # The subscription containing the hub VNet and firewall (deployed by ALZ)
 connectivity_subscription_id: "$($Config.connectivity_subscription_id)"
 
-## Decision 4: Hub Networking
+## Decision 4: Hub Networking (only used when topology = spoke)
 # Required for VNet peering and UDR to route egress through the hub firewall
 hub_vnet_resource_id: "$($Config.hub_vnet_resource_id)"
 hub_vnet_name: "$($Config.hub_vnet_name)"
