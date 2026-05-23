@@ -2756,21 +2756,50 @@ function Deploy-AKSLandingZoneLegacy {
         }
 
         # Validate required string inputs that the bootstrap cannot recover from on its own.
+        # Default topology to 'spoke' for back-compat when older inputs.yaml files don't carry the field.
+        if ([string]::IsNullOrWhiteSpace([string]$config.topology)) {
+            $config.topology = 'spoke'
+            Write-Log "topology not set in inputs — defaulting to 'spoke' for back-compat." -Severity "WARNING"
+        }
+        $allowedTopologies = @('spoke', 'standalone')
+        if ($allowedTopologies -notcontains $config.topology) {
+            Write-Log "topology '$($config.topology)' is invalid. Allowed values: $($allowedTopologies -join ', ')." -Severity "ERROR"
+            return
+        }
+
         $requiredStrings = @(
             'github_organization_name',
             'service_name',
             'environment_name',
             'bootstrap_location',
             'aks_landing_zone_subscription_id',
-            'connectivity_subscription_id',
-            'bootstrap_subscription_id',
-            'hub_vnet_resource_id'
+            'bootstrap_subscription_id'
         )
+        if ($config.topology -eq 'spoke') {
+            $requiredStrings += @(
+                'connectivity_subscription_id',
+                'hub_vnet_resource_id',
+                'hub_vnet_name',
+                'hub_vnet_resource_group_name',
+                'hub_firewall_private_ip'
+            )
+        }
         $missingRequired = $requiredStrings | Where-Object { [string]::IsNullOrWhiteSpace([string]$config.$_) }
         if ($missingRequired.Count -gt 0) {
             Write-Log "Configuration is missing required values: $($missingRequired -join ', ')" -Severity "ERROR"
             Write-Log "Edit $InputConfigPath and set the missing value(s), or re-run the wizard to regenerate it." -Severity "ERROR"
             return
+        }
+
+        # Standalone topology: any leftover hub_* / connectivity_subscription_id values are misleading.
+        # Auto-clear them and warn, so the rendered tfvars cannot accidentally trigger peering or UDR.
+        if ($config.topology -eq 'standalone') {
+            $hubFields = @('connectivity_subscription_id','hub_vnet_resource_id','hub_vnet_name','hub_vnet_resource_group_name','hub_firewall_private_ip')
+            $stale = $hubFields | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$config.$_) }
+            if ($stale.Count -gt 0) {
+                Write-Log "topology=standalone but the following hub fields were set and will be cleared: $($stale -join ', ')" -Severity "WARNING"
+                foreach ($f in $stale) { $config.$f = "" }
+            }
         }
 
         # Auto-resolve grafana_admin_group_object_id from admin groups or current user
