@@ -2430,12 +2430,33 @@ function Get-RepositoryFilesMap {
     # Workflows (caller copies only — templates stay private to the workload repo)
     $wfSrc = Join-Path $TemplateRoot "workflows"
     if (Test-Path $wfSrc) {
+        # Resolve the template repo (owner/name) that hosts the reusable
+        # cd-template.yaml / ci-template.yaml workflows.
+        # Priority: explicit config override -> derive from local git remote.
+        $templateRepo = $null
+        if ($Config.ContainsKey('template_repository') -and -not [string]::IsNullOrWhiteSpace($Config.template_repository)) {
+            $templateRepo = [string]$Config.template_repository
+        } else {
+            try {
+                $remoteUrl = (& git -C (Split-Path $TemplateRoot -Parent) remote get-url origin 2>$null)
+                if ($remoteUrl -match 'github\.com[:/]+([^/]+/[^/.]+)') { $templateRepo = $Matches[1] }
+            } catch { }
+        }
+        if ([string]::IsNullOrWhiteSpace($templateRepo)) {
+            $templateRepo = "$($Config.github_organization_name)/__TEMPLATE_REPO_NAME__"
+            Write-Log "template_repository not set and git remote not resolvable; workload workflows will keep '__TEMPLATE_REPO_NAME__' placeholder." -Severity "WARNING"
+        }
+        $templateOrg  = ($templateRepo -split '/')[0]
+        $templateName = ($templateRepo -split '/')[1]
         foreach ($wfFile in @("ci.yaml","cd.yaml")) {
             $p = Join-Path $wfSrc $wfFile
             if (Test-Path $p) {
                 $content = Get-Content $p -Raw
                 # Best-effort placeholder substitution — workload workflows are simple.
-                $content = $content -replace '__ORG_NAME__',          $Config.github_organization_name
+                # __ORG_NAME__ + __TEMPLATE_REPO_NAME__ together form the `uses:` ref
+                # pointing at the template repo that owns the reusable workflow.
+                $content = $content -replace '__ORG_NAME__',           $templateOrg
+                $content = $content -replace '__TEMPLATE_REPO_NAME__', $templateName
                 $content = $content -replace '__PLAN_ENVIRONMENT__',  "plan"
                 $content = $content -replace '__APPLY_ENVIRONMENT__', "apply"
                 $files[".github/workflows/$wfFile"] = $content
