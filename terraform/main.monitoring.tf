@@ -32,7 +32,7 @@ resource "azurerm_monitor_workspace" "main" {
 resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
   count = var.enable_managed_prometheus ? 1 : 0
 
-  name                = "dce-prometheus-${local.name_prefix}"
+  name                = local.dce_prometheus_name
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   kind                = "Linux"
@@ -43,7 +43,7 @@ resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
 resource "azurerm_monitor_data_collection_rule" "prometheus" {
   count = var.enable_managed_prometheus ? 1 : 0
 
-  name                        = "dcr-prometheus-${local.name_prefix}"
+  name                        = local.dcr_prometheus_name
   resource_group_name         = azurerm_resource_group.main.name
   location                    = azurerm_resource_group.main.location
   data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.prometheus[0].id

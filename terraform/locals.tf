@@ -18,6 +18,9 @@ locals {
   name_prefix = "${var.workload_name}-${var.environment}-${local.loc_short}"
 
   # Resource names
+  # NOTE: Resources with short Azure-imposed name limits use a length-safe pattern:
+  #   <prefix>-<truncated name_prefix><3-char sha256(name_prefix)>
+  # See https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
   resource_group_name    = "rg-${local.name_prefix}"
   vnet_name              = "vnet-${local.name_prefix}"
   aks_name               = "aks-${local.name_prefix}"
@@ -30,6 +33,12 @@ locals {
   log_analytics_name     = "log-${local.name_prefix}"
   monitor_workspace_name = "amon-${local.name_prefix}"
   grafana_name           = length("grf-${local.name_prefix}") <= 23 ? "grf-${local.name_prefix}" : "grf-${substr(local.name_prefix, 0, 16)}${substr(sha256(local.name_prefix), 0, 3)}"
+  # Data Collection Endpoint max length = 44; DCR max length = 64.
+  # "dce-prometheus-" prefix is 15 chars, leaving 29 for name_prefix before hashing.
+  _dce_full              = "dce-prometheus-${local.name_prefix}"
+  dce_prometheus_name    = length(local._dce_full) <= 44 ? local._dce_full : "dce-prometheus-${substr(local.name_prefix, 0, 26)}${substr(sha256(local.name_prefix), 0, 3)}"
+  _dcr_full              = "dcr-prometheus-${local.name_prefix}"
+  dcr_prometheus_name    = length(local._dcr_full) <= 64 ? local._dcr_full : "dcr-prometheus-${substr(local.name_prefix, 0, 46)}${substr(sha256(local.name_prefix), 0, 3)}"
   route_table_name       = "rt-${local.name_prefix}"
   nsg_appgw_name         = "nsg-agw-${local.name_prefix}"
   nsg_pe_name            = "nsg-pe-${local.name_prefix}"
