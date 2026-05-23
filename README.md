@@ -172,7 +172,7 @@ Add `-AutoApprove` to skip both the post-wizard confirmation and the `terraform 
 
 For CI/CD pipelines or when you want to manage `inputs.yaml` in source control, pre-fill the file and pass it explicitly:
 
-1. Open [config/inputs.yaml](config/inputs.yaml) and fill each field from the Phase 0 checklist. Fields map 1:1 to the 11 decisions:
+1. Open [config/inputs.yaml](config/inputs.yaml) and fill each field from the Phase 0 checklist. Fields map 1:1 to the decisions you captured:
 
    | Decision (Phase 0) | Field(s) in `inputs.yaml` |
    |---|---|

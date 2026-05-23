@@ -167,6 +167,8 @@ Each subnet gets its own NSG:
 
 Both subnets share the same route table for corp landing zones (UDR to hub firewall).
 
+> **Note (topology):** The route table and the spoke↔hub VNet peerings are only created when `topology: spoke` (i.e. `hub_vnet_resource_id` is set). When `topology: standalone` is selected, no route table is created, no peering is attempted, and egress leaves the cluster through the spoke's NAT gateway instead.
+
 ---
 
 ## Usage

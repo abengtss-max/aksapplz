@@ -55,11 +55,16 @@ This checklist aligns with the [Azure Landing Zone Accelerator](https://aka.ms/a
 - [ ] Correct subscription selected for AKS workload
 - [ ] Subscription has required resource provider registrations (or auto-register enabled)
 
-### Decision 3: Connectivity Subscription
+### Decision 2.5: Topology
+- [ ] Topology selected: `spoke` (peer to an existing ALZ hub) or `standalone` (no hub, NAT gateway egress only)
+- [ ] If `standalone`: Decisions 3 & 4 are skipped — leave all hub fields blank in `inputs.yaml`
+- [ ] If `spoke`: continue with Decisions 3 & 4 below
+
+### Decision 3: Connectivity Subscription *(only when topology = spoke)*
 - [ ] Hub networking subscription identified
 - [ ] Cross-subscription peering permissions in place
 
-### Decision 4: Hub Networking
+### Decision 4: Hub Networking *(only when topology = spoke)*
 - [ ] Hub VNet resource ID provided
 - [ ] Hub VNet resource group name provided
 - [ ] Hub firewall private IP address confirmed
