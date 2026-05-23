@@ -1,0 +1,66 @@
+---
+# E2E scenario: standalone topology, single_region_regulated
+# Standalone but with regulated controls (azure cni network policy, security patches, min_count=3, pci-dss label).
+scenario: "single_region_regulated"
+secondary_location: ""
+topology: "standalone"
+
+bootstrap_location: "swedencentral"
+aks_landing_zone_subscription_id: "029039e3-76a6-4c2e-b3c0-1473059b0193"
+
+connectivity_subscription_id: ""
+hub_vnet_resource_id: ""
+hub_vnet_name: ""
+hub_vnet_resource_group_name: ""
+hub_firewall_private_ip: ""
+
+spoke_vnet_address_space: "10.10.0.0/16"
+subnet_address_prefix_aks_system_nodes: "10.10.0.0/24"
+subnet_address_prefix_aks_user_nodes: "10.10.16.0/22"
+subnet_address_prefix_aks_api_server: "10.10.20.0/28"
+subnet_address_prefix_app_gateway: "10.10.21.0/24"
+subnet_address_prefix_private_endpoints: "10.10.22.0/24"
+subnet_address_prefix_ingress: "10.10.23.0/24"
+
+kubernetes_version: "1.34.7"
+aks_sku_tier: "Standard"
+aks_private_cluster: false
+aks_admin_group_object_ids: ["3998b1b6-9c1a-43f0-a2d8-79166b30ee4b"]
+
+bootstrap_subscription_id: "029039e3-76a6-4c2e-b3c0-1473059b0193"
+tenant_id: "79ee578e-cb66-4cc6-b879-3ff4f6e34a55"
+
+service_name: "aksapplz"
+environment_name: "stdrg"
+postfix_number: 1
+
+use_self_hosted_runners: false
+use_private_networking: false
+
+github_personal_access_token: "Set via environment variable TF_VAR_github_personal_access_token"
+github_runners_personal_access_token: "Set via environment variable TF_VAR_github_runners_personal_access_token"
+github_organization_name: "abengtss-max-org"
+apply_approvers: ["abengtss-max"]
+
+enable_defender: true
+enable_workload_identity: true
+enable_azure_policy: true
+enable_prometheus: true
+enable_grafana: true
+enable_app_gateway: true
+enable_keda: true
+enable_vpa: false
+enable_node_auto_provisioning: false
+enable_istio: false
+enable_flux: false
+enable_dapr: false
+enable_fips: true
+enable_backup: true
+enable_cost_analysis: true
+enable_acr_geo_replication: false
+
+iac_type: "terraform"
+bootstrap_module_name: "aksapplz_github"
+starter_module_name: "aks_landing_zone"
+
+grafana_admin_group_object_id: "3998b1b6-9c1a-43f0-a2d8-79166b30ee4b"
