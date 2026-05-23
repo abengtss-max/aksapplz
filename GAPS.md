@@ -41,7 +41,7 @@ Owner: @abengtss-max
   - `environment` var validation `{1,8}` blocked `standalone` (now `{1,16}`)
   - Key Vault and Grafana names overflowed 24/23-char limits (now length-safe with sha256 fallback)
 - [x] Decide & implement standalone-appropriate defaults for AKS — documented in [scenarios-and-options.md](ALZ.AKS/docs/scenarios-and-options.md) "Standalone topology — security defaults & trade-offs" table. Current defaults are dev-friendly (`private_cluster_enabled=false`, open authorized IP ranges, system DNS zone, NAT gateway egress). Production hardening guidance documented; users override via per-env tfvars.
-- [ ] Add Pester test for the wizard topology branch (mock `Read-Host`/`Read-NumberedSelection`, assert `config.connectivity_subscription_id == ""` when standalone)
+- [x] Add Pester test for the wizard topology branch — [ALZ.AKS/tests/Get-InteractiveInputs.Topology.Tests.ps1](ALZ.AKS/tests/Get-InteractiveInputs.Topology.Tests.ps1) covers standalone, hub_and_spoke, and spoke branches (3/3 passing)
 - [x] Update test fixture [ALZ.AKS/akstest-t01/config/inputs.yaml](ALZ.AKS/akstest-t01/config/inputs.yaml) with explicit `topology:` field
 
 ---
