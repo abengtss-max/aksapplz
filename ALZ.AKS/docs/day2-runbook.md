@@ -1,0 +1,143 @@
+# Day-2 Operations Runbook
+
+Operational procedures for running `Deploy-AKSLandingZone`-managed clusters
+in production. Pairs with [scenarios-and-options.md](scenarios-and-options.md)
+and [deployment-checklist.md](deployment-checklist.md).
+
+Last reviewed: 2026-05-23 — applies to `1.4.0-rc1`.
+
+---
+
+## 1. Cluster upgrade
+
+The AKS cluster automatically receives:
+
+- **Kubernetes patch** (`automatic_upgrade_channel = "patch"` in baseline scenarios)
+- **Node OS image** (`node_os_upgrade_channel = "NodeImage"`)
+
+Minor-version upgrades (e.g. 1.34 → 1.35) require a manual change to
+`kubernetes_version` in `aks-landing-zone.auto.tfvars` followed by a CD run.
+
+```powershell
+# Trigger the workload repo's CD pipeline after editing kubernetes_version:
+gh workflow run cd.yaml -R <org>/<workload-repo> -f environment=test
+```
+
+Always upgrade `test` first, then promote.
+
+## 2. Scaling
+
+### Cluster nodes
+- **System pool** is managed by the cluster-autoscaler (`min/max` in tfvars).
+- **User pool** scales by HPA + KEDA (if enabled). Tune via tfvars
+  `aks_user_pool_min_count` / `aks_user_pool_max_count`.
+
+### App workloads
+- Use HPA + KEDA for event-driven scale.
+- For long-tail right-sizing, enable VPA (`enable_vpa = true`) — recommended
+  for multi-region scenarios (07–10).
+
+## 3. Backup & restore
+
+When `enable_backup = true` (scenarios 04, 05, 06, 07–10, 12):
+- Azure Backup for AKS protects PVCs + cluster state.
+- Backup vault lives in the workload RG.
+- **Restore drill**: every quarter, restore one PVC to a scratch namespace and
+  verify the file count. Record the result in the change log.
+
+When `enable_backup = false`, you are responsible for any PV snapshots
+(e.g. `velero`, app-level dumps).
+
+## 4. Secret rotation
+
+| Secret | Where | Rotation cadence | Procedure |
+|---|---|---|---|
+| `TF_VAR_github_personal_access_token` | GHA secret `GH_PAT_LZ` | 90 days | Generate new fine-scoped PAT → update repo secret → re-run last successful CI to verify |
+| `TF_VAR_github_runners_personal_access_token` | GHA secret `GH_PAT_RUNNERS` | 90 days | Same as above; only used when `use_self_hosted_runners = true` |
+| AKS cluster admin Entra group | tfvars `aks_admin_group_object_ids` | On membership change | Edit tfvars → CD apply |
+| Grafana admin group | tfvars `grafana_admin_group_object_id` | On membership change | Edit tfvars → CD apply |
+| Key Vault data-plane | Managed identity — no rotation needed | — | — |
+
+## 5. Destroy
+
+There is **no `Remove-AKSLandingZone` cmdlet in v1.4.0-rc1** (see KNOWN-ISSUES).
+Use this manual procedure:
+
+```powershell
+# 1. Tear down the workload
+gh workflow run destroy.yaml -R <org>/<workload-repo> -f environment=<env>
+
+# 2. Destroy the GitHub bootstrap state (creates org repo + envs + OIDC)
+cd bootstrap/alz/github
+terraform workspace select <env>
+terraform destroy -auto-approve
+
+# 3. If hub_and_spoke topology was used, destroy the hub
+cd ../hub
+terraform workspace select <env>
+terraform destroy -auto-approve
+
+# 4. Delete the workload repo (final step — destroys the destroy workflow itself)
+gh repo delete <org>/<workload-repo> --yes
+```
+
+> **Order matters.** Workload first, then bootstrap, then hub. Reverse order
+> leaves orphaned resources because the workload CD pipeline depends on the
+> GHA env identities provisioned by bootstrap.
+
+## 6. State recovery
+
+If the bootstrap remote state blob is lost (deleted, corrupted, container
+rotation gone wrong):
+
+1. **Stop** all automation against the affected env (disable CD workflows).
+2. List the actual deployed resources with `az resource list -g rg-<workload>-<env>-<region> -o json`.
+3. For each resource, `terraform import azurerm_<type>.<addr> <resource_id>`
+   against the workload module.
+4. Run `terraform plan` and reconcile any drift.
+5. Re-enable automation.
+
+(`Import-AKSLandingZoneState` cmdlet is planned for v1.5.0.)
+
+## 7. Drift detection
+
+CD pipeline includes a nightly `terraform plan` that emails the owners if the
+plan is non-empty. Investigate within 24 h.
+
+Typical drift sources:
+- Manual edits in the Azure Portal — re-apply via CD to overwrite.
+- Out-of-band managed-identity changes — generally safe to re-apply.
+- Upstream AVM module updates — pin module versions in `versions.tf` if
+  unwanted upgrades are causing drift.
+
+## 8. Incident response
+
+| Symptom | First action | Escalation |
+|---|---|---|
+| Cluster API unreachable | `az aks show -g <rg> -n <cluster> --query 'powerState'`; check NSG; check NAT GW health | Open Azure support ticket; revert last CD run |
+| Pods stuck `ImagePullBackOff` | Check ACR private endpoint + DNS resolution from cluster | Open ACR ticket; verify managed-identity AcrPull role |
+| App Gateway 502 | Check backend health probes; verify pod readiness | Roll back deployment; check WAF logs |
+| CD pipeline `terraform apply` fails with `ResourceExists` | State drift — see §7 | Manual import per §6 |
+| Key Vault access denied from cluster | Verify workload identity federation; check KV access policy | `az aks get-credentials` then `kubectl describe pod`; check token exchange |
+
+## 9. Cost controls
+
+`enable_cost_analysis = true` enables the AKS Cost Analysis add-on. Review
+namespace cost weekly in Azure Portal.
+
+Quick wins:
+- Set HPA min replicas to 0 + KEDA scale-to-zero where possible.
+- Use Spot VMs for non-prod user pools (`vm_size_spot` tfvars override).
+- Disable Defender (`enable_defender = false`) in `dev`/`test` envs.
+- Use `aks_sku_tier = "Free"` in `dev` (scenario 11 demonstrates this).
+
+## 10. Pre-publish accelerator updates
+
+When publishing accelerator changes that affect generated workload repos:
+
+1. Bump `ModuleVersion` per SemVer + add Prerelease tag if pre-GA.
+2. Update `CHANGELOG.md` with `Added` / `Changed` / `Fixed` / `Removed`.
+3. Run L1 + L2 locally (see `ALZ.AKS/tests/e2e/`).
+4. Run L3 for at least one scenario per topology.
+5. Tag the release in git: `git tag v1.4.0-rc1 && git push --tags`.
+6. (Future) Publish to PSGallery via `Publish-Module`.

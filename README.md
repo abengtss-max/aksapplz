@@ -1,5 +1,11 @@
 # AKS Application Landing Zone Accelerator
 
+[![PSScriptAnalyzer](https://img.shields.io/badge/PSScriptAnalyzer-0%20errors-brightgreen)](.github/workflows/static-analysis.yml)
+[![L1 render](https://img.shields.io/badge/L1%20render-112%20pass-brightgreen)](ALZ.AKS/tests/e2e/Scenarios.L1.Tests.ps1)
+[![L2 plan](https://img.shields.io/badge/L2%20plan-60%20pass%20%2F%2012%20scenarios-brightgreen)](ALZ.AKS/tests/e2e/Scenarios.L2.Tests.ps1)
+[![version](https://img.shields.io/badge/version-1.4.0--rc1-blue)](CHANGELOG.md)
+[![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+
 A Terraform-based accelerator that deploys a production-ready **AKS Application Landing Zone** into an existing Azure Landing Zone, following the [Azure Landing Zones Terraform Accelerator](https://github.com/Azure/alz-terraform-accelerator) pattern.
 
 The accelerator ships as a PowerShell module (`ALZ.AKS`) that exposes a single cmdlet — **`Deploy-AKSLandingZone`** — which renders a Terraform composition (`bootstrap/alz/github/`) and applies it. The bootstrap creates:
@@ -9,7 +15,23 @@ The accelerator ships as a PowerShell module (`ALZ.AKS`) that exposes a single c
 
 Then GitHub Actions deploys the AKS landing zone.
 
-> **Status:** Not yet on PSGallery — install from the cloned repo.
+> **Status:** `1.4.0-rc1` — release candidate. Render + plan paths are fully tested across 12 scenarios; apply path verified for `01-standalone-baseline`. Not yet on PSGallery — install from the cloned repo. See [KNOWN-ISSUES.md](KNOWN-ISSUES.md) for preview-grade limitations.
+
+## Maturity matrix
+
+| Capability | Status | Evidence |
+|---|---|---|
+| Render (template + tfvars generation) | ✅ verified | [L1 tests](ALZ.AKS/tests/e2e/Scenarios.L1.Tests.ps1) — 112 pass across 12 scenarios |
+| `terraform validate` + `plan` | ✅ verified | [L2 tests](ALZ.AKS/tests/e2e/Scenarios.L2.Tests.ps1) — 60 pass across 12 scenarios |
+| `terraform apply` + `destroy` | 🟡 1/12 verified | [L3 tests](ALZ.AKS/tests/e2e/Scenarios.L3.Tests.ps1) — `01-standalone-baseline` proven; remaining scenarios scheduled before GA |
+| Wizard end-to-end (`Deploy-AKSLandingZone`) | 🟡 manually verified | `standalone` + `hub_and_spoke` topologies cloud-tested 2026-05-23; automated [L4 tests](ALZ.AKS/tests/e2e/Scenarios.L4.Tests.ps1) scheduled before GA |
+| Destroy cmdlet (`Remove-AKSLandingZone`) | ❌ planned v1.4 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — manual procedure |
+| State recovery cmdlet | ❌ planned v1.5 | [Day-2 runbook §6](ALZ.AKS/docs/day2-runbook.md#6-state-recovery) — manual procedure |
+| PSGallery publication | ❌ planned v1.4 | Install via `Import-Module .\ALZ.AKS\ALZ.AKS.psd1` |
+| Static analysis (PSSA / tfsec / checkov) | ✅ wired | [.github/workflows/static-analysis.yml](.github/workflows/static-analysis.yml) — 0 PSSA errors |
+| LICENSE / SECURITY / CHANGELOG | ✅ shipped | [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md) |
+| Per-topology architecture diagrams | ✅ shipped | [architecture-diagrams.md](ALZ.AKS/docs/architecture-diagrams.md) |
+| Day-2 operations runbook | ✅ shipped | [day2-runbook.md](ALZ.AKS/docs/day2-runbook.md) |
 
 ---
 
