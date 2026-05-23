@@ -112,6 +112,11 @@ decisions = [
         "Second Azure region (only for multi-region scenarios). Leave blank otherwise.",
         "westeurope, northeurope, eastus2 ...",
         ""),
+    ("0c", "topology",
+        "How the AKS landing zone connects to the network. 'spoke' peers to an existing ALZ hub and routes egress through the hub firewall; 'standalone' has no hub, no peering, and uses a NAT gateway for egress (Decisions 3 and 4 are ignored).",
+        "spoke      (default; peer to existing ALZ hub)\n"
+        "standalone (no hub, NAT egress only)",
+        "spoke"),
 
     ("", "WHERE TO DEPLOY", "", "", ""),
     ("1", "bootstrap_location",
@@ -123,17 +128,17 @@ decisions = [
         "Subscription ID (GUID).\nLeave blank to use whatever `az` is logged into.",
         "(current az subscription)"),
     ("3", "connectivity_subscription_id",
-        "Subscription that holds your existing hub network (firewall, VPN).",
+        "Subscription that holds your existing hub network (firewall, VPN). Only required when topology = spoke; leave blank for standalone.",
         "Subscription ID (GUID).",
         ""),
 
-    ("", "HUB NETWORK (you already have this)", "", "", ""),
+    ("", "HUB NETWORK (only when topology = spoke)", "", "", ""),
     ("4a", "hub_vnet_resource_id",
-        "Full ID of your hub VNet. The wizard lists hubs found in Decision 3 and fills this in.",
+        "Full ID of your hub VNet. The wizard lists hubs found in Decision 3 and fills this in. Leave blank when topology = standalone.",
         "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<name>",
         ""),
     ("4b", "hub_firewall_private_ip",
-        "Private IP of your hub firewall. Traffic leaving the cluster routes through this.",
+        "Private IP of your hub firewall. Traffic leaving the cluster routes through this. Leave blank when topology = standalone.",
         "10.0.0.4",
         "10.0.0.4"),
 
@@ -327,6 +332,8 @@ for r in range(5, row):
     if s == "scenario":
         dropdown(ws1, r, 6, ["single_region_baseline", "multi_region_baseline",
                               "single_region_regulated", "multi_region_regulated"])
+    elif s == "topology":
+        dropdown(ws1, r, 6, ["spoke", "standalone"])
     elif s == "aks_sku_tier":
         dropdown(ws1, r, 6, ["Free", "Standard", "Premium"])
     elif s in bool_settings:
@@ -487,6 +494,7 @@ intro = [
     ("", normal_font),
     ("1. Open the 'Bootstrap Decisions' tab and fill in every yellow cell.", normal_font),
     ("   - Pick a scenario first (row 0a) — it sets sensible defaults for the rest.", normal_font),
+    ("   - Pick a topology (row 0c) — 'spoke' if you already have an ALZ hub, 'standalone' for an isolated subscription. Standalone skips Decisions 3 and 4.", normal_font),
     ("   - Don't put GitHub tokens in the workbook. The wizard asks for them with hidden input.", normal_font),
     ("", normal_font),
     ("2. Open 'Advanced Cluster Settings' only if you need to change cluster sizing, networking,", normal_font),
