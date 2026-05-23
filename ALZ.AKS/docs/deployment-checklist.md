@@ -56,11 +56,15 @@ This checklist aligns with the [Azure Landing Zone Accelerator](https://aka.ms/a
 - [ ] Subscription has required resource provider registrations (or auto-register enabled)
 
 ### Decision 2.5: Topology
-- [ ] Topology selected: `spoke` (peer to an existing ALZ hub) or `standalone` (no hub, NAT gateway egress only)
+- [ ] Topology selected: `spoke`, `standalone`, or `hub_and_spoke`
+  - `spoke` — peer to an existing ALZ hub (UDR egress through hub firewall)
+  - `standalone` — no hub, no peering, NAT gateway egress only
+  - `hub_and_spoke` — greenfield: this bootstrap creates a new hub VNet (+ optional Azure Firewall) in the connectivity subscription, then peers the spoke to it
 - [ ] If `standalone`: Decisions 3 & 4 are skipped — leave all hub fields blank in `inputs.yaml`
 - [ ] If `spoke`: continue with Decisions 3 & 4 below
+- [ ] If `hub_and_spoke`: fill Decision 3 (connectivity subscription) **and** Decision 4b (hub sizing & firewall) below; leave Decision 4 hub IDs blank — they are auto-populated after the hub apply
 
-### Decision 3: Connectivity Subscription *(only when topology = spoke)*
+### Decision 3: Connectivity Subscription *(used by `spoke` and `hub_and_spoke`)*
 - [ ] Hub networking subscription identified
 - [ ] Cross-subscription peering permissions in place
 
@@ -69,6 +73,13 @@ This checklist aligns with the [Azure Landing Zone Accelerator](https://aka.ms/a
 - [ ] Hub VNet resource group name provided
 - [ ] Hub firewall private IP address confirmed
 - [ ] Firewall rules allow AKS egress (see [AKS required outbound rules](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress))
+
+### Decision 4b: Hub Sizing & Firewall *(only when topology = hub_and_spoke)*
+- [ ] Hub VNet address space chosen (default `10.0.0.0/16`; must not overlap with spoke)
+- [ ] AzureFirewallSubnet prefix chosen (default `10.0.0.0/26`; minimum /26)
+- [ ] Decision: deploy Azure Firewall now (`hub_deploy_firewall: true`) or VNet-only and attach later (`false`)
+- [ ] If deploying firewall: SKU chosen \u2014 `Standard` (recommended) or `Premium` (adds TLS inspection, IDPS, URL filtering). Basic SKU is **not** supported in v1.3.
+- [ ] Operator has `Network Contributor` + `Owner` (or `User Access Administrator`) on the connectivity subscription
 
 ### Decision 5: Spoke Networking
 - [ ] Spoke VNet address space does not overlap with hub or other spokes

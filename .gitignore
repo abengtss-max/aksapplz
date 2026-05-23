@@ -45,3 +45,7 @@ bootstrap/alz/github/*.tfplan
 # Apply / plan transcripts (root-level)
 standalone-*.log
 standalone-*.tfplan
+# hub_and_spoke cloud-test fixture artefacts
+hub01-apply*.log
+bootstrap/alz/hub/hub01-apply*.log
+bootstrap/alz/hub/terraform.tfvars.json

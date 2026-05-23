@@ -167,7 +167,7 @@ Each subnet gets its own NSG:
 
 Both subnets share the same route table for corp landing zones (UDR to hub firewall).
 
-> **Note (topology):** The route table and the spoke↔hub VNet peerings are only created when `topology: spoke` (i.e. `hub_vnet_resource_id` is set). When `topology: standalone` is selected, no route table is created, no peering is attempted, and egress leaves the cluster through the spoke's NAT gateway instead.
+> **Note (topology):** The route table and the spoke↔hub VNet peerings are only created when `topology: spoke` or `topology: hub_and_spoke` (i.e. `hub_vnet_resource_id` is set). When `topology: standalone` is selected, no route table is created, no peering is attempted, and egress leaves the cluster through the spoke's NAT gateway instead. For `hub_and_spoke`, the cmdlet runs `bootstrap/alz/hub/` first — creating a new hub VNet plus an optional Azure Firewall (Standard or Premium SKU; Basic is intentionally not supported in v1.3 because it requires a Management subnet and Management IP) — and captures the hub outputs into the spoke render automatically.
 
 ---
 

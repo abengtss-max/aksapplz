@@ -2795,6 +2795,39 @@ function Deploy-AKSLandingZone {
     # ── terraform init + workspace + plan/apply ──
     Push-Location $BootstrapRoot
     try {
+        # Cross-env safety: if a backend.tf from a different environment is still on
+        # disk (each env writes its own remote backend in its own storage account),
+        # or if cached .terraform metadata points at a different workspace, wipe those
+        # artefacts so this run starts with a clean local init. The remote state for
+        # each env is safe in its own storage account.
+        $backendTfPath = Join-Path $BootstrapRoot "backend.tf"
+        $envMarker     = Join-Path $BootstrapRoot ".terraform/environment"
+        $targetEnv     = if (-not [string]::IsNullOrWhiteSpace($Environment)) { $Environment } else { [string]$config.environment_name }
+        $shouldClean   = $false
+        if (Test-Path $backendTfPath) {
+            $existingBackend = Get-Content $backendTfPath -Raw
+            # backend.tf for env X always contains the env token inside the SA's RG name
+            # (rg-<service>-<env>-state-…) and the SA name. If the current target env
+            # token is missing, the backend belongs to another env.
+            if (-not [string]::IsNullOrWhiteSpace($targetEnv) -and $existingBackend -notmatch "(?i)-$([regex]::Escape($targetEnv))-") {
+                Write-Log "Detected backend.tf from a different environment (current target='$targetEnv'); cleaning local Terraform artefacts before init." -Severity "WARNING"
+                $shouldClean = $true
+            }
+        }
+        if (-not $shouldClean -and (Test-Path $envMarker)) {
+            $cachedWs = (Get-Content $envMarker -ErrorAction SilentlyContinue).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($cachedWs) -and -not [string]::IsNullOrWhiteSpace($targetEnv) -and $cachedWs -ne $targetEnv -and -not (Test-Path $backendTfPath)) {
+                Write-Log "Cached workspace '$cachedWs' differs from target '$targetEnv'; cleaning local Terraform artefacts." -Severity "WARNING"
+                $shouldClean = $true
+            }
+        }
+        if ($shouldClean) {
+            foreach ($p in @("$BootstrapRoot\backend.tf", "$BootstrapRoot\.terraform", "$BootstrapRoot\.terraform.lock.hcl", "$BootstrapRoot\terraform.tfstate", "$BootstrapRoot\terraform.tfstate.backup")) {
+                if (Test-Path $p) { Remove-Item -Path $p -Recurse -Force -ErrorAction SilentlyContinue }
+            }
+            Write-Log "Local Terraform artefacts cleaned. Remote state in the prior env's storage account is unaffected." -Severity "INFO"
+        }
+
         Write-Log "Running terraform init..." -Severity "INFO"
         $initArgs = @('init','-input=false','-upgrade')
         & terraform @initArgs

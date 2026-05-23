@@ -132,8 +132,8 @@ variable "tags" {
 
 # --- Pass-through (rendered into repo files; not consumed by bootstrap) -------
 variable "aks_landing_zone_inputs" {
-  description = "Free-form pass-through map written verbatim into the workload repo's tfvars."
-  type        = map(any)
+  description = "Free-form pass-through object written verbatim into the workload repo's tfvars. Uses `any` so values can mix strings, bools, and numbers."
+  type        = any
   default     = {}
 }
 
