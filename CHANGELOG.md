@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-rc3] - 2026-05-23
+
+Bug-fix release for the `-Action destroy` path discovered during real-cloud
+end-to-end validation. The rc2 destroy command went through the motions but
+could silently report success without actually destroying anything; rc3 makes
+the destroy path honest and recovers from terraform's self-referential
+backend-teardown.
+
+### Fixed
+- **`-Action destroy` now renders `terraform.tfvars.json` before invoking
+  `terraform destroy`.** rc2 skipped the render entirely on destroy, which
+  caused terraform to fail with `Error: No value for required variable` (the
+  PATs and `repository_files` map are still evaluated during destroy).
+- **`-Action destroy` no longer reports false-positive success when the target
+  workspace is missing.** rc2 logged a warning and fell through to destroy
+  whatever workspace happened to be active (typically `default`, which
+  contained nothing) and then printed the "Teardown Complete" banner. rc3
+  hard-aborts with a clear error if the per-env workspace is not present.
+- **`-Action destroy` aborts cleanly when the workspace state has zero
+  tracked resources** instead of running a no-op destroy and claiming success.
+- **`-Action destroy` recognises terraform's self-referential teardown error
+  (404 / "Failed to persist state to backend" / "Error releasing the state
+  lock") and treats it as a successful destroy.** This is expected when the
+  bootstrap composition manages its own remote state storage account: after
+  the SA is destroyed, terraform cannot save final state back to it and
+  returns a non-zero exit code, even though every tracked resource was
+  destroyed.
+- **`-Action destroy` self-heals an operator missing `Storage Blob Data
+  Contributor` on the remote state SA** (idempotent grant + 30 s propagation
+  sleep) when the destroy is invoked from a different machine than the one
+  that ran apply.
+- **`-Action destroy` self-heals a stale `backend.tf` on disk** that points
+  at a different environment's storage account, by re-discovering the target
+  env's state RG + SA from Azure and rewriting the file before init.
+
+### Verified end-to-end (real cloud, swedencentral, `aksapplz-standalone`)
+- Fresh apply → 45 resources created; state migrated to fresh remote SA.
+- `-Action destroy -AutoApprove` → all 45 resources destroyed (incl. workload
+  GitHub repo, federated identities, managed identities, both bootstrap RGs).
+  Self-referential teardown error correctly classified as expected success.
+
 ## [1.4.0-rc2] - 2026-05-23
 
 API hardening release. Replaces the previously-planned standalone

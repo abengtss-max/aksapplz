@@ -2794,25 +2794,133 @@ function Deploy-AKSLandingZone {
         # Spoke / bootstrap destroy
         Push-Location $BootstrapRoot
         try {
+            # Self-heal stale backend.tf: if the on-disk backend.tf references a
+            # different env's storage account (or no backend.tf exists), rebuild
+            # it from the actual state RG + storage account in Azure for the
+            # target env. This mirrors what the apply path does via $shouldClean.
+            $backendTfPath = Join-Path $BootstrapRoot "backend.tf"
+            $needsRewrite  = $true
+            if (Test-Path $backendTfPath) {
+                $existingBackend = Get-Content $backendTfPath -Raw
+                if (-not [string]::IsNullOrWhiteSpace($workspaceName) -and $existingBackend -match "(?i)-$([regex]::Escape($workspaceName))-") {
+                    $needsRewrite = $false
+                } else {
+                    Write-Log "On-disk backend.tf references a different environment; rebuilding for '$workspaceName'." -Severity "WARNING"
+                }
+            } else {
+                Write-Log "No backend.tf on disk; discovering bootstrap storage account for '$workspaceName'..." -Severity "INFO"
+            }
+            if ($needsRewrite) {
+                $svc       = [string]$config.service_name
+                $subId     = [string]$config.bootstrap_subscription_id
+                $stateRg   = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name | [0]" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($stateRg)) {
+                    Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found in subscription $subId. Nothing to destroy at the spoke layer." -Severity "WARNING"
+                    return
+                }
+                $saName = az storage account list -g $stateRg --subscription $subId --query "[0].name" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($saName)) {
+                    Write-Log "State RG '$stateRg' exists but contains no storage account. Skipping spoke destroy." -Severity "WARNING"
+                    return
+                }
+                $backendTf = @"
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "$stateRg"
+    storage_account_name = "$saName"
+    container_name       = "tfstate"
+    key                  = "bootstrap.tfstate"
+    use_azuread_auth     = true
+    subscription_id      = "$subId"
+    tenant_id            = "$($config.tenant_id)"
+  }
+}
+"@
+                Set-Content -Path $backendTfPath -Value $backendTf -Encoding UTF8
+                Write-Log "Rewrote backend.tf -> $stateRg / $saName" -Severity "SUCCESS"
+                # Wipe cached .terraform so init picks up the new backend cleanly.
+                foreach ($p in @(".terraform",".terraform.lock.hcl")) {
+                    $full = Join-Path $BootstrapRoot $p
+                    if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
+                }
+
+                # Ensure the operator has Storage Blob Data Contributor on the SA
+                # (the apply path grants this; for destroys run on a different
+                # machine or after RBAC drift, we need it again). Idempotent.
+                $saResourceId = "/subscriptions/$subId/resourceGroups/$stateRg/providers/Microsoft.Storage/storageAccounts/$saName"
+                $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
+                if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
+                    $raOutput = az role assignment create `
+                        --assignee-object-id $signedInId `
+                        --assignee-principal-type User `
+                        --role "Storage Blob Data Contributor" `
+                        --scope $saResourceId `
+                        --subscription $subId 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Granted Storage Blob Data Contributor on $saName to operator. Waiting 30s for RBAC propagation..." -Severity "INFO"
+                        Start-Sleep -Seconds 30
+                    } elseif ($raOutput -match 'already exists|RoleAssignmentExists') {
+                        Write-Log "Storage Blob Data Contributor on $saName already present for operator." -Severity "INFO"
+                    } else {
+                        Write-Log "Could not create role assignment (will try anyway): $raOutput" -Severity "WARNING"
+                    }
+                }
+            }
+
             Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
             $initArgs = @('init','-input=false','-reconfigure')
             & terraform @initArgs
             if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform init failed (backend may already be gone)." -Severity "ERROR"; return }
 
+            # terraform destroy still evaluates all required variables (PATs, repository_files),
+            # so we must render terraform.tfvars.json before destroying. This also keeps the
+            # var values consistent with what was used at apply time.
+            try {
+                Write-Log "Rendering terraform.tfvars.json for destroy (required variables must be resolvable)..." -Severity "INFO"
+                $repoFilesForDestroy = Get-RepositoryFilesMap -Config $config
+                $null = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFilesForDestroy
+            } catch {
+                Write-Log "Could not render tfvars before destroy: $($_.Exception.Message)" -Severity "ERROR"; return
+            }
+
             if (-not [string]::IsNullOrWhiteSpace($workspaceName)) {
                 & terraform workspace select $workspaceName 2>$null
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Log "Workspace '$workspaceName' not found in bootstrap state — nothing to destroy at the spoke layer." -Severity "WARNING"
-                } else {
-                    Write-Log "Selected workspace '$workspaceName'." -Severity "INFO"
+                    Write-Log "Workspace '$workspaceName' not found in bootstrap state — nothing to destroy at the spoke layer (aborting to avoid false-positive success on 'default')." -Severity "WARNING"
+                    return
                 }
+                Write-Log "Selected workspace '$workspaceName'." -Severity "INFO"
+            }
+
+            # Sanity check: if the workspace exists but has no resources, don't claim destroy ran.
+            $preState = & terraform state list 2>$null
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($preState -join "`n"))) {
+                Write-Log "Workspace '$workspaceName' state is empty — no tracked resources to destroy." -Severity "WARNING"
+                return
             }
 
             $destroyArgs = @('destroy','-input=false')
             if ($AutoApprove) { $destroyArgs += '-auto-approve' }
             Write-Log "Running terraform destroy against bootstrap composition..." -Severity "INFO"
-            & terraform @destroyArgs
-            if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform destroy failed." -Severity "ERROR"; return }
+            & terraform @destroyArgs 2>&1 | Tee-Object -Variable destroyTee | Out-Host
+            $destroyExit = $LASTEXITCODE
+            if ($destroyExit -ne 0) {
+                # Self-referential teardown: terraform destroyed its own backend storage
+                # account, then fails to persist state / release lock against the now-gone
+                # SA (404 ResourceNotFound). The actual destroy succeeded — detect this
+                # and report success rather than a false-negative ERROR.
+                $joined = ($destroyTee | Out-String)
+                $isBackendGone = $joined -match 'Failed to persist state to backend' `
+                              -or $joined -match 'Failed to save state' `
+                              -or $joined -match 'Error releasing the state lock' `
+                              -or ($joined -match 'ResourceNotFound' -and $joined -match 'Destruction complete')
+                if ($isBackendGone) {
+                    Write-Log "Terraform destroyed its own backend storage account; the post-destroy state save returned 404 (expected). Treating destroy as successful." -Severity "WARNING"
+                } else {
+                    Write-Log "bootstrap terraform destroy failed." -Severity "ERROR"
+                    return
+                }
+            }
             Write-Log "Bootstrap composition destroyed." -Severity "SUCCESS"
         }
         finally { Pop-Location }
