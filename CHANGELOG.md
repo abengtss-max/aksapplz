@@ -31,6 +31,7 @@ and documented preview-grade limitations.
 
 ### Fixed
 - Working tree hygiene — removed eight stale `*.log` and `*.tfvars` debug artefacts from prior manual runs.
+- **Invalid CIDR in scenario templates**: `templates/scenarios/*.tfvars` shipped `aks_user_nodes = "10.10.1.0/22"`, which Azure rejects with `InvalidCIDRNotation` (a /22 must align on a /22 boundary). Corrected to `10.10.16.0/22` (matches what every e2e YAML already uses). **Surfaced by the new L3 harness on the first real cloud apply** — exactly the class of bug L3 exists to catch. Added `ALZ.AKS/tests/Cidr.Alignment.Tests.ps1` (32 cases, runs in <1 s) so the same class of bug fails at unit-test time before any cloud spend.
 
 ### Known limitations (see [KNOWN-ISSUES.md](KNOWN-ISSUES.md))
 - L3 / L4 are wired but the first real cloud run is part of the rc1 sign-off; until then treat the apply path as preview.

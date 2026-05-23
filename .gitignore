@@ -58,3 +58,7 @@ bootstrap/alz/hub/terraform.tfvars.json
 # Local terraform state at repo root (only sandbox/template state is allowed)
 /terraform.tfstate
 /terraform.tfstate.backup
+
+# L3/L4 cloud-test transcripts (root-level)
+l3-*.log
+l4-*.log
