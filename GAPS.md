@@ -50,9 +50,9 @@ Owner: @abengtss-max
 
 - [ ] **PSGallery publication**: add `Publish-Module` script, set up API key, decide on SemVer policy, add `CHANGELOG.md`  *(CHANGELOG added in 1.1.0 — still need publish script + API key)*
 - [ ] **azd story**: ship an `azure.yaml` wrapper so `azd up` triggers `Deploy-AKSLandingZone` (or document why we don't)
-- [ ] **Idempotency / re-run**: define the upgrade contract for re-running `Deploy-AKSLandingZone` with changed inputs
-  - [ ] Decide: does re-render overwrite user edits in the workload repo?
-  - [ ] Add `-Refresh` (re-render + git push only) vs `-Apply` (full bootstrap) distinction, or document a single safe-merge story
+- [x] **Idempotency / re-run**: contract defined and enforced in v1.4.0-rc5. Re-render overwrites managed files (`terraform/*.tf`, `.github/workflows/{ci,cd}.yaml`, `terraform/aks-landing-zone.auto.tfvars`, `.gitignore`) by design; operator hand-edits to those paths are detected and block the re-run unless `-Force` is passed. `-Action refresh` ships as the templates-only path (`terraform apply -target=module.github.github_repository_file.this`). `-DryRun` previews drift without touching anything. See README "Re-run contract" and day2-runbook §7.
+  - [x] Decide: does re-render overwrite user edits in the workload repo?  *(answer: yes, by design — with safety gate)*
+  - [x] Add `-Refresh` (re-render + push only) vs `-Apply` (full bootstrap) distinction  *(shipped as `-Action refresh`)*
 - [x] **State recovery**: `-Action import` on `Deploy-AKSLandingZone` (v1.4.0-rc4) pushes a known-good state file to the remote backend; auto-discovers `errored.tfstate` or accepts explicit `-StateBackup <path>`
 - [x] **Destroy path**: `-Action destroy` on `Deploy-AKSLandingZone` (v1.4.0-rc3) drains GitHub repo + GHA identities, runs `terraform destroy`, deletes bootstrap RGs (state and identity RG shells remain empty due to self-referential teardown — documented in KNOWN-ISSUES)
 - [ ] **Secrets handling**:

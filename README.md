@@ -15,7 +15,7 @@ The accelerator ships as a PowerShell module (`ALZ.AKS`) that exposes a single c
 
 Then GitHub Actions deploys the AKS landing zone.
 
-> **Status:** `1.4.0-rc4` — release candidate. Render + plan paths are fully tested across 12 scenarios; apply path verified for `01-standalone-baseline`. Destroy and state-recovery (`-Action import`) verified end-to-end on Azure 2026-05-23. Not yet on PSGallery — install from the cloned repo. See [KNOWN-ISSUES.md](KNOWN-ISSUES.md) for preview-grade limitations.
+> **Status:** `1.4.0-rc5` — release candidate. Render + plan paths are fully tested across 12 scenarios; apply path verified for `01-standalone-baseline`. Destroy + state-recovery (`-Action import`) + re-run contract (`-DryRun` / `-Action refresh` / `-Force`) verified end-to-end on Azure 2026-05-23. Not yet on PSGallery — install from the cloned repo. See [KNOWN-ISSUES.md](KNOWN-ISSUES.md) for preview-grade limitations.
 
 ## Maturity matrix
 
@@ -27,6 +27,7 @@ Then GitHub Actions deploys the AKS landing zone.
 | Wizard end-to-end (`Deploy-AKSLandingZone`) | 🟡 manually verified | `standalone` + `hub_and_spoke` topologies cloud-tested 2026-05-23; automated [L4 tests](ALZ.AKS/tests/e2e/Scenarios.L4.Tests.ps1) scheduled before GA |
 | Destroy (`Deploy-AKSLandingZone -Action destroy`) | ✅ shipped in v1.4.0-rc3 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — automated spoke-then-hub teardown with `-AutoApprove` support |
 | State recovery (`Deploy-AKSLandingZone -Action import`) | ✅ shipped in v1.4.0-rc4 | Pushes a known-good terraform state file to the remote azurerm backend. Auto-discovers `errored.tfstate` or accepts explicit `-StateBackup <path>`. Verified e2e against a corrupted-blob scenario on Azure |
+| Re-run contract (`-DryRun` / `-Action refresh` / hand-edit safety) | ✅ shipped in v1.4.0-rc5 | [See "Re-run contract" below.](#re-run-contract) `-DryRun` previews the drift; `-Action refresh` pushes only the managed files via `terraform apply -target`; apply/refresh block when an operator has hand-edited a managed file unless `-Force` is passed. Verified e2e with a hand-edit-then-reconcile cycle on Azure |
 | PSGallery publication | ❌ planned v1.4 | Install via `Import-Module .\ALZ.AKS\ALZ.AKS.psd1` |
 | Static analysis (PSSA / tfsec / checkov) | ✅ wired | [.github/workflows/static-analysis.yml](.github/workflows/static-analysis.yml) — 0 PSSA errors |
 | LICENSE / SECURITY / CHANGELOG | ✅ shipped | [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md) |
@@ -311,6 +312,67 @@ Deploy-AKSLandingZone -Environment prod -AutoApprove   # uses config/inputs.prod
 | Workload repo `<service>-<env>-aks-landing-zone` | GitHub | One per env, separate CI/CD lanes |
 
 ---
+
+## Re-run contract
+
+The cmdlet manages a fixed set of files in the generated workload repo via
+`github_repository_file.this` (one per path). Every `-Action apply` or
+`-Action refresh` re-renders the templates and reconciles those files. The
+following paths are **managed** — do **not** hand-edit them in the workload
+repo or your changes will be overwritten on the next re-run:
+
+- `terraform/*.tf` (rendered from `ALZ.AKS/templates/terraform/`)
+- `terraform/aks-landing-zone.auto.tfvars` (rendered from `inputs.<env>.yaml`)
+- `.github/workflows/ci.yaml`, `.github/workflows/cd.yaml`
+- `.gitignore`
+
+Anything else in the workload repo (e.g. `README.md`, `extensions/`, your own
+Kustomize overlays) is **operator-owned** and never touched by the cmdlet.
+
+### Preview a re-run with `-DryRun`
+
+```powershell
+$env:TF_VAR_github_personal_access_token = '<pat>'
+Deploy-AKSLandingZone -Environment <env> -DryRun
+```
+
+Renders templates locally, fetches each managed path's current content from
+the workload repo via `gh api`, compares to terraform state, and prints a
+per-file table:
+
+| Status | Meaning |
+|---|---|
+| `unchanged` | repo content already matches the freshly rendered template — no-op |
+| `add` | file is missing from the workload repo — will be created |
+| `update-managed` | repo matches state but render is newer — will update cleanly |
+| `hand-edited` | repo content differs from terraform state — an operator edited it directly |
+
+No terraform is invoked, no files are pushed.
+
+### Push only the managed files with `-Action refresh`
+
+```powershell
+Deploy-AKSLandingZone -Environment <env> -Action refresh -AutoApprove
+```
+
+Skips Entra app, federated creds, state SA, and RBAC bootstrap (idempotent on
+a full apply but several minutes per re-run). Runs
+`terraform apply -target='module.github.github_repository_file.this'` against
+the existing state. Use this when you've changed a template or a value in
+`inputs.<env>.yaml` and just want to push the new rendered files.
+
+### Hand-edit safety
+
+Both `-Action apply` and `-Action refresh` run the drift report before pushing
+and **block** if any managed file shows `hand-edited`. To proceed, either:
+
+- Copy the operator edits into the template tree under `ALZ.AKS/templates/`
+  (the correct place for permanent changes) and re-run without `-Force`, **or**
+- Re-run with `-Force` to discard the operator edits and overwrite with the
+  freshly rendered templates.
+
+Greenfield applies (no existing state) skip the safety check — every file is
+an `add`.
 
 ## Destroy
 

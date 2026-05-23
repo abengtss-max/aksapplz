@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-rc5] - 2026-05-23
+
+### Added
+- **Re-run contract is now defined and enforced.** Previously, re-running
+  `Deploy-AKSLandingZone -Action apply` against an existing env would silently
+  overwrite any operator hand-edits to the rendered files in the workload repo
+  (`terraform/*.tf`, `.github/workflows/{ci,cd}.yaml`, `terraform/aks-landing-zone.auto.tfvars`,
+  `.gitignore`). The behaviour was undocumented and unsafe.
+
+- **`-DryRun` switch** (valid with `-Action apply` and `-Action refresh`).
+  Renders templates locally, fetches the current workload-repo content via
+  `gh api`, and prints a per-file drift report classifying each managed file
+  as `add` / `unchanged` / `update-managed` / `hand-edited`. Exits before
+  touching terraform or the repo. Use to preview what a re-run would do.
+
+- **`-Action refresh`**. Re-renders templates + tfvars and pushes only the
+  managed files to the workload repo via
+  `terraform apply -target=module.github.github_repository_file.this`.
+  Skips Entra app, federated creds, state SA, and RBAC bootstrap (those are
+  idempotent on a full apply but add several minutes per re-run). Requires a
+  previously-applied env. Honours `-DryRun` and `-Force`.
+
+- **`-Force` switch** (valid with `-Action apply|refresh`). Overrides the
+  hand-edit safety check so a re-run can intentionally discard operator edits.
+
+- **Hand-edit safety check.** Before `terraform apply` runs on an existing
+  env, the cmdlet compares the current workload-repo content against
+  terraform state for each `github_repository_file.this[<path>]` entry.
+  If any file's repo content differs from state (operator edited it directly),
+  the apply is blocked with an error listing the divergent files and the
+  remediation: either move the edits into `ALZ.AKS/templates/` and re-run
+  without `-Force`, or re-run with `-Force` to overwrite the operator edits.
+  Greenfield applies skip this check (state map is empty, every file is an `add`).
+
+### Changed
+- `-Action` parameter accepts a new value: `'refresh'`. Validation messages
+  for `-StateBackup`, `-DryRun`, and `-Force` updated to reflect the expanded
+  action set.
+- Help text for `Deploy-AKSLandingZone` expanded to document the re-run
+  contract, the four file-status classifications, and which paths in the
+  workload repo are managed vs operator-owned.
+
+### Documentation
+- README adds a **Re-run contract** section listing managed file paths,
+  what `-Action apply` / `refresh` does on a re-run, the hand-edit policy,
+  and a worked example of `-DryRun` + `-Action refresh`.
+- `ALZ.AKS/docs/day2-runbook.md` adds §7 "Re-run contract" covering all
+  four file-status classifications and the operator workflow for safe
+  template changes.
+- `KNOWN-ISSUES.md` removes the obsolete "Re-run contract" pre-GA row.
+- `GAPS.md` §C marks idempotency / re-run contract items as shipped.
+
+### Verified
+- Param validation tests (rc5: 4/4 new guards passing).
+- Full live cycle on `swedencentral` standalone env: greenfield apply →
+  `-DryRun` shows 0 diffs → operator edit via `gh api` → `-DryRun` shows
+  1 `hand-edited` → `-Action refresh` (no `-Force`) blocked correctly →
+  `-Action refresh -Force` reconciles → `-DryRun` shows 0 diffs again →
+  destroy clean.
+
 ## [1.4.0-rc4] - 2026-05-23
 
 State recovery feature: when the remote terraform state in the bootstrap

@@ -130,7 +130,74 @@ operation (provider major-version bump, large refactor, container rotation).
 > bump the source file's `serial` field above the remote's and retry, or
 > manually `terraform state push -force <source>` from the bootstrap dir.
 
-## 7. Drift detection
+## 7. Re-run contract
+
+The cmdlet manages a fixed set of files in the workload repo via
+`github_repository_file.this`. These paths are **overwritten** on every
+`-Action apply` or `-Action refresh`:
+
+- `terraform/*.tf` (from `ALZ.AKS/templates/terraform/`)
+- `terraform/aks-landing-zone.auto.tfvars` (from `inputs.<env>.yaml`)
+- `.github/workflows/{ci,cd}.yaml`
+- `.gitignore`
+
+Any other file in the workload repo (README.md, extensions/, kustomize
+overlays, custom workflows) is **operator-owned** and never touched.
+
+### Preview a re-run
+
+```powershell
+$env:TF_VAR_github_personal_access_token = '<pat>'
+Deploy-AKSLandingZone -Environment <env> -DryRun
+```
+
+Renders templates locally, fetches each managed path from the workload repo
+via `gh api`, and prints a per-file status table:
+
+| Status | Meaning | Action by re-run |
+|---|---|---|
+| `unchanged` | repo == fresh render | no-op |
+| `add` | file missing from repo | create |
+| `update-managed` | repo == state, render is newer | update cleanly |
+| `hand-edited` | repo != state — operator edited directly | **blocked** without `-Force` |
+
+### Push managed files only
+
+```powershell
+Deploy-AKSLandingZone -Environment <env> -Action refresh -AutoApprove
+```
+
+Faster than `-Action apply` because it skips the Entra app / federated creds /
+state SA / RBAC bootstrap and runs
+`terraform apply -target='module.github.github_repository_file.this'`.
+Use when you've just changed a template or a value in `inputs.<env>.yaml`.
+
+### Hand-edit safety
+
+If any managed file shows `hand-edited`, the cmdlet refuses to push:
+
+```text
+[ERROR] 1 managed file(s) in <org>/<repo> have been hand-edited
+        and no longer match terraform state.
+[ERROR] These files: terraform/main.aks.tf
+[INFO]  Re-run with -Force to OVERWRITE the operator edits, OR move
+        the edits into the template tree under ALZ.AKS/templates/
+        and re-run without -Force.
+```
+
+The two safe paths:
+
+1. **Promote the edit to the template** (preferred for permanent changes).
+   Copy your edit into `ALZ.AKS/templates/terraform/<file>.tf`, commit, then
+   re-run without `-Force` — the drift report will then show `update-managed`.
+2. **Discard the edit** with `-Force`:
+   ```powershell
+   Deploy-AKSLandingZone -Environment <env> -Action refresh -Force -AutoApprove
+   ```
+
+Greenfield applies (no prior state) skip the safety check.
+
+## 8. Drift detection
 
 CD pipeline includes a nightly `terraform plan` that emails the owners if the
 plan is non-empty. Investigate within 24 h.
@@ -141,17 +208,17 @@ Typical drift sources:
 - Upstream AVM module updates — pin module versions in `versions.tf` if
   unwanted upgrades are causing drift.
 
-## 8. Incident response
+## 9. Incident response
 
 | Symptom | First action | Escalation |
 |---|---|---|
 | Cluster API unreachable | `az aks show -g <rg> -n <cluster> --query 'powerState'`; check NSG; check NAT GW health | Open Azure support ticket; revert last CD run |
 | Pods stuck `ImagePullBackOff` | Check ACR private endpoint + DNS resolution from cluster | Open ACR ticket; verify managed-identity AcrPull role |
 | App Gateway 502 | Check backend health probes; verify pod readiness | Roll back deployment; check WAF logs |
-| CD pipeline `terraform apply` fails with `ResourceExists` | State drift — see §7 | Manual import per §6 |
+| CD pipeline `terraform apply` fails with `ResourceExists` | State drift — see §8 | Manual import per §6 |
 | Key Vault access denied from cluster | Verify workload identity federation; check KV access policy | `az aks get-credentials` then `kubectl describe pod`; check token exchange |
 
-## 9. Cost controls
+## 10. Cost controls
 
 `enable_cost_analysis = true` enables the AKS Cost Analysis add-on. Review
 namespace cost weekly in Azure Portal.
@@ -162,7 +229,7 @@ Quick wins:
 - Disable Defender (`enable_defender = false`) in `dev`/`test` envs.
 - Use `aks_sku_tier = "Free"` in `dev` (scenario 11 demonstrates this).
 
-## 10. Pre-publish accelerator updates
+## 11. Pre-publish accelerator updates
 
 When publishing accelerator changes that affect generated workload repos:
 

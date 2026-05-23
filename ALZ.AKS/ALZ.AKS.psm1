@@ -2498,6 +2498,148 @@ function Get-RepositoryFilesMap {
     return $files
 }
 
+# -----------------------------------------------------------------------------
+# Re-run contract helpers (v1.4.0-rc5)
+# -----------------------------------------------------------------------------
+# These power -DryRun, -Action refresh, and hand-edit detection.
+# The contract: every file in Get-RepositoryFilesMap is "managed" — the
+# cmdlet reconciles its content on every apply/refresh and will overwrite
+# operator edits. Anything else in the workload repo is operator-owned.
+
+function Compare-NormalizedContent {
+    param([string]$A, [string]$B)
+    if ($null -eq $A -and $null -eq $B) { return $true }
+    if ($null -eq $A -or  $null -eq $B) { return $false }
+    $na = ($A -replace "`r`n", "`n").TrimEnd("`n", "`r", " ", "`t")
+    $nb = ($B -replace "`r`n", "`n").TrimEnd("`n", "`r", " ", "`t")
+    return $na -eq $nb
+}
+
+function Get-WorkloadRepoFileContent {
+    # Fetch the current content of a file in the generated workload repo via the
+    # GitHub API. Returns $null if the file doesn't exist (404) or the request
+    # fails. Requires GH_TOKEN / GITHUB_TOKEN to be set (caller's responsibility).
+    param(
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$Repo,
+        [Parameter(Mandatory)][string]$Path
+    )
+    $b64 = & gh api "repos/$Owner/$Repo/contents/$Path" --jq '.content' 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($b64)) { return $null }
+    try {
+        # The GitHub contents API returns base64 with newlines every 60 chars.
+        $clean = ($b64 -join '') -replace "`r", '' -replace "`n", '' -replace ' ', ''
+        return [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($clean))
+    } catch {
+        Write-Log "Could not decode content for ${Path}: $($_.Exception.Message)" -Severity "WARNING"
+        return $null
+    }
+}
+
+function Get-StateContentMap {
+    # Returns a hashtable: managed-path => content currently recorded in
+    # terraform state for module.github.github_repository_file.this[<path>].
+    # Returns empty map when state is empty or terraform show fails (treated as
+    # "no prior apply" — every file will look like an add).
+    param([Parameter(Mandatory)][string]$BootstrapRoot)
+    Push-Location $BootstrapRoot
+    try {
+        $raw = & terraform show -json 2>$null | Out-String
+        if ([string]::IsNullOrWhiteSpace($raw)) { return @{} }
+        try { $json = $raw | ConvertFrom-Json } catch { return @{} }
+        $map = @{}
+        $stack = New-Object System.Collections.Stack
+        if ($json.values -and $json.values.root_module) { $stack.Push($json.values.root_module) }
+        while ($stack.Count -gt 0) {
+            $m = $stack.Pop()
+            if ($m.resources) {
+                foreach ($r in $m.resources) {
+                    if ($r.type -eq 'github_repository_file' -and $r.name -eq 'this' -and $r.values -and $r.values.file) {
+                        $map[[string]$r.values.file] = [string]$r.values.content
+                    }
+                }
+            }
+            if ($m.child_modules) { foreach ($cm in $m.child_modules) { $stack.Push($cm) } }
+        }
+        return $map
+    } finally { Pop-Location }
+}
+
+function Get-RenderDriftReport {
+    # Compares three views of every managed file:
+    #   - $RenderNew     : what Get-RepositoryFilesMap just rendered (about to push)
+    #   - $stateContent  : what terraform state thinks is in the repo
+    #   - $repoNow       : what's actually in the workload repo right now (gh api)
+    #
+    # Classification (per path):
+    #   unchanged       : repoNow == renderNew → no-op
+    #   add             : repoNow == $null (file not in repo yet) → first push
+    #   update-managed  : repoNow == stateContent AND repoNow != renderNew → clean update
+    #   hand-edited     : repoNow != stateContent (operator edited the repo directly)
+    #                     AND repoNow != renderNew (otherwise the edit converged with the new render anyway)
+    param(
+        [Parameter(Mandatory)][hashtable]$RenderNew,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$Repo,
+        [Parameter(Mandatory)][hashtable]$StateMap
+    )
+    $report = @()
+    foreach ($path in ($RenderNew.Keys | Sort-Object)) {
+        $renderContent = [string]$RenderNew[$path]
+        $stateContent  = if ($StateMap.ContainsKey($path)) { [string]$StateMap[$path] } else { $null }
+        $repoNow       = Get-WorkloadRepoFileContent -Owner $Owner -Repo $Repo -Path $path
+
+        $status = 'unknown'
+        if ($null -eq $repoNow) {
+            $status = 'add'
+        } elseif (Compare-NormalizedContent -A $repoNow -B $renderContent) {
+            $status = 'unchanged'
+        } elseif ($null -ne $stateContent -and (Compare-NormalizedContent -A $repoNow -B $stateContent)) {
+            $status = 'update-managed'
+        } else {
+            $status = 'hand-edited'
+        }
+
+        $report += [pscustomobject]@{
+            Path            = $path
+            Status          = $status
+            RenderBytes     = $renderContent.Length
+            RepoBytes       = if ($null -eq $repoNow) { 0 } else { $repoNow.Length }
+            StateBytes      = if ($null -eq $stateContent) { 0 } else { $stateContent.Length }
+        }
+    }
+    return ,$report
+}
+
+function Show-DriftReport {
+    param(
+        [Parameter(Mandatory)][object[]]$Report,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$Repo
+    )
+    $colorMap = @{
+        'unchanged'      = 'DarkGray'
+        'add'            = 'Cyan'
+        'update-managed' = 'Yellow'
+        'hand-edited'    = 'Red'
+    }
+    Write-Host ""
+    Write-Host "  Re-run drift report for $Owner/$Repo" -ForegroundColor White
+    Write-Host "  -----------------------------------" -ForegroundColor DarkGray
+    $maxPath = (($Report | ForEach-Object { $_.Path.Length }) + 4 | Measure-Object -Maximum).Maximum
+    if ($maxPath -lt 40) { $maxPath = 40 }
+    foreach ($row in $Report) {
+        $color = $colorMap[$row.Status]
+        if (-not $color) { $color = 'White' }
+        $line = ("  [{0,-14}] {1,-${maxPath}}  render={2}B  repo={3}B  state={4}B" -f $row.Status, $row.Path, $row.RenderBytes, $row.RepoBytes, $row.StateBytes)
+        Write-Host $line -ForegroundColor $color
+    }
+    $counts = $Report | Group-Object Status | ForEach-Object { "$($_.Name)=$($_.Count)" }
+    Write-Host ""
+    Write-Host ("  Totals: " + ($counts -join ', ')) -ForegroundColor White
+    Write-Host ""
+}
+
 # =============================================================================
 # ████████  PUBLIC FUNCTION: Deploy-AKSLandingZone (Terraform)  ████████
 # =============================================================================
@@ -2534,6 +2676,13 @@ function Get-RepositoryFilesMap {
     What terraform action to run against the bootstrap composition. One of:
       - 'apply'   (default) — render templates, init, plan, apply, migrate state.
       - 'plan'   — render templates, init, plan only. Equivalent to legacy -PlanOnly.
+      - 'refresh' — render templates + tfvars and run `terraform apply -target=
+                    module.github.github_repository_file.this` ONLY against an
+                    existing env. Skips Entra app, federated creds, state SA,
+                    and RBAC bootstrap. Use when you've changed a template or
+                    a value in inputs.<env>.yaml and just want to push the new
+                    rendered files to the workload repo. Requires -InputConfigPath
+                    or -Environment and a previously-applied env.
       - 'destroy' — load existing inputs file, init against the already-migrated
                     azurerm backend, then terraform destroy. For hub_and_spoke
                     topology, the spoke bootstrap is destroyed first (which
@@ -2558,6 +2707,20 @@ function Get-RepositoryFilesMap {
     Only valid with -Action import. When omitted, the cmdlet looks for an
     'errored.tfstate' left behind in the bootstrap composition directory by
     a failed apply or destroy.
+
+.PARAMETER DryRun
+    Render templates, fetch current workload-repo content via gh api, compare to
+    terraform state, and print a per-file drift report (add / update-managed /
+    hand-edited / unchanged). Exits BEFORE touching terraform or the workload
+    repo. Valid with -Action apply or -Action refresh. Use this to preview
+    what a re-run would do.
+
+.PARAMETER Force
+    With -Action apply or -Action refresh, override the safety check that blocks
+    a re-run when any managed file in the workload repo has been hand-edited
+    (i.e. its content no longer matches terraform state). Use only when you
+    intentionally want to discard the operator edits and push the freshly
+    rendered templates.
 
 .EXAMPLE
     # Interactive (recommended)
@@ -2592,14 +2755,21 @@ function Deploy-AKSLandingZone {
         [Parameter()][string]$BootstrapRoot,
         [Parameter()][string]$Environment,
         [Parameter()][switch]$AutoApprove,
-        [Parameter()][ValidateSet('apply','plan','destroy','import')][string]$Action = 'apply',
+        [Parameter()][ValidateSet('apply','plan','refresh','destroy','import')][string]$Action = 'apply',
         [Parameter()][switch]$PlanOnly,
         [Parameter()][switch]$SkipPreflight,
         # State recovery (-Action import): explicit path to a known-good terraform
         # state file to push to the remote backend. When omitted, the cmdlet looks
         # for an 'errored.tfstate' left behind in the bootstrap composition by a
-        # failed apply/destroy. Mutually exclusive with -Action apply|plan|destroy.
-        [Parameter()][string]$StateBackup
+        # failed apply/destroy. Mutually exclusive with -Action apply|plan|destroy|refresh.
+        [Parameter()][string]$StateBackup,
+        # Re-run contract (v1.4.0-rc5): preview what a re-run would push, without
+        # touching terraform or the workload repo. Valid with -Action apply|refresh.
+        [Parameter()][switch]$DryRun,
+        # Re-run contract (v1.4.0-rc5): override the hand-edit safety check that
+        # blocks apply/refresh when an operator has edited a managed file in the
+        # workload repo directly. Valid with -Action apply|refresh.
+        [Parameter()][switch]$Force
     )
 
     # Backward compatibility: -PlanOnly is equivalent to -Action plan.
@@ -2610,13 +2780,20 @@ function Deploy-AKSLandingZone {
     if ($StateBackup -and $Action -ne 'import') {
         Write-Log "-StateBackup is only valid with -Action import." -Severity "ERROR"; return
     }
+    if ($DryRun -and $Action -notin @('apply','refresh')) {
+        Write-Log "-DryRun is only valid with -Action apply or -Action refresh." -Severity "ERROR"; return
+    }
+    if ($Force -and $Action -notin @('apply','refresh')) {
+        Write-Log "-Force is only valid with -Action apply or -Action refresh (operator hand-edit override)." -Severity "ERROR"; return
+    }
 
     Show-Banner
-    $headerLabel = switch ($Action) { 'apply' { 'Bootstrap' } 'plan' { 'Bootstrap (PLAN)' } 'destroy' { 'TEARDOWN' } 'import' { 'STATE RECOVERY' } }
+    $headerLabel = switch ($Action) { 'apply' { 'Bootstrap' } 'plan' { 'Bootstrap (PLAN)' } 'refresh' { 'RE-RENDER (managed files only)' } 'destroy' { 'TEARDOWN' } 'import' { 'STATE RECOVERY' } }
+    if ($DryRun) { $headerLabel = "$headerLabel — DRY RUN" }
     Write-Log "=== AKS Application Landing Zone — $headerLabel ===" -Severity "INFO"
 
-    # -Action destroy|import require an existing inputs file (no wizard fallback).
-    if ($Action -in @('destroy','import') -and [string]::IsNullOrEmpty($InputConfigPath) -and [string]::IsNullOrWhiteSpace($Environment)) {
+    # -Action destroy|import|refresh require an existing inputs file (no wizard fallback).
+    if ($Action -in @('destroy','import','refresh') -and [string]::IsNullOrEmpty($InputConfigPath) -and [string]::IsNullOrWhiteSpace($Environment)) {
         Write-Log "-Action $Action requires either -InputConfigPath or -Environment (to locate the existing config)." -Severity "ERROR"
         return
     }
@@ -3160,6 +3337,146 @@ terraform {
         return
     }
 
+    # ── REFRESH PATH ──
+    # Re-render templates + tfvars and push them to the workload repo via
+    # `terraform apply -target=module.github.github_repository_file.this`.
+    # Skips Entra app, federated creds, state SA, RBAC bootstrap — those are
+    # idempotent on -Action apply anyway and add several minutes per re-run.
+    # Honours -DryRun (preview only) and -Force (override hand-edit safety).
+    if ($Action -eq 'refresh') {
+        $workspaceName = if (-not [string]::IsNullOrWhiteSpace($Environment)) { $Environment } else { [string]$config.environment_name }
+        if ([string]::IsNullOrWhiteSpace($workspaceName)) {
+            Write-Log "-Action refresh requires environment_name in config or -Environment." -Severity "ERROR"; return
+        }
+
+        $svc        = [string]$config.service_name
+        $orgName    = [string]$config.github_organization_name
+        $repoName   = "$svc-$workspaceName"
+        Write-Log "Workload repo target: $orgName/$repoName" -Severity "INFO"
+
+        # PAT export for gh api (gh CLI honours GH_TOKEN). The TF_VAR PAT is
+        # already required for terraform apply; we just reuse it for gh.
+        $hadGhToken = $env:GH_TOKEN
+        if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+            $env:GH_TOKEN = $env:TF_VAR_github_personal_access_token
+        }
+        try {
+            Push-Location $BootstrapRoot
+            try {
+                # Backend self-heal (mirrors destroy/import paths): refresh must
+                # work on a fresh machine where backend.tf may be missing or stale.
+                $backendTfPath = Join-Path $BootstrapRoot "backend.tf"
+                $subId         = [string]$config.bootstrap_subscription_id
+                $stateRg = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name | [0]" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($stateRg)) {
+                    Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found. -Action refresh requires a previously-applied env." -Severity "ERROR"; return
+                }
+                $saName = az storage account list -g $stateRg --subscription $subId --query "[0].name" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($saName)) {
+                    Write-Log "State RG '$stateRg' exists but contains no storage account. Cannot refresh." -Severity "ERROR"; return
+                }
+                $backendTf = @"
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "$stateRg"
+    storage_account_name = "$saName"
+    container_name       = "tfstate"
+    key                  = "bootstrap.tfstate"
+    use_azuread_auth     = true
+    subscription_id      = "$subId"
+    tenant_id            = "$($config.tenant_id)"
+  }
+}
+"@
+                Set-Content -Path $backendTfPath -Value $backendTf -Encoding UTF8
+                foreach ($p in @(".terraform",".terraform.lock.hcl")) {
+                    $full = Join-Path $BootstrapRoot $p
+                    if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
+                }
+                # Idempotent SBDC role grant (same pattern as destroy/import).
+                $saResourceId = "/subscriptions/$subId/resourceGroups/$stateRg/providers/Microsoft.Storage/storageAccounts/$saName"
+                $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
+                if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
+                    $raOutput = az role assignment create `
+                        --assignee-object-id $signedInId `
+                        --assignee-principal-type User `
+                        --role "Storage Blob Data Contributor" `
+                        --scope $saResourceId `
+                        --subscription $subId 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Granted Storage Blob Data Contributor on $saName. Waiting 30s for RBAC propagation..." -Severity "INFO"
+                        Start-Sleep -Seconds 30
+                    }
+                }
+
+                # Render templates + tfvars (must come before init: tfvars are evaluated).
+                Write-Log "Re-rendering managed files from templates..." -Severity "INFO"
+                $repoFiles = Get-RepositoryFilesMap -Config $config
+                $null      = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFiles
+                Write-Log "Rendered $($repoFiles.Keys.Count) managed files." -Severity "SUCCESS"
+
+                Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
+                & terraform @('init','-input=false','-reconfigure')
+                if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform init failed." -Severity "ERROR"; return }
+
+                & terraform workspace select $workspaceName 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "Workspace '$workspaceName' not found in bootstrap state. -Action refresh requires an already-applied env." -Severity "ERROR"; return
+                }
+
+                # Drift report: render-new vs state vs repo-now.
+                Write-Log "Comparing rendered templates against workload repo and terraform state..." -Severity "INFO"
+                $stateMap = Get-StateContentMap -BootstrapRoot $BootstrapRoot
+                $report   = Get-RenderDriftReport -RenderNew $repoFiles -Owner $orgName -Repo $repoName -StateMap $stateMap
+                Show-DriftReport -Report $report -Owner $orgName -Repo $repoName
+
+                $handEdits = @($report | Where-Object { $_.Status -eq 'hand-edited' })
+                if ($handEdits.Count -gt 0 -and -not $Force -and -not $DryRun) {
+                    Write-Log "$($handEdits.Count) managed file(s) in $orgName/$repoName have been hand-edited and no longer match terraform state." -Severity "ERROR"
+                    Write-Log "These files: $($handEdits.Path -join ', ')" -Severity "ERROR"
+                    Write-Log "Re-run with -Force to OVERWRITE the operator edits with freshly-rendered templates, OR copy the edits into the template tree under ALZ.AKS/templates/ and re-run without -Force." -Severity "INFO"
+                    return
+                }
+
+                $needsApply = @($report | Where-Object { $_.Status -in @('add','update-managed','hand-edited') })
+                if ($needsApply.Count -eq 0) {
+                    Write-Log "Nothing to push: every managed file matches the rendered template." -Severity "SUCCESS"
+                    return
+                }
+
+                if ($DryRun) {
+                    Write-Log "DryRun: would apply $($needsApply.Count) change(s) — exiting before terraform apply." -Severity "INFO"
+                    return
+                }
+
+                if (-not $AutoApprove) {
+                    Write-Host ""
+                    Write-Log "About to push $($needsApply.Count) file change(s) to $orgName/$repoName via terraform apply -target=module.github.github_repository_file.this." -Severity "INPUT REQUIRED"
+                    $proceed = Read-Host "Enter '[y]es' to continue, '[n]o' to abort"
+                    if ($proceed -notin @('y','yes')) { Write-Log "Aborted." -Severity "INFO"; return }
+                }
+
+                $applyArgs = @('apply','-input=false','-target=module.github.github_repository_file.this')
+                if ($AutoApprove) { $applyArgs += '-auto-approve' }
+                Write-Log "Running targeted terraform apply..." -Severity "INFO"
+                & terraform @applyArgs
+                if ($LASTEXITCODE -ne 0) { Write-Log "Refresh apply failed." -Severity "ERROR"; return }
+
+                Write-Log "Refresh complete: managed files in $orgName/$repoName are now reconciled to the rendered templates." -Severity "SUCCESS"
+            }
+            finally { Pop-Location }
+        }
+        finally {
+            if ([string]::IsNullOrWhiteSpace($hadGhToken)) { Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue }
+        }
+
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "  ║   Refresh Complete                                           ║" -ForegroundColor Green
+        Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+        return
+    }
+
     # ── Hub composition (greenfield) ──
     # When topology=hub_and_spoke, run bootstrap/alz/hub/ first to create the hub VNet
     # (+ optional Azure Firewall), then populate $config.hub_* from its outputs so the
@@ -3316,6 +3633,41 @@ terraform {
             if ($LASTEXITCODE -ne 0) { Write-Log "terraform plan failed." -Severity "ERROR"; return }
             Write-Log "Plan saved to bootstrap.tfplan. Exiting (PlanOnly)." -Severity "SUCCESS"
             return
+        }
+
+        # ── Re-run contract: drift report + hand-edit safety check (v1.4.0-rc5) ──
+        # Only meaningful on apply against an already-applied env (terraform show
+        # returns state; gh api returns repo content). For a greenfield apply the
+        # state map is empty and every managed file shows as 'add' — that's fine.
+        $hadGhTokenApply = $env:GH_TOKEN
+        if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) { $env:GH_TOKEN = $env:TF_VAR_github_personal_access_token }
+        try {
+            $orgNameApply  = [string]$config.github_organization_name
+            $repoNameApply = "$([string]$config.service_name)-$workspaceName"
+            $stateMapApply = Get-StateContentMap -BootstrapRoot $BootstrapRoot
+            if ($stateMapApply.Count -gt 0) {
+                Write-Log "Comparing rendered templates against workload repo and terraform state..." -Severity "INFO"
+                $reportApply  = Get-RenderDriftReport -RenderNew $repoFiles -Owner $orgNameApply -Repo $repoNameApply -StateMap $stateMapApply
+                Show-DriftReport -Report $reportApply -Owner $orgNameApply -Repo $repoNameApply
+
+                $handEditsApply = @($reportApply | Where-Object { $_.Status -eq 'hand-edited' })
+                if ($handEditsApply.Count -gt 0 -and -not $Force -and -not $DryRun) {
+                    Write-Log "$($handEditsApply.Count) managed file(s) in $orgNameApply/$repoNameApply have been hand-edited and no longer match terraform state." -Severity "ERROR"
+                    Write-Log "These files: $($handEditsApply.Path -join ', ')" -Severity "ERROR"
+                    Write-Log "Re-run with -Force to OVERWRITE the operator edits, OR move the edits into the template tree under ALZ.AKS/templates/ and re-run without -Force." -Severity "INFO"
+                    return
+                }
+            } else {
+                Write-Log "No prior state for this env — first apply. Skipping drift report (every managed file is an add)." -Severity "INFO"
+            }
+
+            if ($DryRun) {
+                Write-Log "DryRun: exiting before terraform apply." -Severity "INFO"
+                return
+            }
+        }
+        finally {
+            if ([string]::IsNullOrWhiteSpace($hadGhTokenApply)) { Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue }
         }
 
         $applyArgs = @('apply','-input=false')
