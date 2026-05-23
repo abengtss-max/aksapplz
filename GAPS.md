@@ -33,7 +33,7 @@ Owner: @abengtss-max
 ## B. Step 1 (standalone topology) follow-ups — shipped but not fully proven
 
 - [x] **Cloud test the standalone path** end-to-end: bootstrap (27 resources) created 2026-05-23 against sub `029039e3-…` / org `abengtss-max-org`. Workload CD plan green 2026-05-23 (after fixes below); apply pending verification.
-- [ ] Confirm AKS cluster boots and reaches the internet via NAT gateway (no UDR, no peering) — apply run 26334407206 in progress.
+- [x] Confirm AKS cluster boots and reaches the internet via NAT gateway — `gh run 26334915216` ✅ success 2026-05-23; AKS `aks-aksapplz-standalone-swc` Running, k8s 1.34.7, system+user pools 2/2 nodes Succeeded; API server reachable (returns Entra auth challenge); no UDR, no peering — pure NAT egress proven.
 - [x] Fix `terraform init -migrate-state` 403 in bootstrap (v1.3.0).
 - [x] **NEW (2026-05-23) — Standalone workload CD blockers**: fixed in commit `36f0d55`
   - tfvars rendered to repo root → Terraform working_directory mismatch (now `terraform/aks-landing-zone.auto.tfvars`)

@@ -119,8 +119,9 @@ resource "azurerm_dashboard_grafana" "main" {
 }
 
 # Role assignment: Grafana Admin for the specified group
+# Skipped when no admin group is provided (e.g. standalone POC topology)
 resource "azurerm_role_assignment" "grafana_admin" {
-  count = var.enable_managed_grafana ? 1 : 0
+  count = var.enable_managed_grafana && var.grafana_admin_group_object_id != "" ? 1 : 0
 
   scope                = azurerm_dashboard_grafana.main[0].id
   role_definition_name = "Grafana Admin"

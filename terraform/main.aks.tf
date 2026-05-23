@@ -320,6 +320,10 @@ resource "azapi_resource" "aks_backup_extension" {
       extensionType           = "Microsoft.DataProtection.Kubernetes"
       autoUpgradeMinorVersion = true
       releaseTrain            = "Stable"
+      # Required for the velero secret rendered by the extension's Helm chart
+      configurationSettings = {
+        "credentials.tenantId" = var.tenant_id
+      }
     }
   }
 }
