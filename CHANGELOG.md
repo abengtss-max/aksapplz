@@ -34,7 +34,8 @@ and documented preview-grade limitations.
 - **Invalid CIDR in scenario templates**: `templates/scenarios/*.tfvars` shipped `aks_user_nodes = "10.10.1.0/22"`, which Azure rejects with `InvalidCIDRNotation` (a /22 must align on a /22 boundary). Corrected to `10.10.16.0/22` (matches what every e2e YAML already uses). **Surfaced by the new L3 harness on the first real cloud apply** — exactly the class of bug L3 exists to catch. Added `ALZ.AKS/tests/Cidr.Alignment.Tests.ps1` (32 cases, runs in <1 s) so the same class of bug fails at unit-test time before any cloud spend.
 
 ### Known limitations (see [KNOWN-ISSUES.md](KNOWN-ISSUES.md))
-- L3 / L4 are wired but the first real cloud run is part of the rc1 sign-off; until then treat the apply path as preview.
+- **L3 cloud verification**: `01-standalone-baseline` apply (~11 min) + destroy (~10 min) verified on Azure 2026-05-23. Remaining 11 scenarios scheduled before GA.
+- L4 wizard automated tests are wired but the first real cloud run is part of the rc1 sign-off; until then treat the wizard apply path as preview.
 - Several Section-C items (destroy cmdlet, state recovery, OIDC-only secrets, azd wrapper, PSGallery publish) are deferred to v1.5.0.
 - Upstream `log_analytics` AVM module emits a deprecated-arg warning during plan (non-blocking).
 - GitHub Free-plan orgs cannot enforce environment reviewer rules on private repos.

@@ -23,7 +23,7 @@ Then GitHub Actions deploys the AKS landing zone.
 |---|---|---|
 | Render (template + tfvars generation) | ✅ verified | [L1 tests](ALZ.AKS/tests/e2e/Scenarios.L1.Tests.ps1) — 112 pass across 12 scenarios |
 | `terraform validate` + `plan` | ✅ verified | [L2 tests](ALZ.AKS/tests/e2e/Scenarios.L2.Tests.ps1) — 60 pass across 12 scenarios |
-| `terraform apply` + `destroy` | 🟡 1/12 verified | [L3 tests](ALZ.AKS/tests/e2e/Scenarios.L3.Tests.ps1) — `01-standalone-baseline` proven; remaining scenarios scheduled before GA |
+| `terraform apply` + `destroy` | 🟡 1/12 cloud-verified | [L3 tests](ALZ.AKS/tests/e2e/Scenarios.L3.Tests.ps1) — `01-standalone-baseline` apply (11 min) + destroy (10 min) both pass on Azure. Surfaced and fixed an invalid-CIDR bug ([CHANGELOG](CHANGELOG.md)); remaining 11 scenarios scheduled before GA |
 | Wizard end-to-end (`Deploy-AKSLandingZone`) | 🟡 manually verified | `standalone` + `hub_and_spoke` topologies cloud-tested 2026-05-23; automated [L4 tests](ALZ.AKS/tests/e2e/Scenarios.L4.Tests.ps1) scheduled before GA |
 | Destroy cmdlet (`Remove-AKSLandingZone`) | ❌ planned v1.4 | [Day-2 runbook §5](ALZ.AKS/docs/day2-runbook.md#5-destroy) — manual procedure |
 | State recovery cmdlet | ❌ planned v1.5 | [Day-2 runbook §6](ALZ.AKS/docs/day2-runbook.md#6-state-recovery) — manual procedure |
