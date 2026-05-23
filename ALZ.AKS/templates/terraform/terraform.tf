@@ -38,11 +38,14 @@ provider "azurerm" {
 }
 
 # -----------------------------------------------------------------------------
-# Provider: Connectivity subscription (hub) — used for hub VNet peering
+# Provider: Connectivity subscription (hub) — used for hub VNet peering.
+# In standalone topology connectivity_subscription_id is empty; fall back to
+# the workload subscription so the provider block stays valid. No resources
+# reference this alias when standalone (peering module is conditional).
 # -----------------------------------------------------------------------------
 provider "azurerm" {
   alias                           = "connectivity"
-  subscription_id                 = var.connectivity_subscription_id
+  subscription_id                 = var.connectivity_subscription_id != "" ? var.connectivity_subscription_id : var.subscription_id
   resource_provider_registrations = "core"
   features {}
 }

@@ -22,12 +22,14 @@ locals {
   vnet_name              = "vnet-${local.name_prefix}"
   aks_name               = "aks-${local.name_prefix}"
   acr_name               = replace("acr${var.workload_name}${var.environment}${local.loc_short}", "-", "")
-  key_vault_name         = "kv-${local.name_prefix}"
+  # Key Vault max length = 24. Truncate + append 3-char deterministic hash when over.
+  _kv_full               = "kv-${local.name_prefix}"
+  key_vault_name         = length(local._kv_full) <= 24 ? local._kv_full : "kv-${substr(local.name_prefix, 0, 17)}${substr(sha256(local.name_prefix), 0, 3)}"
   app_gateway_name       = "agw-${local.name_prefix}"
   waf_policy_name        = "waf-${local.name_prefix}"
   log_analytics_name     = "log-${local.name_prefix}"
   monitor_workspace_name = "amon-${local.name_prefix}"
-  grafana_name           = "grf-${local.name_prefix}"
+  grafana_name           = length("grf-${local.name_prefix}") <= 23 ? "grf-${local.name_prefix}" : "grf-${substr(local.name_prefix, 0, 16)}${substr(sha256(local.name_prefix), 0, 3)}"
   route_table_name       = "rt-${local.name_prefix}"
   nsg_appgw_name         = "nsg-agw-${local.name_prefix}"
   nsg_pe_name            = "nsg-pe-${local.name_prefix}"

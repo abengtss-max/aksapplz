@@ -2475,12 +2475,13 @@ function Get-RepositoryFilesMap {
         }
     }
 
-    # tfvars file (rendered from wizard answers) -> aks-landing-zone.auto.tfvars
-    # Reuse Write-TfvarsFile by piping its output through a temp file.
+    # tfvars file (rendered from wizard answers) -> terraform/aks-landing-zone.auto.tfvars
+    # Must live inside the terraform/ working directory so Terraform auto-loads it
+    # (auto.tfvars are only picked up from CWD, and our CD/CI workflows run from terraform/).
     $tmp = [System.IO.Path]::GetTempFileName()
     try {
         Write-TfvarsFile -Config $Config -OutputPath $tmp
-        $files["aks-landing-zone.auto.tfvars"] = (Get-Content $tmp -Raw)
+        $files["terraform/aks-landing-zone.auto.tfvars"] = (Get-Content $tmp -Raw)
     } finally {
         Remove-Item $tmp -Force -ErrorAction SilentlyContinue
     }
