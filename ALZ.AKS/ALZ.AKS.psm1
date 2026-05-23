@@ -17,7 +17,7 @@
 
 $script:ModuleRoot    = $PSScriptRoot
 $script:TemplateRoot  = Join-Path $PSScriptRoot "templates"
-$script:ScriptVersion = "1.0.0"
+$script:ScriptVersion = "1.2.0"
 
 # =============================================================================
 # Helper Functions (Private — not exported)
@@ -2458,6 +2458,7 @@ function Deploy-AKSLandingZone {
     param(
         [Parameter()][string]$InputConfigPath,
         [Parameter()][string]$BootstrapRoot,
+        [Parameter()][string]$Environment,
         [Parameter()][switch]$AutoApprove,
         [Parameter()][switch]$PlanOnly,
         [Parameter()][switch]$SkipPreflight
@@ -2465,6 +2466,27 @@ function Deploy-AKSLandingZone {
 
     Show-Banner
     Write-Log "=== AKS Application Landing Zone — Bootstrap ===" -Severity "INFO"
+
+    # Validate -Environment naming (matches workload-side validation: 1-8 lowercase alphanumeric)
+    if (-not [string]::IsNullOrWhiteSpace($Environment)) {
+        if ($Environment -notmatch '^[a-z0-9]{1,8}$') {
+            Write-Log "-Environment '$Environment' is invalid. Must be 1-8 lowercase alphanumeric characters." -Severity "ERROR"
+            return
+        }
+        Write-Log "Environment scope: $Environment" -Severity "INFO"
+    }
+
+    # When -Environment is set but no -InputConfigPath, default to per-env config file
+    if (-not [string]::IsNullOrWhiteSpace($Environment) -and [string]::IsNullOrEmpty($InputConfigPath)) {
+        $repoRoot  = Split-Path -Parent $script:ModuleRoot
+        $candidate = Join-Path $repoRoot "config/inputs.$Environment.yaml"
+        if (Test-Path $candidate) {
+            $InputConfigPath = $candidate
+            Write-Log "Resolved -InputConfigPath from -Environment: $InputConfigPath" -Severity "INFO"
+        } else {
+            Write-Log "No config file at $candidate — falling through to interactive wizard." -Severity "INFO"
+        }
+    }
 
     # ── Interactive wizard fallback when no config supplied ──
     if ([string]::IsNullOrEmpty($InputConfigPath)) {
@@ -2483,11 +2505,22 @@ function Deploy-AKSLandingZone {
             return
         }
 
-        $InputConfigPath = Join-Path $configDir "inputs.yaml"
-        $tfvarsPath      = Join-Path $configDir "aks-landing-zone.tfvars"
+        # If -Environment was passed, override the wizard-collected environment_name so
+        # per-env files are written to predictable paths.
+        if (-not [string]::IsNullOrWhiteSpace($Environment)) {
+            $config.environment_name = $Environment
+            Write-Log "Overrode environment_name to '$Environment' from -Environment parameter." -Severity "INFO"
+        }
+
+        $envSuffix = if (-not [string]::IsNullOrWhiteSpace($config.environment_name)) { ".$($config.environment_name)" } else { "" }
+        $InputConfigPath = Join-Path $configDir "inputs$envSuffix.yaml"
+        $tfvarsPath      = Join-Path $configDir "aks-landing-zone$envSuffix.tfvars"
         Write-InputsYaml -Config $config -OutputPath $InputConfigPath
         Write-TfvarsFile -Config $config -OutputPath $tfvarsPath
         Write-Log "Configuration written to $InputConfigPath" -Severity "SUCCESS"
+        if (-not [string]::IsNullOrWhiteSpace($Environment)) {
+            Write-Log "Re-run later with: Deploy-AKSLandingZone -Environment $Environment" -Severity "INFO"
+        }
 
         Write-Host ""
         Write-Log "PAT tokens are read from environment variables (never written to disk):" -Severity "INFO"
@@ -2557,6 +2590,14 @@ function Deploy-AKSLandingZone {
     Write-Log "Loading $InputConfigPath" -Severity "INFO"
     $config = Read-FlatYaml -Path $InputConfigPath
 
+    # -Environment overrides the value in the loaded config (keeps resource naming consistent).
+    if (-not [string]::IsNullOrWhiteSpace($Environment)) {
+        if ($config.environment_name -and $config.environment_name -ne $Environment) {
+            Write-Log "Overriding config environment_name '$($config.environment_name)' with -Environment '$Environment'." -Severity "WARNING"
+        }
+        $config.environment_name = $Environment
+    }
+
     # Make sure tenant_id is present (Read-FlatYaml does not derive it).
     if ([string]::IsNullOrEmpty($config.tenant_id)) {
         $config.tenant_id = (az account show --query tenantId -o tsv).Trim()
@@ -2571,13 +2612,33 @@ function Deploy-AKSLandingZone {
     # ── Render terraform.tfvars.json ──
     $tfvarsJson = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFiles
 
-    # ── terraform init + plan/apply ──
+    # ── terraform init + workspace + plan/apply ──
     Push-Location $BootstrapRoot
     try {
         Write-Log "Running terraform init..." -Severity "INFO"
         $initArgs = @('init','-input=false','-upgrade')
         & terraform @initArgs
         if ($LASTEXITCODE -ne 0) { Write-Log "terraform init failed." -Severity "ERROR"; return }
+
+        # Per-environment state isolation: select or create a Terraform workspace named
+        # after the environment so each env (dev/test/qa/prod/standalone/…) keeps its own
+        # state file inside the same bootstrap composition.
+        $workspaceName = if (-not [string]::IsNullOrWhiteSpace($Environment)) { $Environment } else { $config.environment_name }
+        if (-not [string]::IsNullOrWhiteSpace($workspaceName)) {
+            $currentWs = (& terraform workspace show).Trim()
+            if ($currentWs -ne $workspaceName) {
+                & terraform workspace select $workspaceName 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "Creating new Terraform workspace '$workspaceName' for state isolation." -Severity "INFO"
+                    & terraform workspace new $workspaceName
+                    if ($LASTEXITCODE -ne 0) { Write-Log "terraform workspace new failed." -Severity "ERROR"; return }
+                } else {
+                    Write-Log "Selected Terraform workspace '$workspaceName'." -Severity "INFO"
+                }
+            } else {
+                Write-Log "Already on Terraform workspace '$workspaceName'." -Severity "INFO"
+            }
+        }
 
         if ($PlanOnly) {
             Write-Log "Running terraform plan (-PlanOnly mode)..." -Severity "INFO"

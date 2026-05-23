@@ -24,8 +24,8 @@ locals {
     managed_identity_plan               = "id-plan-{{service_name}}-{{environment_name}}-{{azure_location_short}}-{{postfix_number}}"
     managed_identity_apply              = "id-apply-{{service_name}}-{{environment_name}}-{{azure_location_short}}-{{postfix_number}}"
 
-    version_control_system_repository   = "{{service_name}}"
-    version_control_system_team         = "{{service_name}}-approvers"
+    version_control_system_repository   = "{{service_name}}-{{environment_name}}"
+    version_control_system_team         = "{{service_name}}-{{environment_name}}-approvers"
     version_control_system_runner_group = "{{service_name}}-{{environment_name}}-runners"
   }
 

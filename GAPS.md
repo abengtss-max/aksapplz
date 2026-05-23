@@ -11,11 +11,11 @@ Owner: @abengtss-max
 ## A. Roadmap — features we agreed to build but haven't
 
 ### A1. Step 2 — Multi-environment support (dev / test / qa / prod)
-- [ ] Add `-Environment <name>` parameter to `Deploy-AKSLandingZone`
-- [ ] Per-env config files: `config/inputs.<env>.yaml` + `config/aks-landing-zone.<env>.tfvars`
-- [ ] Wizard "deploy another env?" loop after each iteration
-- [ ] Per-env workload repo naming: `{service}-{env}-aks-landing-zone`
-- [ ] Per-env bootstrap resource groups (separate state per env)
+- [x] Add `-Environment <name>` parameter to `Deploy-AKSLandingZone` — v1.2.0
+- [x] Per-env config files: `config/inputs.<env>.yaml` + `config/aks-landing-zone.<env>.tfvars` — v1.2.0
+- [ ] Wizard "deploy another env?" loop after each iteration (deferred — re-invoke cmdlet per env)
+- [x] Per-env workload repo naming: `{service}-{env}` — v1.2.0 (locals.tf template)
+- [x] Per-env bootstrap state isolation via Terraform workspaces — v1.2.0
 - [ ] Doc: README Phase 2 + checklist tab on env strategy
 
 ### A2. Step 3 — `hub_and_spoke` (greenfield) topology
@@ -30,7 +30,9 @@ Owner: @abengtss-max
 
 ## B. Step 1 (standalone topology) follow-ups — shipped but not fully proven
 
-- [ ] **Cloud test the standalone path** end-to-end: `Deploy-AKSLandingZone` → `terraform apply` → confirm cluster boots and reaches the internet via NAT gateway (no UDR, no peering).
+- [x] **Cloud test the standalone path** end-to-end: `Deploy-AKSLandingZone` → `terraform apply`. Bootstrap (27 resources) created successfully against sub `029039e3-…` / org `abengtss-max-org` on 2026-05-23. Workload repo + GH Actions environments live. **AKS cluster apply not yet verified** — needs to run the workload `cd.yaml` workflow.
+- [ ] Confirm AKS cluster boots and reaches the internet via NAT gateway (no UDR, no peering) — pending workflow run.
+- [ ] **NEW** — Fix `terraform init -migrate-state` 403 in bootstrap. The state-migration step fails because the local Azure principal lacks `Storage Blob Data Contributor` on the just-created storage account. Either auto-assign the role inside the bootstrap composition (preferred) or document a manual `az role assignment create` step.
 - [ ] Decide & implement standalone-appropriate defaults for AKS — currently `is_corp = false` flips:
   - `outbound_type` → `loadBalancer` (instead of `userDefinedRouting`) ✅ probably correct
   - `private_cluster_enabled` → `false` (public API server) ⚠ may or may not be what we want

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-23
+
+### Added
+- **Multi-environment support** for `Deploy-AKSLandingZone`.
+  - New `-Environment <name>` parameter (1-8 lowercase alphanumeric chars).
+  - When supplied and `-InputConfigPath` is omitted, the cmdlet resolves `config/inputs.<env>.yaml` automatically; falls through to the wizard if it does not exist.
+  - Wizard fallback now writes `config/inputs.<env>.yaml` + `config/aks-landing-zone.<env>.tfvars` when `-Environment` is set.
+  - `-Environment` overrides `environment_name` in the loaded config so all resource names stay in sync.
+- **Per-environment Terraform state isolation** via Terraform workspaces.
+  - After `terraform init`, the cmdlet runs `terraform workspace select <env>` and creates a new workspace on demand. Each environment now has its own `terraform.tfstate.d/<env>/` directory inside `bootstrap/alz/github/`.
+- End-to-end cloud test against the **standalone** topology in `swedencentral` (sub `029039e3-…`, org `abengtss-max-org`). 27 bootstrap resources created successfully, workload repo + 2 GitHub Actions environments provisioned.
+
+### Changed
+- **Breaking — repo & team naming.** `bootstrap/alz/github/locals.tf` now derives:
+  - `version_control_system_repository`  = `{{service_name}}-{{environment_name}}`
+  - `version_control_system_team`        = `{{service_name}}-{{environment_name}}-approvers`
+  Existing deployments will see a destroy/recreate of the GitHub repo + team on the next apply. Use the v1.1.0 template if you must preserve an existing repo name.
+- Banner version string now reads from `$script:ScriptVersion` (no longer hardcoded `1.0.0`).
+
+### Known Issues
+- Remote-state migration (`terraform init -migrate-state`) fails with **403 AuthorizationPermissionMismatch** because the local Azure principal does not have *Storage Blob Data Contributor* on the storage account that bootstrap just created. Local state remains authoritative and the bootstrap is still considered successful. Workaround: assign the role to the operator (or to the `apply` MI) and re-run with `-SkipPreflight`. Will be fixed in a follow-up by adding the role assignment to the bootstrap composition.
+
 ## [1.1.0] - 2026-05-23
 
 ### Added
