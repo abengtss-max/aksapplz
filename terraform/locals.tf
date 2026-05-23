@@ -14,8 +14,13 @@ locals {
 
   loc_short = lookup(local.location_short, var.location, substr(var.location, 0, 3))
 
-  # Naming convention: {resource_type}-{workload_name}-{environment}-{location_short}
-  name_prefix = "${var.workload_name}-${var.environment}-${local.loc_short}"
+  # Short form of environment for resource naming. Defaults to var.environment (no change
+  # for existing deployments). Set var.environment_short to a 1-6 char string when
+  # var.environment exceeds 6 chars to keep within Azure resource name limits.
+  env_short = var.environment_short != "" ? var.environment_short : var.environment
+
+  # Naming convention: {resource_type}-{workload_name}-{env_short}-{location_short}
+  name_prefix = "${var.workload_name}-${local.env_short}-${local.loc_short}"
 
   # Resource names
   # NOTE: Resources with short Azure-imposed name limits use a length-safe pattern:
@@ -24,7 +29,7 @@ locals {
   resource_group_name    = "rg-${local.name_prefix}"
   vnet_name              = "vnet-${local.name_prefix}"
   aks_name               = "aks-${local.name_prefix}"
-  acr_name               = replace("acr${var.workload_name}${var.environment}${local.loc_short}", "-", "")
+  acr_name               = replace("acr${var.workload_name}${local.env_short}${local.loc_short}", "-", "")
   # Key Vault max length = 24. Truncate + append 3-char deterministic hash when over.
   _kv_full               = "kv-${local.name_prefix}"
   key_vault_name         = length(local._kv_full) <= 24 ? local._kv_full : "kv-${substr(local.name_prefix, 0, 17)}${substr(sha256(local.name_prefix), 0, 3)}"

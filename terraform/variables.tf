@@ -35,12 +35,22 @@ variable "workload_name" {
 }
 
 variable "environment" {
-  description = "The environment name (e.g., dev, staging, prod, standalone, production)."
+  description = "The environment name (e.g., dev, staging, prod, standalone, production). Long form used in tags/labels."
   type        = string
   default     = "prod"
   validation {
     condition     = can(regex("^[a-z0-9]{1,16}$", var.environment))
     error_message = "Environment must be 1-16 lowercase alphanumeric characters."
+  }
+}
+
+variable "environment_short" {
+  description = "Short form of the environment name (1-6 lowercase alphanumeric chars) used in resource naming where Azure name limits are tight (Key Vault, Grafana, storage, DCE/DCR). Defaults to var.environment when empty — keep empty to preserve existing resource names; set explicitly when var.environment exceeds 6 chars."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.environment_short == "" || can(regex("^[a-z0-9]{1,6}$", var.environment_short))
+    error_message = "environment_short must be empty or 1-6 lowercase alphanumeric characters."
   }
 }
 
