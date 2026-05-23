@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-rc4] - 2026-05-23
+
+State recovery feature: when the remote terraform state in the bootstrap
+backend gets corrupted, deleted, or otherwise diverges from reality, you can
+now repair it without leaving the cmdlet.
+
+### Added
+- `-Action import` on `Deploy-AKSLandingZone`. Pushes a known-good terraform
+  state file to the remote azurerm backend for the resolved environment. No
+  new cmdlet — same single entry point.
+- `-StateBackup <path>` parameter. Explicit path to the source state file to
+  push. Only valid with `-Action import`. When omitted, the cmdlet auto-
+  discovers an `errored.tfstate` left behind in the bootstrap composition by
+  a failed apply or destroy.
+- Always re-discovers the state RG and storage account on import (never trusts
+  on-disk `backend.tf`), then re-grants `Storage Blob Data Contributor` to the
+  operator with a 30s propagation wait — same self-heal shape proven in the
+  rc3 destroy path. Falls through to a clear "the backend storage account is
+  gone" error when the state RG truly doesn't exist anymore.
+- Pre-push validation: the source file must parse as JSON and contain
+  `version`, `terraform_version`, and `resources` before any backend mutation.
+- Post-push verification: aborts with an explicit error if `terraform state
+  list` returns zero after the push.
+- Workspace handling: selects the per-env workspace if it exists, creates it
+  if it doesn't (the whole point of recovery is to repopulate state).
+- Auto-cleans the local `errored.tfstate` after a successful push so the file
+  doesn't get re-picked-up on a future run.
+
+### Verified
+End-to-end on `swedencentral` against the standalone topology:
+1. Fresh apply → 45 resources, state migrated to azurerm backend (serial 48).
+2. `terraform state pull` → captured 32-resource good state (49 instances).
+3. Uploaded an empty serial-1 state to the remote blob via `az storage blob
+   upload --overwrite`, breaking the prior stale lease first. Confirmed
+   `terraform state list` returned 0 (remote corrupted).
+4. `Deploy-AKSLandingZone -Action import -StateBackup good.tfstate -AutoApprove
+   -SkipPreflight` → discovered state SA, granted RBAC, init, workspace select,
+   pushed state, post-verify reported 49 instances restored, banner printed.
+5. `Deploy-AKSLandingZone -Action destroy -AutoApprove -SkipPreflight` against
+   the recovered state → workload repo destroyed, all 45 resources inside the
+   state and identity RGs destroyed (only empty RG shells remained — same rc3
+   self-referential-teardown limitation, not introduced by rc4).
+
+### Parameter validation tests (all passing)
+- `-StateBackup` with `-Action apply` → errors fast.
+- `-Action import` with no source and no `errored.tfstate` → errors with
+  remediation hint.
+- `-Action import -StateBackup nonexistent.tfstate` → errors with "does not
+  exist".
+- `-Action import -StateBackup junk.txt` (non-JSON) → errors with JSON parse
+  message.
+
 ## [1.4.0-rc3] - 2026-05-23
 
 Bug-fix release for the `-Action destroy` path discovered during real-cloud

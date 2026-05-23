@@ -62,7 +62,7 @@
 '@
 
             # Prerelease string of this module — RC for the 1.4.0 GA series
-            Prerelease = 'rc3'
+            Prerelease = 'rc4'
         }
     }
 }

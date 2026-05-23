@@ -2540,12 +2540,24 @@ function Get-RepositoryFilesMap {
                     deletes the generated workload repo + GHA env identities),
                     then the hub composition. Requires -InputConfigPath or
                     -Environment.
+      - 'import' — state recovery. Load existing inputs file, init against the
+                   azurerm backend, then push a known-good terraform state file
+                   to the remote backend. Source state is either -StateBackup
+                   <path> or an 'errored.tfstate' left behind by a failed
+                   apply/destroy in the bootstrap composition directory.
+                   Requires -InputConfigPath or -Environment.
 
 .PARAMETER PlanOnly
     DEPRECATED. Equivalent to -Action plan. Kept for backward compatibility.
 
 .PARAMETER SkipPreflight
     Skip tool / `az login` / Microsoft.ContainerInstance RP / PAT checks. Advanced.
+
+.PARAMETER StateBackup
+    Path to a known-good terraform state file to push to the remote backend.
+    Only valid with -Action import. When omitted, the cmdlet looks for an
+    'errored.tfstate' left behind in the bootstrap composition directory by
+    a failed apply or destroy.
 
 .EXAMPLE
     # Interactive (recommended)
@@ -2564,6 +2576,14 @@ function Get-RepositoryFilesMap {
 .EXAMPLE
     # Same, non-interactive
     Deploy-AKSLandingZone -InputConfigPath .\config\inputs.dev.yaml -Action destroy -AutoApprove
+
+.EXAMPLE
+    # Recover from a failed apply or destroy by pushing the leftover errored.tfstate
+    Deploy-AKSLandingZone -InputConfigPath .\config\inputs.dev.yaml -Action import -AutoApprove
+
+.EXAMPLE
+    # Recover from an external state backup
+    Deploy-AKSLandingZone -InputConfigPath .\config\inputs.dev.yaml -Action import -StateBackup .\backup.tfstate -AutoApprove
 #>
 function Deploy-AKSLandingZone {
     [CmdletBinding()]
@@ -2572,24 +2592,32 @@ function Deploy-AKSLandingZone {
         [Parameter()][string]$BootstrapRoot,
         [Parameter()][string]$Environment,
         [Parameter()][switch]$AutoApprove,
-        [Parameter()][ValidateSet('apply','plan','destroy')][string]$Action = 'apply',
+        [Parameter()][ValidateSet('apply','plan','destroy','import')][string]$Action = 'apply',
         [Parameter()][switch]$PlanOnly,
-        [Parameter()][switch]$SkipPreflight
+        [Parameter()][switch]$SkipPreflight,
+        # State recovery (-Action import): explicit path to a known-good terraform
+        # state file to push to the remote backend. When omitted, the cmdlet looks
+        # for an 'errored.tfstate' left behind in the bootstrap composition by a
+        # failed apply/destroy. Mutually exclusive with -Action apply|plan|destroy.
+        [Parameter()][string]$StateBackup
     )
 
     # Backward compatibility: -PlanOnly is equivalent to -Action plan.
     if ($PlanOnly -and $Action -eq 'apply') { $Action = 'plan' }
-    if ($PlanOnly -and $Action -eq 'destroy') {
-        Write-Log "-PlanOnly and -Action destroy are mutually exclusive." -Severity "ERROR"; return
+    if ($PlanOnly -and $Action -ne 'plan') {
+        Write-Log "-PlanOnly is only valid with -Action plan (or the default 'apply')." -Severity "ERROR"; return
+    }
+    if ($StateBackup -and $Action -ne 'import') {
+        Write-Log "-StateBackup is only valid with -Action import." -Severity "ERROR"; return
     }
 
     Show-Banner
-    $headerLabel = switch ($Action) { 'apply' { 'Bootstrap' } 'plan' { 'Bootstrap (PLAN)' } 'destroy' { 'TEARDOWN' } }
+    $headerLabel = switch ($Action) { 'apply' { 'Bootstrap' } 'plan' { 'Bootstrap (PLAN)' } 'destroy' { 'TEARDOWN' } 'import' { 'STATE RECOVERY' } }
     Write-Log "=== AKS Application Landing Zone — $headerLabel ===" -Severity "INFO"
 
-    # -Action destroy requires an existing inputs file (no wizard fallback).
-    if ($Action -eq 'destroy' -and [string]::IsNullOrEmpty($InputConfigPath) -and [string]::IsNullOrWhiteSpace($Environment)) {
-        Write-Log "-Action destroy requires either -InputConfigPath or -Environment (to locate the existing config)." -Severity "ERROR"
+    # -Action destroy|import require an existing inputs file (no wizard fallback).
+    if ($Action -in @('destroy','import') -and [string]::IsNullOrEmpty($InputConfigPath) -and [string]::IsNullOrWhiteSpace($Environment)) {
+        Write-Log "-Action $Action requires either -InputConfigPath or -Environment (to locate the existing config)." -Severity "ERROR"
         return
     }
 
@@ -2964,13 +2992,181 @@ terraform {
         return
     }
 
+    # ── IMPORT / STATE RECOVERY PATH ──
+    # Push a known-good terraform state file to the remote backend. Source is
+    # either -StateBackup <path> or an 'errored.tfstate' left behind in the
+    # bootstrap composition by a failed apply/destroy. Backend self-heal +
+    # SBDC role grant mirror the destroy path so this works on a fresh machine.
+    if ($Action -eq 'import') {
+        $workspaceName = if (-not [string]::IsNullOrWhiteSpace($Environment)) { $Environment } else { [string]$config.environment_name }
+
+        # Resolve source state file up front so we fail fast.
+        $sourceState = $null
+        if (-not [string]::IsNullOrWhiteSpace($StateBackup)) {
+            if (-not (Test-Path -LiteralPath $StateBackup)) {
+                Write-Log "-StateBackup '$StateBackup' does not exist." -Severity "ERROR"; return
+            }
+            $sourceState = (Resolve-Path -LiteralPath $StateBackup).Path
+        } else {
+            $erroredPath = Join-Path $BootstrapRoot "errored.tfstate"
+            if (Test-Path -LiteralPath $erroredPath) {
+                $sourceState = (Resolve-Path -LiteralPath $erroredPath).Path
+                Write-Log "Auto-discovered errored.tfstate at $sourceState" -Severity "INFO"
+            } else {
+                Write-Log "No -StateBackup provided and no errored.tfstate found at $erroredPath. Nothing to recover." -Severity "ERROR"
+                Write-Log "Pass -StateBackup <path> with a known-good terraform state file to push." -Severity "INFO"
+                return
+            }
+        }
+
+        # Validate it's a real terraform state file before touching the backend.
+        try {
+            $stateJson = Get-Content -LiteralPath $sourceState -Raw | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Write-Log "Source file is not valid JSON: $($_.Exception.Message)" -Severity "ERROR"; return
+        }
+        if ($null -eq $stateJson.version -or $null -eq $stateJson.terraform_version -or $null -eq $stateJson.resources) {
+            Write-Log "Source file does not look like a terraform state (missing version/terraform_version/resources)." -Severity "ERROR"; return
+        }
+        $sourceResourceCount = @($stateJson.resources).Count
+        $sourceSerial        = $stateJson.serial
+        $sourceTfVersion     = $stateJson.terraform_version
+        Write-Log "Source state: $sourceResourceCount resources, serial=$sourceSerial, terraform=$sourceTfVersion" -Severity "INFO"
+
+        if (-not $AutoApprove) {
+            Write-Host ""
+            Write-Log "ABOUT TO PUSH state to the remote backend for environment '$workspaceName'." -Severity "WARNING"
+            Write-Log "This will OVERWRITE the current remote state. Make sure the file is correct." -Severity "WARNING"
+            $confirm = Read-Host "Type 'import' to confirm"
+            if ($confirm -ne 'import') { Write-Log "Aborted." -Severity "INFO"; return }
+        }
+
+        Push-Location $BootstrapRoot
+        try {
+            # Reuse the destroy-path backend self-heal pattern, but ALWAYS
+            # re-discover for import — the whole point of recovery is that
+            # something is broken, so we don't trust on-disk backend.tf.
+            $backendTfPath = Join-Path $BootstrapRoot "backend.tf"
+            Write-Log "Discovering bootstrap storage account for '$workspaceName' (always re-discover on import)..." -Severity "INFO"
+            if ($true) {
+                $svc     = [string]$config.service_name
+                $subId   = [string]$config.bootstrap_subscription_id
+                $stateRg = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name | [0]" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($stateRg)) {
+                    Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found in subscription $subId. Cannot recover state — the backend storage account is gone." -Severity "ERROR"
+                    return
+                }
+                $saName = az storage account list -g $stateRg --subscription $subId --query "[0].name" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($saName)) {
+                    Write-Log "State RG '$stateRg' exists but contains no storage account. Cannot recover state." -Severity "ERROR"
+                    return
+                }
+                $backendTf = @"
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "$stateRg"
+    storage_account_name = "$saName"
+    container_name       = "tfstate"
+    key                  = "bootstrap.tfstate"
+    use_azuread_auth     = true
+    subscription_id      = "$subId"
+    tenant_id            = "$($config.tenant_id)"
+  }
+}
+"@
+                Set-Content -Path $backendTfPath -Value $backendTf -Encoding UTF8
+                Write-Log "Rewrote backend.tf -> $stateRg / $saName" -Severity "SUCCESS"
+                foreach ($p in @(".terraform",".terraform.lock.hcl")) {
+                    $full = Join-Path $BootstrapRoot $p
+                    if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
+                }
+                $saResourceId = "/subscriptions/$subId/resourceGroups/$stateRg/providers/Microsoft.Storage/storageAccounts/$saName"
+                $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
+                if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
+                    $raOutput = az role assignment create `
+                        --assignee-object-id $signedInId `
+                        --assignee-principal-type User `
+                        --role "Storage Blob Data Contributor" `
+                        --scope $saResourceId `
+                        --subscription $subId 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Granted Storage Blob Data Contributor on $saName to operator. Waiting 30s for RBAC propagation..." -Severity "INFO"
+                        Start-Sleep -Seconds 30
+                    } elseif ($raOutput -match 'already exists|RoleAssignmentExists') {
+                        Write-Log "Storage Blob Data Contributor on $saName already present for operator." -Severity "INFO"
+                    } else {
+                        Write-Log "Could not create role assignment (will try anyway): $raOutput" -Severity "WARNING"
+                    }
+                }
+            }
+
+            # Render tfvars so terraform init / state push has all required vars resolvable.
+            try {
+                Write-Log "Rendering terraform.tfvars.json for import (required variables must be resolvable)..." -Severity "INFO"
+                $repoFilesForImport = Get-RepositoryFilesMap -Config $config
+                $null = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFilesForImport
+            } catch {
+                Write-Log "Could not render tfvars before import: $($_.Exception.Message)" -Severity "ERROR"; return
+            }
+
+            Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
+            & terraform @('init','-input=false','-reconfigure')
+            if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform init failed." -Severity "ERROR"; return }
+
+            # Workspace: select if present, otherwise create. State push targets the
+            # current workspace, so we must be on the right one before pushing.
+            if (-not [string]::IsNullOrWhiteSpace($workspaceName)) {
+                & terraform workspace select $workspaceName 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "Workspace '$workspaceName' not found; creating it." -Severity "INFO"
+                    & terraform workspace new $workspaceName
+                    if ($LASTEXITCODE -ne 0) { Write-Log "Failed to create workspace '$workspaceName'." -Severity "ERROR"; return }
+                }
+                Write-Log "On workspace '$workspaceName'." -Severity "INFO"
+            }
+
+            # Show current remote state before overwriting.
+            $preCount = @(& terraform state list 2>$null).Count
+            Write-Log "Remote state currently tracks $preCount resource(s). Will overwrite with $sourceResourceCount from source." -Severity "INFO"
+
+            Write-Log "Pushing state to remote backend..." -Severity "INFO"
+            & terraform state push $sourceState
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "terraform state push failed. If you see 'cannot import state with serial X over newer state with serial Y', pass -StateBackup with a file whose serial is >= the remote serial, or use 'terraform state push -force' manually." -Severity "ERROR"
+                return
+            }
+
+            # Verify.
+            $postState = & terraform state list 2>$null
+            $postCount = @($postState).Count
+            if ($postCount -lt 1) {
+                Write-Log "State push reported success but remote state is empty. Investigate manually." -Severity "ERROR"; return
+            }
+            Write-Log "State recovery complete. Remote state now tracks $postCount resource(s)." -Severity "SUCCESS"
+
+            # Clean up errored.tfstate so it doesn't get picked up again on a future run.
+            if ($sourceState -eq (Join-Path $BootstrapRoot "errored.tfstate")) {
+                Remove-Item -LiteralPath $sourceState -Force -ErrorAction SilentlyContinue
+                Write-Log "Removed local errored.tfstate (state has been pushed to remote backend)." -Severity "INFO"
+            }
+        }
+        finally { Pop-Location }
+
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "  ║   State Recovery Complete                                    ║" -ForegroundColor Green
+        Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Log "Next: run 'Deploy-AKSLandingZone -Action plan' to verify state matches Azure, then apply or destroy as needed." -Severity "INFO"
+        return
+    }
+
     # ── Hub composition (greenfield) ──
     # When topology=hub_and_spoke, run bootstrap/alz/hub/ first to create the hub VNet
     # (+ optional Azure Firewall), then populate $config.hub_* from its outputs so the
     # downstream render + spoke bootstrap pick them up transparently.
     # Skipped when -Action destroy — for destroy, hub teardown runs AFTER the spoke
     # bootstrap is destroyed (so the workload repo + identities are gone first).
-    if ($config.topology -eq 'hub_and_spoke' -and $Action -ne 'destroy') {
+    if ($config.topology -eq 'hub_and_spoke' -and $Action -in @('apply','plan')) {
         $repoRootForHub = Split-Path -Parent $script:ModuleRoot
         $hubRoot        = Join-Path $repoRootForHub "bootstrap/alz/hub"
         if (!(Test-Path $hubRoot)) {
@@ -3042,8 +3238,8 @@ terraform {
     }
 
     # ── Build repository_files map ──
-    # Skipped for destroy: terraform reads from existing state, no template render needed.
-    if ($Action -ne 'destroy') {
+    # Skipped for destroy/import: terraform reads from existing state, no template render needed.
+    if ($Action -in @('apply','plan')) {
         Write-Log "Building repository_files map from /terraform and /workflows templates..." -Severity "INFO"
         $repoFiles = Get-RepositoryFilesMap -Config $config
         Write-Log "Repository files: $($repoFiles.Keys.Count) entries" -Severity "SUCCESS"
