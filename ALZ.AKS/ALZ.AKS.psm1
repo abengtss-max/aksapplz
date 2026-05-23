@@ -2455,6 +2455,9 @@ function Get-RepositoryFilesMap {
         }
         $templateOrg  = ($templateRepo -split '/')[0]
         $templateName = ($templateRepo -split '/')[1]
+        # Pick a runner label that matches how the bootstrap provisioned compute.
+        # ACI runner is only created when use_self_hosted_runners=true.
+        $runnerLabel = if ($Config.use_self_hosted_runners -eq $true) { "self-hosted" } else { "ubuntu-latest" }
         foreach ($wfFile in @("ci.yaml","cd.yaml")) {
             $p = Join-Path $wfSrc $wfFile
             if (Test-Path $p) {
@@ -2466,6 +2469,7 @@ function Get-RepositoryFilesMap {
                 $content = $content -replace '__TEMPLATE_REPO_NAME__', $templateName
                 $content = $content -replace '__PLAN_ENVIRONMENT__',  "plan"
                 $content = $content -replace '__APPLY_ENVIRONMENT__', "apply"
+                $content = $content -replace '__RUNNER_LABEL__',      $runnerLabel
                 $files[".github/workflows/$wfFile"] = $content
             }
         }

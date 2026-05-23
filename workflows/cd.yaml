@@ -32,4 +32,5 @@ jobs:
       plan_environment: __PLAN_ENVIRONMENT__
       apply_environment: __APPLY_ENVIRONMENT__
       action: ${{ inputs.action || 'apply' }}
+      runner_label: __RUNNER_LABEL__
     secrets: inherit

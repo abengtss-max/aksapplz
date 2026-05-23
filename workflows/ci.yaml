@@ -16,4 +16,5 @@ jobs:
     uses: __ORG_NAME__/__TEMPLATE_REPO_NAME__/.github/workflows/ci-template.yaml@main
     with:
       environment: __PLAN_ENVIRONMENT__
+      runner_label: __RUNNER_LABEL__
     secrets: inherit
