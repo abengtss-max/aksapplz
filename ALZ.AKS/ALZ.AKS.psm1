@@ -2432,10 +2432,17 @@ function Get-RepositoryFilesMap {
     if (Test-Path $wfSrc) {
         # Resolve the template repo (owner/name) that hosts the reusable
         # cd-template.yaml / ci-template.yaml workflows.
-        # Priority: explicit config override -> derive from local git remote.
+        # Priority:
+        #   1. explicit config.template_repository ("owner/name")
+        #   2. convention: <github_organization_name>/<service_name>-templates
+        #      (workload repos in the org can consume sibling-org reusable workflows)
+        #   3. local git remote (only works when bootstrap repo is in the same org
+        #      AND is reachable from the workload — typically not the case)
         $templateRepo = $null
         if ($Config.ContainsKey('template_repository') -and -not [string]::IsNullOrWhiteSpace($Config.template_repository)) {
             $templateRepo = [string]$Config.template_repository
+        } elseif (-not [string]::IsNullOrWhiteSpace($Config.github_organization_name) -and -not [string]::IsNullOrWhiteSpace($Config.service_name)) {
+            $templateRepo = "$($Config.github_organization_name)/$($Config.service_name)-templates"
         } else {
             try {
                 $remoteUrl = (& git -C (Split-Path $TemplateRoot -Parent) remote get-url origin 2>$null)
@@ -2444,7 +2451,7 @@ function Get-RepositoryFilesMap {
         }
         if ([string]::IsNullOrWhiteSpace($templateRepo)) {
             $templateRepo = "$($Config.github_organization_name)/__TEMPLATE_REPO_NAME__"
-            Write-Log "template_repository not set and git remote not resolvable; workload workflows will keep '__TEMPLATE_REPO_NAME__' placeholder." -Severity "WARNING"
+            Write-Log "template_repository not set and could not be derived; workload workflows will keep '__TEMPLATE_REPO_NAME__' placeholder." -Severity "WARNING"
         }
         $templateOrg  = ($templateRepo -split '/')[0]
         $templateName = ($templateRepo -split '/')[1]
