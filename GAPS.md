@@ -63,7 +63,7 @@ Owner: @abengtss-max
 
 ## D. Smaller correctness gaps
 
-- [ ] **Standalone + `multi_region_*` scenarios**: never tested. `secondary_location` + ACR geo-replication likely still works, but `is_corp = false` may disable things the multi-region scenarios assume.
+- [x] **Standalone + `multi_region_*` scenarios** — validated 2026-05-23 via terraform plan in sandbox: `Plan: 49 to add, 0 to change, 0 to destroy`, no errors. ACR `georeplications { location = "westeurope" }` correctly generated. `is_corp=false` properly bypasses private endpoints / UDR / private DNS zone; scenario's `private_cluster_enabled=true` is overridden to `false` by the `local.is_corp` gate in `main.aks.tf` (no broken refs). Cloud apply not run — covered by the existing single_region_baseline + standalone validation (run `26334915216`).
 - [ ] **Preflight validation** in `Test-DeploymentPrerequisites`:
   - [x] Enforce `topology: spoke` ⇒ `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip`, `connectivity_subscription_id` all non-empty
   - [x] Enforce `topology: standalone` ⇒ hub_* and `connectivity_subscription_id` all empty (warn + auto-clear, or fail)
@@ -83,6 +83,9 @@ Owner: @abengtss-max
 - [~] **Resource name length safety — broader audit needed**. Fixed Key Vault (24), Grafana (23), and added DCE (44) + DCR (64) length-safe handling this session via `length(...) <= max ? full : "<prefix>-<truncated><sha3>"` pattern. Still pending: extract a reusable Terraform module / pre-commit lint to catch new resources that don't follow the pattern. Audited resources today: AKS (63), App Gateway (80), Log Analytics (63), Monitor workspace (63), VNet (64), NSGs (80), Managed Identity (128), Subnets (80), Public IP (80), Route Table (80), WAF (128), ACR (50 alphanumeric) — all safe at current naming envelope (≤80 with name_prefix up to ~55).
 - [ ] **`environment` naming convention vs. tag value split**. Long env names break short Azure resource names. Consider introducing a separate `environment_short` var (1-6 chars, used in resource naming) alongside `environment` (full, used in tags/labels).
 - [x] **CD state-lock race when multiple commits land quickly** — added `concurrency: { group: cd-<apply_env>-<ref>, cancel-in-progress: false }` to `cd.yaml` (template + local copy). Later runs queue instead of racing for tfstate. (Commit pending.)
+- [ ] **Provider deprecation warnings** (surfaced during multi_region+standalone plan validation 2026-05-23) — non-blocking but should be cleaned up before AzureRM v5:
+  - `azurerm_application_gateway.enable_http2` → `http2_enabled` (main.appgateway.tf:58)
+  - `log_analytics` AVM module emits deprecated `local_authentication_disabled` — wait for upstream module fix
 
 ---
 
