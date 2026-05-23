@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.3.0'
+    ModuleVersion     = '1.4.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -45,10 +45,10 @@
             Tags         = @('Azure', 'AKS', 'Kubernetes', 'Landing-Zone', 'Accelerator', 'Terraform', 'ALZ', 'Infrastructure-as-Code')
 
             # A URL to the license for this module
-            LicenseUri   = 'https://github.com/aksapplz/LICENSE'
+            LicenseUri   = 'https://github.com/abengtss-max/aksapplz/blob/main/LICENSE'
 
             # A URL to the main website for this project
-            ProjectUri   = 'https://github.com/aksapplz'
+            ProjectUri   = 'https://github.com/abengtss-max/aksapplz'
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
@@ -61,8 +61,8 @@
 - Self-hosted runner support
 '@
 
-            # Prerelease string of this module
-            # Prerelease = ''
+            # Prerelease string of this module — RC for the 1.4.0 GA series
+            Prerelease = 'rc1'
         }
     }
 }

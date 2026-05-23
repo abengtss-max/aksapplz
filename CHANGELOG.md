@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-rc1] - 2026-05-23
+
+First release candidate of the v1.4.0 line. Focus is **publish-readiness**:
+automated end-to-end test harness, governance files, static-analysis gate,
+and documented preview-grade limitations.
+
+### Added
+- **End-to-end scenario test harness** under `ALZ.AKS/tests/e2e/` (12 scenarios x 4 levels):
+  - **L1 render** (`Scenarios.L1.Tests.ps1`) — 112/204 assertions, ~1.5 s.
+  - **L2 terraform plan** (`Scenarios.L2.Tests.ps1`) — 60/60 plans across 12 scenarios in ~13 min.
+  - **L3 apply+destroy** (`Scenarios.L3.Tests.ps1`) — gated by `ALZ_AKS_E2E_APPLY=1`; sandbox apply with always-on AfterAll destroy.
+  - **L4 wizard end-to-end** (`Scenarios.L4.Tests.ps1`) — gated by `ALZ_AKS_E2E_L4=1`; mirrors repo to sandbox, drives `Deploy-AKSLandingZone -PlanOnly` (default) or `-AutoApprove` (full).
+- **Scenario matrix (12)**: 3 topologies (standalone/spoke/hub_and_spoke) x 2 scenarios (baseline/regulated) + 4 multi-region variants + feature-flag minimal + feature-flag maximal.
+- **PR gate workflow** `.github/workflows/test-scenarios.yml` — L1 single job + L2 matrix of 12 (OIDC, parallel 6, plan only).
+- **L3 / L4 manual workflows** `.github/workflows/test-scenarios-l3.yml` and `test-scenarios-l4.yml` — `workflow_dispatch` with comma-separated or `all` scenario selector, environment-gated.
+- **Governance files**: `LICENSE` (MIT), `SECURITY.md`, `KNOWN-ISSUES.md`, `CODE_OF_CONDUCT.md`.
+- **Static analysis gate** `.github/workflows/static-analysis.yml` — PSScriptAnalyzer + tfsec + checkov (informational; advisory severities only).
+
+### Changed
+- **Module version**: `1.3.0` -> `1.4.0` with `Prerelease = 'rc1'`. Manifest `LicenseUri` / `ProjectUri` corrected to the real repo URL.
+- **`.gitignore`** extended for ad-hoc `*.tfvars` and `terraform.tfstate*` at repo root + `bootstrap/alz/hub/*.log` (covers destroy logs).
+
+### Fixed
+- Working tree hygiene — removed eight stale `*.log` and `*.tfvars` debug artefacts from prior manual runs.
+
+### Known limitations (see [KNOWN-ISSUES.md](KNOWN-ISSUES.md))
+- L3 / L4 are wired but the first real cloud run is part of the rc1 sign-off; until then treat the apply path as preview.
+- Several Section-C items (destroy cmdlet, state recovery, OIDC-only secrets, azd wrapper, PSGallery publish) are deferred to v1.5.0.
+- Upstream `log_analytics` AVM module emits a deprecated-arg warning during plan (non-blocking).
+- GitHub Free-plan orgs cannot enforce environment reviewer rules on private repos.
+
 ## [1.3.0] - 2026-05-23
 
 ### Added

@@ -1,0 +1,65 @@
+name: Static Analysis
+
+# PSScriptAnalyzer + tfsec + checkov as advisory PR gates.
+# Hard-fails on PSScriptAnalyzer Error severity; warnings/info are reported but
+# allowed through. tfsec/checkov are informational for the rc1 line (will be
+# tightened to fail on HIGH/CRITICAL for 1.4.0 GA).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ALZ.AKS/**'
+      - 'terraform/**'
+      - 'bootstrap/**'
+      - '.github/workflows/static-analysis.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        name: Install PSScriptAnalyzer
+        run: Install-Module PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+      - shell: pwsh
+        name: Run PSScriptAnalyzer (fail on Error)
+        run: |
+          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Severity @('Information','Warning','Error') -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions,PSAvoidUsingConvertToSecureStringWithPlainText,PSUseDeclaredVarsMoreThanAssignments
+          $errors   = @($findings | Where-Object { $_.Severity -eq 'Error' })
+          $warnings = @($findings | Where-Object { $_.Severity -eq 'Warning' })
+          Write-Host ("Findings: {0} Error, {1} Warning, {2} Info" -f $errors.Count, $warnings.Count, ($findings.Count - $errors.Count - $warnings.Count))
+          $findings | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize | Out-String | Write-Host
+          if ($errors.Count -gt 0) { exit 1 }
+
+  tfsec:
+    name: tfsec (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ALZ.AKS/templates/terraform
+          soft_fail: true
+
+  checkov:
+    name: checkov (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ALZ.AKS/templates/terraform
+          framework: terraform
+          quiet: true
+          soft_fail: true

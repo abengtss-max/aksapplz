@@ -47,5 +47,14 @@ standalone-*.log
 standalone-*.tfplan
 # hub_and_spoke cloud-test fixture artefacts
 hub01-apply*.log
-bootstrap/alz/hub/hub01-apply*.log
+bootstrap/alz/hub/*.log
 bootstrap/alz/hub/terraform.tfvars.json
+
+# Ad-hoc tfvars dropped at repo root during local debugging
+/good.tfvars
+/standalone-remote.tfvars
+/*.tfvars
+
+# Local terraform state at repo root (only sandbox/template state is allowed)
+/terraform.tfstate
+/terraform.tfstate.backup
