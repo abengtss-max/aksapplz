@@ -3176,45 +3176,42 @@ terraform {
                 Write-Log "Could not resolve signed-in user object id; skipping RBAC self-heal (terraform init may fail with 403)." -Severity "WARNING"
             }
 
-            # Always (idempotently) ensure the backend SA is reachable from the
-            # operator's public IP. By default the Secure-Baseline-compliant SA
-            # has publicNetworkAccess=Disabled and/or defaultAction=Deny, which
-            # makes terraform's listBlobs call fail with the same 403/Authorization
-            # Failure even when RBAC is correct. Open public access + allowlist
-            # the operator's IP. (The SA is destroyed at the end of this run, so
-            # no revert is needed.)
+            # Always (idempotently) make the backend SA reachable from the
+            # operator. The Secure-Baseline-compliant SA defaults to
+            # publicNetworkAccess=Disabled and/or defaultAction=Deny, which
+            # makes terraform's listBlobs call fail with 403 even when RBAC is
+            # correct. IP allowlists are brittle (NAT/CGNAT/VPN can hide the
+            # real egress IP), so we set defaultAction=Allow for the duration
+            # of the destroy. The SA is deleted seconds later, so there is
+            # nothing to revert.
             try {
-                $saNet = az storage account show -n $saName --subscription $subId `
-                    --query "{public:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction, ipRules:networkRuleSet.ipRules[].ipAddressOrRange}" -o json 2>$null | ConvertFrom-Json
-                $myIp = $null
-                try { $myIp = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 10) } catch { }
-                if (-not $myIp) {
-                    try { $myIp = (Invoke-RestMethod -Uri 'https://ifconfig.me/ip' -TimeoutSec 10) } catch { }
-                }
-                $needsOpen = ($saNet.public -ne 'Enabled')
-                $needsIp   = $myIp -and (-not ($saNet.ipRules -contains $myIp))
-                if ($needsOpen -or $needsIp) {
-                    if ($needsOpen) {
-                        Write-Log "Backend SA $saName has publicNetworkAccess='$($saNet.public)' — temporarily enabling for destroy (SA will be deleted by terraform destroy)." -Severity "WARNING"
-                        az storage account update -n $saName --subscription $subId --public-network-access Enabled --default-action Deny -o none 2>&1 | Out-Null
-                    }
-                    if ($needsIp) {
-                        Write-Log "Allowlisting operator IP $myIp on $saName..." -Severity "INFO"
-                        az storage account network-rule add -n $saName --subscription $subId --ip-address $myIp -o none 2>&1 | Out-Null
-                    }
-                    Write-Log "Waiting 60s for storage firewall propagation..." -Severity "INFO"
-                    Start-Sleep -Seconds 60
-                } else {
-                    Write-Log "Backend SA $saName already reachable from operator IP $myIp." -Severity "INFO"
-                }
+                az storage account update -n $saName --subscription $subId `
+                    --public-network-access Enabled --default-action Allow `
+                    --bypass AzureServices Logging Metrics -o none 2>&1 | Out-Null
+                Write-Log "Set $saName publicNetworkAccess=Enabled, defaultAction=Allow for the destroy run (will be deleted)." -Severity "WARNING"
+                Write-Log "Waiting 60s for storage firewall propagation..." -Severity "INFO"
+                Start-Sleep -Seconds 60
             } catch {
                 Write-Log "Could not adjust backend SA network rules: $($_.Exception.Message). terraform init may fail with 403." -Severity "WARNING"
             }
 
             Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
             $initArgs = @('init','-input=false','-reconfigure')
-            & terraform @initArgs
-            if ($LASTEXITCODE -ne 0) { Write-Log "bootstrap terraform init failed (backend may already be gone)." -Severity "ERROR"; return }
+            & terraform @initArgs 2>&1 | Tee-Object -Variable initTee | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                # One-shot retry for the storage-firewall race: if init failed
+                # with a 403, wait another 90s and retry. Propagation can be
+                # slow on freshly-changed Storage network rules.
+                $joinedInit = ($initTee | Out-String)
+                if ($joinedInit -match '403' -or $joinedInit -match 'AuthorizationFailure') {
+                    Write-Log "init failed with 403 — waiting an extra 90s for firewall propagation, then retrying once..." -Severity "WARNING"
+                    Start-Sleep -Seconds 90
+                    & terraform @initArgs
+                }
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "bootstrap terraform init failed (backend may already be gone)." -Severity "ERROR"; return
+                }
+            }
 
             # terraform destroy still evaluates all required variables (PATs, repository_files),
             # so we must render terraform.tfvars.json before destroying. This also keeps the
