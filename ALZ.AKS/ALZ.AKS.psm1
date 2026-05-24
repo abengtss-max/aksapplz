@@ -3043,6 +3043,9 @@ function Deploy-AKSLandingZone {
             # different env's storage account (or no backend.tf exists), rebuild
             # it from the actual state RG + storage account in Azure for the
             # target env. This mirrors what the apply path does via $shouldClean.
+            # We always discover the SA from Azure so we can grant data-plane
+            # RBAC unconditionally (the apply path grants this; destroys run
+            # on a different machine or after RBAC drift need it again).
             $backendTfPath = Join-Path $BootstrapRoot "backend.tf"
             $needsRewrite  = $true
             if (Test-Path $backendTfPath) {
@@ -3055,19 +3058,23 @@ function Deploy-AKSLandingZone {
             } else {
                 Write-Log "No backend.tf on disk; discovering bootstrap storage account for '$workspaceName'..." -Severity "INFO"
             }
+
+            # Always discover the state RG + SA so we can (a) optionally rewrite
+            # backend.tf and (b) always grant operator RBAC on the SA.
+            $svc     = [string]$config.service_name
+            $subId   = [string]$config.bootstrap_subscription_id
+            $stateRg = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name | [0]" -o tsv 2>$null
+            if ([string]::IsNullOrWhiteSpace($stateRg)) {
+                Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found in subscription $subId. Nothing to destroy at the spoke layer." -Severity "WARNING"
+                return
+            }
+            $saName = az storage account list -g $stateRg --subscription $subId --query "[0].name" -o tsv 2>$null
+            if ([string]::IsNullOrWhiteSpace($saName)) {
+                Write-Log "State RG '$stateRg' exists but contains no storage account. Skipping spoke destroy." -Severity "WARNING"
+                return
+            }
+
             if ($needsRewrite) {
-                $svc       = [string]$config.service_name
-                $subId     = [string]$config.bootstrap_subscription_id
-                $stateRg   = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name | [0]" -o tsv 2>$null
-                if ([string]::IsNullOrWhiteSpace($stateRg)) {
-                    Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found in subscription $subId. Nothing to destroy at the spoke layer." -Severity "WARNING"
-                    return
-                }
-                $saName = az storage account list -g $stateRg --subscription $subId --query "[0].name" -o tsv 2>$null
-                if ([string]::IsNullOrWhiteSpace($saName)) {
-                    Write-Log "State RG '$stateRg' exists but contains no storage account. Skipping spoke destroy." -Severity "WARNING"
-                    return
-                }
                 $backendTf = @"
 terraform {
   backend "azurerm" {
@@ -3088,13 +3095,22 @@ terraform {
                     $full = Join-Path $BootstrapRoot $p
                     if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
                 }
+            }
 
-                # Ensure the operator has Storage Blob Data Contributor on the SA
-                # (the apply path grants this; for destroys run on a different
-                # machine or after RBAC drift, we need it again). Idempotent.
-                $saResourceId = "/subscriptions/$subId/resourceGroups/$stateRg/providers/Microsoft.Storage/storageAccounts/$saName"
-                $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
-                if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
+            # Always (idempotently) ensure the operator has Storage Blob Data
+            # Contributor on the backend SA — terraform init's listBlobs call
+            # uses Entra data-plane auth and returns 403 without it.
+            $saResourceId = "/subscriptions/$subId/resourceGroups/$stateRg/providers/Microsoft.Storage/storageAccounts/$saName"
+            $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
+            if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
+                # Check first to avoid the 30s propagation wait when role is already present.
+                $hasRole = az role assignment list `
+                    --assignee $signedInId `
+                    --role "Storage Blob Data Contributor" `
+                    --scope $saResourceId `
+                    --subscription $subId `
+                    --query "[0].id" -o tsv 2>$null
+                if ([string]::IsNullOrWhiteSpace($hasRole)) {
                     $raOutput = az role assignment create `
                         --assignee-object-id $signedInId `
                         --assignee-principal-type User `
@@ -3107,9 +3123,13 @@ terraform {
                     } elseif ($raOutput -match 'already exists|RoleAssignmentExists') {
                         Write-Log "Storage Blob Data Contributor on $saName already present for operator." -Severity "INFO"
                     } else {
-                        Write-Log "Could not create role assignment (will try anyway): $raOutput" -Severity "WARNING"
+                        Write-Log "Could not create role assignment on $saName (terraform init may fail with 403): $raOutput" -Severity "WARNING"
                     }
+                } else {
+                    Write-Log "Operator already has Storage Blob Data Contributor on $saName." -Severity "INFO"
                 }
+            } else {
+                Write-Log "Could not resolve signed-in user object id; skipping RBAC self-heal (terraform init may fail with 403)." -Severity "WARNING"
             }
 
             Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
