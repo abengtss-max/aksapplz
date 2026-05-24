@@ -3320,11 +3320,21 @@ terraform {
             $workloadRepo = "$svc-$workspaceName"
             $templateRepo = "$svc-templates"
 
-            # Up-front: does the local gh CLI have delete_repo scope? Surface a
-            # one-time, actionable hint rather than burying the failure later.
-            $ghScopes = (gh auth status 2>&1) -join "`n"
-            if ($ghScopes -notmatch 'delete_repo') {
-                Write-Log "gh CLI is missing the 'delete_repo' scope — repo deletes will fail. Run: gh auth refresh -s delete_repo" -Severity "WARNING"
+            # Resolve a GitHub token the same way the apply path does: prefer
+            # TF_VAR_github_personal_access_token (already exported when the
+            # operator ran apply), fall back to the value stored in inputs.yaml.
+            # Then export GH_TOKEN so 'gh' uses it instead of (or in addition
+            # to) the local 'gh auth' login — which on a fresh machine may
+            # have no delete_repo scope, or no auth at all.
+            $patForGh = if ($env:TF_VAR_github_personal_access_token) { $env:TF_VAR_github_personal_access_token }
+                        elseif ($config.github_personal_access_token -and $config.github_personal_access_token -notmatch '^Set via') { [string]$config.github_personal_access_token }
+                        else { $null }
+            $savedGhToken = $env:GH_TOKEN
+            if (-not [string]::IsNullOrWhiteSpace($patForGh)) {
+                $env:GH_TOKEN = $patForGh
+                Write-Log "Authenticating gh CLI via TF_VAR_github_personal_access_token (same PAT used by apply)." -Severity "INFO"
+            } else {
+                Write-Log "No TF_VAR_github_personal_access_token in env and no PAT in config — falling back to local 'gh auth' session. Run: gh auth refresh -s delete_repo if delete fails." -Severity "WARNING"
             }
 
             # Small helper so we capture gh's actual error text on failure.
@@ -3402,6 +3412,10 @@ terraform {
             }
         } catch {
             Write-Log "Final cleanup phase hit an error: $($_.Exception.Message)" -Severity "WARNING"
+        } finally {
+            # Restore any prior GH_TOKEN so we don't poison the user's shell.
+            if ($null -ne $savedGhToken) { $env:GH_TOKEN = $savedGhToken }
+            else { Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue }
         }
 
         # Hub destroy (only for hub_and_spoke topology)
