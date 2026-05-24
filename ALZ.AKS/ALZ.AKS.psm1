@@ -3095,17 +3095,30 @@ terraform {
                 Write-Log "Rewrote backend.tf -> $stateRg / $saName" -Severity "SUCCESS"
             }
 
-            # ALWAYS wipe the .terraform cache + lock before init. Terraform's
-            # cached .terraform/terraform.tfstate records the previously-used
-            # backend; if it differs from backend.tf (or claims 'local'), init
-            # treats the run as a backend migration and tries to inspect BOTH
-            # the source and the destination — which produces the misleading
-            # "Error inspecting states in the \"local\" backend: listing blobs"
-            # 403 even when current backend.tf is correct. Wiping the cache
-            # makes -reconfigure truly idempotent.
-            foreach ($p in @(".terraform",".terraform.lock.hcl")) {
+            # ALWAYS wipe the .terraform cache + lock AND any local-backend
+            # workspace state before init. Terraform's cached
+            # .terraform/terraform.tfstate records the previously-used backend,
+            # and any leftover terraform.tfstate / terraform.tfstate.d/ at the
+            # working-dir root is interpreted as a 'local' backend with
+            # workspaces — either triggers a phantom 'local -> azurerm'
+            # migration on init -reconfigure, which inspects BOTH sides and
+            # surfaces the misleading
+            # 'Error inspecting states in the "local" backend: listing blobs ... 403'
+            # even when current backend.tf is correct.
+            $wipeTargets = @(
+                ".terraform",
+                ".terraform.lock.hcl",
+                "terraform.tfstate",
+                "terraform.tfstate.backup",
+                "terraform.tfstate.d",
+                "errored.tfstate"
+            )
+            foreach ($p in $wipeTargets) {
                 $full = Join-Path $BootstrapRoot $p
-                if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
+                if (Test-Path $full) {
+                    Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Log "Removed stale $p" -Severity "INFO"
+                }
             }
 
             # Always (idempotently) ensure the operator has Storage Blob Data
