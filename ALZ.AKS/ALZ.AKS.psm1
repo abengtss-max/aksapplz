@@ -17,7 +17,10 @@
 
 $script:ModuleRoot    = $PSScriptRoot
 $script:TemplateRoot  = Join-Path $PSScriptRoot "templates"
-$script:ScriptVersion = "1.3.0"
+# Bind version to the manifest so the banner can never drift from ALZ.AKS.psd1.
+$script:ScriptVersion = try {
+    (Test-ModuleManifest -Path (Join-Path $PSScriptRoot 'ALZ.AKS.psd1') -ErrorAction Stop).Version.ToString()
+} catch { '0.0.0' }
 
 # =============================================================================
 # Helper Functions (Private — not exported)
