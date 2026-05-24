@@ -3320,17 +3320,30 @@ terraform {
             $workloadRepo = "$svc-$workspaceName"
             $templateRepo = "$svc-templates"
 
+            # Up-front: does the local gh CLI have delete_repo scope? Surface a
+            # one-time, actionable hint rather than burying the failure later.
+            $ghScopes = (gh auth status 2>&1) -join "`n"
+            if ($ghScopes -notmatch 'delete_repo') {
+                Write-Log "gh CLI is missing the 'delete_repo' scope — repo deletes will fail. Run: gh auth refresh -s delete_repo" -Severity "WARNING"
+            }
+
+            # Small helper so we capture gh's actual error text on failure.
+            function _ghDelete($fullName) {
+                $out = gh repo delete $fullName --yes 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Deleted $fullName" -Severity "SUCCESS"
+                } else {
+                    $msg = ($out | Out-String).Trim()
+                    Write-Log "gh repo delete $fullName failed: $msg" -Severity "ERROR"
+                }
+            }
+
             # 1. Workload GitHub repo (e.g. aliapplz-prod)
             if (-not [string]::IsNullOrWhiteSpace($orgName)) {
                 $repoCheck = gh repo view "$orgName/$workloadRepo" --json name 2>&1
                 if ($LASTEXITCODE -eq 0) {
                     Write-Log "Deleting GitHub repo $orgName/$workloadRepo ..." -Severity "WARNING"
-                    gh repo delete "$orgName/$workloadRepo" --yes 2>&1 | Out-Null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Log "Deleted $orgName/$workloadRepo" -Severity "SUCCESS"
-                    } else {
-                        Write-Log "Could not delete $orgName/$workloadRepo — check 'gh auth status' has delete_repo scope (gh auth refresh -s delete_repo)." -Severity "WARNING"
-                    }
+                    _ghDelete "$orgName/$workloadRepo"
                 } else {
                     Write-Log "GitHub repo $orgName/$workloadRepo not present (already deleted or never created)." -Severity "INFO"
                 }
@@ -3340,39 +3353,51 @@ terraform {
                 $tplCheck = gh repo view "$orgName/$templateRepo" --json name 2>&1
                 if ($LASTEXITCODE -eq 0) {
                     Write-Log "Deleting GitHub repo $orgName/$templateRepo ..." -Severity "WARNING"
-                    gh repo delete "$orgName/$templateRepo" --yes 2>&1 | Out-Null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Log "Deleted $orgName/$templateRepo" -Severity "SUCCESS"
-                    } else {
-                        Write-Log "Could not delete $orgName/$templateRepo — check 'gh auth status' has delete_repo scope (gh auth refresh -s delete_repo)." -Severity "WARNING"
-                    }
+                    _ghDelete "$orgName/$templateRepo"
                 } else {
                     Write-Log "GitHub repo $orgName/$templateRepo not present (already deleted or never created)." -Severity "INFO"
                 }
             }
 
-            # 3. State RG (contains the backend SA). Re-discover in case
-            # terraform already nuked it.
-            $stateRgs = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name" -o tsv 2>$null
-            foreach ($rg in ($stateRgs -split "`n" | Where-Object { $_ })) {
-                Write-Log "Deleting state RG $rg ..." -Severity "WARNING"
-                az group delete -n $rg --subscription $subId --yes --no-wait -o none 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Log "Submitted delete for $rg (async)" -Severity "SUCCESS"
+            # 3. State RG — reuse the value we already discovered above. The SA
+            # naming prefix isn't guaranteed (service_name shortening, suffix
+            # randomisation), so re-querying with starts_with is fragile.
+            if (-not [string]::IsNullOrWhiteSpace($stateRg)) {
+                $exists = az group exists -n $stateRg --subscription $subId 2>$null
+                if ($exists -eq 'true') {
+                    Write-Log "Deleting state RG $stateRg ..." -Severity "WARNING"
+                    $rgDelOut = az group delete -n $stateRg --subscription $subId --yes --no-wait 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Submitted delete for $stateRg (async)" -Severity "SUCCESS"
+                    } else {
+                        Write-Log "Could not delete $stateRg : $(($rgDelOut | Out-String).Trim())" -Severity "ERROR"
+                    }
                 } else {
-                    Write-Log "Could not delete $rg." -Severity "WARNING"
+                    Write-Log "State RG $stateRg already gone." -Severity "INFO"
                 }
             }
 
-            # 4. Bootstrap identity RG (federated MIs for the GHA workflows)
-            $idRgs = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-') && contains(name,'-identity')].name" -o tsv 2>$null
-            foreach ($rg in ($idRgs -split "`n" | Where-Object { $_ })) {
-                Write-Log "Deleting identity RG $rg ..." -Severity "WARNING"
-                az group delete -n $rg --subscription $subId --yes --no-wait -o none 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Log "Submitted delete for $rg (async)" -Severity "SUCCESS"
-                } else {
-                    Write-Log "Could not delete $rg." -Severity "WARNING"
+            # 4. Bootstrap identity RG (federated MIs for the GHA workflows).
+            # Use -o json + ConvertFrom-Json so terminal-prompt noise from any
+            # shell tracing can never leak into the variable.
+            $idJson = az group list --subscription $subId -o json 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($idJson)) {
+                try {
+                    $idGroups = ($idJson | ConvertFrom-Json) | Where-Object {
+                        $_.name -like "rg-$svc-$workspaceName-*" -and $_.name -like "*identity*"
+                    } | Select-Object -ExpandProperty name
+                    foreach ($rg in @($idGroups)) {
+                        if ([string]::IsNullOrWhiteSpace($rg)) { continue }
+                        Write-Log "Deleting identity RG $rg ..." -Severity "WARNING"
+                        $rgDelOut = az group delete -n $rg --subscription $subId --yes --no-wait 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Log "Submitted delete for $rg (async)" -Severity "SUCCESS"
+                        } else {
+                            Write-Log "Could not delete $rg : $(($rgDelOut | Out-String).Trim())" -Severity "ERROR"
+                        }
+                    }
+                } catch {
+                    Write-Log "Could not parse az group list output: $($_.Exception.Message)" -Severity "WARNING"
                 }
             }
         } catch {
