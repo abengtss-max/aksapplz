@@ -3093,11 +3093,19 @@ terraform {
 "@
                 Set-Content -Path $backendTfPath -Value $backendTf -Encoding UTF8
                 Write-Log "Rewrote backend.tf -> $stateRg / $saName" -Severity "SUCCESS"
-                # Wipe cached .terraform so init picks up the new backend cleanly.
-                foreach ($p in @(".terraform",".terraform.lock.hcl")) {
-                    $full = Join-Path $BootstrapRoot $p
-                    if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
-                }
+            }
+
+            # ALWAYS wipe the .terraform cache + lock before init. Terraform's
+            # cached .terraform/terraform.tfstate records the previously-used
+            # backend; if it differs from backend.tf (or claims 'local'), init
+            # treats the run as a backend migration and tries to inspect BOTH
+            # the source and the destination — which produces the misleading
+            # "Error inspecting states in the \"local\" backend: listing blobs"
+            # 403 even when current backend.tf is correct. Wiping the cache
+            # makes -reconfigure truly idempotent.
+            foreach ($p in @(".terraform",".terraform.lock.hcl")) {
+                $full = Join-Path $BootstrapRoot $p
+                if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
             }
 
             # Always (idempotently) ensure the operator has Storage Blob Data
@@ -3161,8 +3169,8 @@ terraform {
                         Write-Log "Allowlisting operator IP $myIp on $saName..." -Severity "INFO"
                         az storage account network-rule add -n $saName --subscription $subId --ip-address $myIp -o none 2>&1 | Out-Null
                     }
-                    Write-Log "Waiting 30s for storage firewall propagation..." -Severity "INFO"
-                    Start-Sleep -Seconds 30
+                    Write-Log "Waiting 60s for storage firewall propagation..." -Severity "INFO"
+                    Start-Sleep -Seconds 60
                 } else {
                     Write-Log "Backend SA $saName already reachable from operator IP $myIp." -Severity "INFO"
                 }
