@@ -3075,8 +3075,15 @@ function Deploy-AKSLandingZone {
         }
 
         # Spoke / bootstrap destroy
+        $stateRg = $null
         Push-Location $BootstrapRoot
         try {
+          # Wrap the terraform-related work in a single-iteration loop so we can
+          # 'break' out to the cleanup phase (below the Push-Location) without
+          # returning from the whole function. Returning would skip the always-on
+          # GitHub repo + state RG cleanup, which the user expects to run even
+          # when the backend storage account is already gone from a prior run.
+          do {
             # Self-heal stale backend.tf: if the on-disk backend.tf references a
             # different env's storage account (or no backend.tf exists), rebuild
             # it from the actual state RG + storage account in Azure for the
@@ -3103,13 +3110,14 @@ function Deploy-AKSLandingZone {
             $subId   = [string]$config.bootstrap_subscription_id
             $stateRg = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name | [0]" -o tsv 2>$null
             if ([string]::IsNullOrWhiteSpace($stateRg)) {
-                Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found in subscription $subId. Nothing to destroy at the spoke layer." -Severity "WARNING"
-                return
+                Write-Log "No state RG matching 'rg-$svc-$workspaceName-state-*' found — backend storage is already gone. Skipping terraform destroy and falling through to direct GitHub/Azure cleanup." -Severity "WARNING"
+                $stateRg = $null
+                break
             }
             $saName = az storage account list -g $stateRg --subscription $subId --query "[0].name" -o tsv 2>$null
             if ([string]::IsNullOrWhiteSpace($saName)) {
-                Write-Log "State RG '$stateRg' exists but contains no storage account. Skipping spoke destroy." -Severity "WARNING"
-                return
+                Write-Log "State RG '$stateRg' exists but contains no storage account. Skipping terraform destroy and falling through to direct cleanup." -Severity "WARNING"
+                break
             }
 
             if ($needsRewrite) {
@@ -3224,7 +3232,7 @@ terraform {
                     & terraform @initArgs
                 }
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Log "bootstrap terraform init failed (backend may already be gone)." -Severity "ERROR"; return
+                    Write-Log "bootstrap terraform init failed (backend may already be gone) — falling through to direct cleanup." -Severity "WARNING"; break
                 }
             }
 
@@ -3236,7 +3244,7 @@ terraform {
                 $repoFilesForDestroy = Get-RepositoryFilesMap -Config $config
                 $null = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFilesForDestroy
             } catch {
-                Write-Log "Could not render tfvars before destroy: $($_.Exception.Message)" -Severity "ERROR"; return
+                Write-Log "Could not render tfvars before destroy: $($_.Exception.Message) — falling through to direct cleanup." -Severity "WARNING"; break
             }
 
             # Resolve which workspace actually has state. Apply may have run
@@ -3303,6 +3311,7 @@ terraform {
                     Write-Log "Bootstrap composition destroyed." -Severity "SUCCESS"
                 }
             }
+          } while ($false)
         }
         finally { Pop-Location }
 
