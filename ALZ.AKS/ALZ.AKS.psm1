@@ -3416,15 +3416,41 @@ terraform {
             # that terraform destroy didn't clean up (e.g. backend was already
             # gone). Match anything prefixed rg-<svc>-<env>-*. Use -o json so
             # shell-prompt noise can't leak into the variable.
+            #
+            # BEFORE deleting RGs we harvest principalIds of any user-assigned
+            # managed identities inside them. Subscription-scope role
+            # assignments (Contributor on AKS LZ sub, Network Contributor on
+            # connectivity sub) live outside the RG and would otherwise linger
+            # as ghosts ("Identity not found") after the RG is gone.
+            $orphanPrincipalIds = @()
             $idJson = az group list --subscription $subId -o json 2>$null
             if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($idJson)) {
                 try {
                     $leftoverRgs = ($idJson | ConvertFrom-Json) | Where-Object {
                         $_.name -like "rg-$svc-$workspaceName-*"
                     } | Select-Object -ExpandProperty name
+
+                    # Harvest MI principalIds first.
                     foreach ($rg in @($leftoverRgs)) {
                         if ([string]::IsNullOrWhiteSpace($rg)) { continue }
-                        # Skip the state RG — already handled above.
+                        if ($rg -eq $stateRg) { continue }
+                        $miJson = az identity list -g $rg --subscription $subId -o json 2>$null
+                        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($miJson)) {
+                            try {
+                                $mis = $miJson | ConvertFrom-Json
+                                foreach ($mi in @($mis)) {
+                                    if ($mi.principalId) {
+                                        $orphanPrincipalIds += [string]$mi.principalId
+                                        Write-Log "Captured principalId $($mi.principalId) for MI $($mi.name) in $rg" -Severity "INFO"
+                                    }
+                                }
+                            } catch { }
+                        }
+                    }
+
+                    # Now delete the RGs.
+                    foreach ($rg in @($leftoverRgs)) {
+                        if ([string]::IsNullOrWhiteSpace($rg)) { continue }
                         if ($rg -eq $stateRg) { continue }
                         Write-Log "Deleting leftover RG $rg ..." -Severity "WARNING"
                         $rgDelOut = az group delete -n $rg --subscription $subId --yes --no-wait 2>&1
@@ -3436,6 +3462,35 @@ terraform {
                     }
                 } catch {
                     Write-Log "Could not parse az group list output: $($_.Exception.Message)" -Severity "WARNING"
+                }
+            }
+
+            # 5. Orphan role assignments for the harvested MI principalIds
+            # across every subscription the bootstrap could have touched.
+            $orphanPrincipalIds = $orphanPrincipalIds | Select-Object -Unique
+            if ($orphanPrincipalIds.Count -gt 0) {
+                $subsToScrub = @()
+                $subsToScrub += [string]$config.bootstrap_subscription_id
+                if ($config.aks_landing_zone_subscription_id) { $subsToScrub += [string]$config.aks_landing_zone_subscription_id }
+                if ($config.connectivity_subscription_id)     { $subsToScrub += [string]$config.connectivity_subscription_id }
+                $subsToScrub = $subsToScrub | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+                foreach ($principalId in $orphanPrincipalIds) {
+                    foreach ($s in $subsToScrub) {
+                        Write-Log "Removing role assignments for principal $principalId in subscription $s ..." -Severity "WARNING"
+                        $raOut = az role assignment delete --assignee $principalId --subscription $s 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Log "Removed role assignments for $principalId in $s" -Severity "SUCCESS"
+                        } else {
+                            $msg = ($raOut | Out-String).Trim()
+                            # 'No matching role assignments' is fine.
+                            if ($msg -match 'No matching role assignments') {
+                                Write-Log "No role assignments for $principalId in $s" -Severity "INFO"
+                            } else {
+                                Write-Log "Could not remove role assignments for $principalId in $s : $msg" -Severity "ERROR"
+                            }
+                        }
+                    }
                 }
             }
         } catch {
