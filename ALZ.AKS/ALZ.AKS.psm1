@@ -608,9 +608,13 @@ function Get-InteractiveInputs {
     Write-Host ""
     }
 
-    # ── Decision 5: Spoke Networking ──
+    # ── Decision 5: AKS VNet Networking ──
     Write-Log "spoke_vnet_address_space" -Severity "INPUT REQUIRED"
-    Write-Host "Address space for the spoke VNet. Must not overlap with hub or other spokes."
+    if ($config.topology -eq 'standalone') {
+        Write-Host "Address space for the AKS VNet (standalone — no hub/peering). Pick a range that won't clash with anything you may peer to later."
+    } else {
+        Write-Host "Address space for the spoke VNet. Must not overlap with hub or other spokes."
+    }
     Write-Host "https://github.com/aksapplz/docs/planning#decision-5"
     Write-Host "Default: 10.10.0.0/16"
     Write-Host "Required: Yes"
