@@ -3412,18 +3412,21 @@ terraform {
                 }
             }
 
-            # 4. Bootstrap identity RG (federated MIs for the GHA workflows).
-            # Use -o json + ConvertFrom-Json so terminal-prompt noise from any
-            # shell tracing can never leak into the variable.
+            # 4. Any leftover workload RGs (identity, net, agents, aks, etc.)
+            # that terraform destroy didn't clean up (e.g. backend was already
+            # gone). Match anything prefixed rg-<svc>-<env>-*. Use -o json so
+            # shell-prompt noise can't leak into the variable.
             $idJson = az group list --subscription $subId -o json 2>$null
             if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($idJson)) {
                 try {
-                    $idGroups = ($idJson | ConvertFrom-Json) | Where-Object {
-                        $_.name -like "rg-$svc-$workspaceName-*" -and $_.name -like "*identity*"
+                    $leftoverRgs = ($idJson | ConvertFrom-Json) | Where-Object {
+                        $_.name -like "rg-$svc-$workspaceName-*"
                     } | Select-Object -ExpandProperty name
-                    foreach ($rg in @($idGroups)) {
+                    foreach ($rg in @($leftoverRgs)) {
                         if ([string]::IsNullOrWhiteSpace($rg)) { continue }
-                        Write-Log "Deleting identity RG $rg ..." -Severity "WARNING"
+                        # Skip the state RG — already handled above.
+                        if ($rg -eq $stateRg) { continue }
+                        Write-Log "Deleting leftover RG $rg ..." -Severity "WARNING"
                         $rgDelOut = az group delete -n $rg --subscription $subId --yes --no-wait 2>&1
                         if ($LASTEXITCODE -eq 0) {
                             Write-Log "Submitted delete for $rg (async)" -Severity "SUCCESS"
