@@ -3135,6 +3135,41 @@ terraform {
                 Write-Log "Could not resolve signed-in user object id; skipping RBAC self-heal (terraform init may fail with 403)." -Severity "WARNING"
             }
 
+            # Always (idempotently) ensure the backend SA is reachable from the
+            # operator's public IP. By default the Secure-Baseline-compliant SA
+            # has publicNetworkAccess=Disabled and/or defaultAction=Deny, which
+            # makes terraform's listBlobs call fail with the same 403/Authorization
+            # Failure even when RBAC is correct. Open public access + allowlist
+            # the operator's IP. (The SA is destroyed at the end of this run, so
+            # no revert is needed.)
+            try {
+                $saNet = az storage account show -n $saName --subscription $subId `
+                    --query "{public:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction, ipRules:networkRuleSet.ipRules[].ipAddressOrRange}" -o json 2>$null | ConvertFrom-Json
+                $myIp = $null
+                try { $myIp = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 10) } catch { }
+                if (-not $myIp) {
+                    try { $myIp = (Invoke-RestMethod -Uri 'https://ifconfig.me/ip' -TimeoutSec 10) } catch { }
+                }
+                $needsOpen = ($saNet.public -ne 'Enabled')
+                $needsIp   = $myIp -and (-not ($saNet.ipRules -contains $myIp))
+                if ($needsOpen -or $needsIp) {
+                    if ($needsOpen) {
+                        Write-Log "Backend SA $saName has publicNetworkAccess='$($saNet.public)' — temporarily enabling for destroy (SA will be deleted by terraform destroy)." -Severity "WARNING"
+                        az storage account update -n $saName --subscription $subId --public-network-access Enabled --default-action Deny -o none 2>&1 | Out-Null
+                    }
+                    if ($needsIp) {
+                        Write-Log "Allowlisting operator IP $myIp on $saName..." -Severity "INFO"
+                        az storage account network-rule add -n $saName --subscription $subId --ip-address $myIp -o none 2>&1 | Out-Null
+                    }
+                    Write-Log "Waiting 30s for storage firewall propagation..." -Severity "INFO"
+                    Start-Sleep -Seconds 30
+                } else {
+                    Write-Log "Backend SA $saName already reachable from operator IP $myIp." -Severity "INFO"
+                }
+            } catch {
+                Write-Log "Could not adjust backend SA network rules: $($_.Exception.Message). terraform init may fail with 403." -Severity "WARNING"
+            }
+
             Write-Log "Initialising bootstrap composition (reconfigure against existing azurerm backend)..." -Severity "INFO"
             $initArgs = @('init','-input=false','-reconfigure')
             & terraform @initArgs
