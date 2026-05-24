@@ -47,15 +47,30 @@ function Show-Banner {
     param([string]$Action = 'apply')
     # Destroy gets a red, scary banner; everything else stays cyan/info.
     if ($Action -eq 'destroy') {
+        # Helper: print a row with red border and white body so the warning
+        # text is legible while the box itself still screams "destructive".
+        function _row($body) {
+            Write-Host "  ║ " -ForegroundColor Red -NoNewline
+            Write-Host ($body.PadRight(60)) -ForegroundColor White -NoNewline
+            Write-Host " ║" -ForegroundColor Red
+        }
         Write-Host ""
         Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-        Write-Host "  ║   !!  AKS Application Landing Zone — TEARDOWN  !!          ║" -ForegroundColor Red
-        Write-Host "  ║                    v$script:ScriptVersion                              ║" -ForegroundColor Red
-        Write-Host "  ║                                                            ║" -ForegroundColor Red
-        Write-Host "  ║  DESTRUCTIVE: deletes the bootstrap RG, state storage      ║" -ForegroundColor Red
-        Write-Host "  ║  account, generated GitHub workload repo, and federated    ║" -ForegroundColor Red
-        Write-Host "  ║  identities. AKS / spoke VNet / App Gateway must already   ║" -ForegroundColor Red
-        Write-Host "  ║  be torn down by the workload repo's CD pipeline.          ║" -ForegroundColor Red
+        Write-Host "  ║ " -ForegroundColor Red -NoNewline
+        Write-Host ("  /!\  AKS Application Landing Zone — TEARDOWN  /!\".PadRight(60)) -ForegroundColor Yellow -NoNewline
+        Write-Host " ║" -ForegroundColor Red
+        Write-Host "  ║ " -ForegroundColor Red -NoNewline
+        Write-Host (("                  v$script:ScriptVersion").PadRight(60)) -ForegroundColor White -NoNewline
+        Write-Host " ║" -ForegroundColor Red
+        _row ""
+        _row " [!] DESTRUCTIVE ACTION — this will permanently delete:"
+        _row "     - the bootstrap resource group"
+        _row "     - the Terraform state storage account"
+        _row "     - the generated GitHub workload repository"
+        _row "     - the federated workload identities"
+        _row ""
+        _row " [i] AKS / spoke VNet / App Gateway must already be torn"
+        _row "     down by the workload repo's CD pipeline first."
         Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Red
         Write-Host ""
     } else {
