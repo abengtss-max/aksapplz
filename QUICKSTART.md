@@ -2,9 +2,14 @@
 
 **Goal:** deploy a production-ready AKS cluster on Azure in under an hour.
 
-This guide covers the two **GA-supported** paths:
-- **Standalone** — fastest, no Azure hub required (good for dev/test, PoCs, isolated subscriptions).
-- **Hub-and-spoke** — the accelerator creates a hub VNet + Azure Firewall, then the AKS spoke peered to it (good for production / enterprise).
+Two ways to drive the cmdlet:
+
+- **Interactive wizard (recommended for first run)** — run the cmdlet with no arguments and it walks you through every decision, writes the config file for you, and starts the deploy.
+- **Advanced / non-interactive** — pre-fill a YAML file and pass it via `-InputConfigPath` (good for CI, repeat deploys, or when you already know your values).
+
+The two GA-supported topologies are:
+- **Standalone** — fastest, no Azure hub VNet required (dev/test, PoCs, isolated subs).
+- **Hub-and-spoke** — the accelerator creates a hub VNet + Azure Firewall, then the AKS spoke peered to it (enterprise / prod).
 
 Everything else (regulated topologies, multi-region hub-and-spoke) is tech preview — see [ADVANCED.md](ADVANCED.md).
 
@@ -40,7 +45,7 @@ You need a GitHub **organization** (personal accounts are not supported). On htt
 | Landing-zone PAT | `repo`, `admin:org` (Members R/W), `workflow` | Always |
 | Runners PAT | `admin:org` Full | Only if you want self-hosted runners |
 
-Set them as environment variables (never commit them):
+Export them as environment variables (the wizard warns if missing):
 
 ```powershell
 $env:TF_VAR_github_personal_access_token         = 'github_pat_...'
@@ -53,92 +58,105 @@ $env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'  # optional
 git clone https://github.com/abengtss-max/aksapplz.git
 cd aksapplz
 Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force
+(Get-Module ALZ.AKS).Version    # should print 1.4.0
 ```
 
-Verify:
+---
+
+## Path A — Interactive wizard (recommended)
+
+Just run the cmdlet with **no** `-InputConfigPath`:
 
 ```powershell
-(Get-Module ALZ.AKS).Version   # should print 1.4.0
+Deploy-AKSLandingZone
+```
+
+The wizard walks you through, in order:
+
+1. **Scenario** — `single_region_baseline` (GA) or `multi_region_baseline` (GA for standalone only).
+2. **Bootstrap location** — any Azure region, picked from a numbered list (e.g. `swedencentral`).
+3. **Bootstrap subscription** — from a numbered list of your `az account list` subs.
+4. **Topology** — `standalone` or `hub_and_spoke`.
+5. **(hub_and_spoke only)** Connectivity subscription, hub VNet address space, Azure Firewall deploy + SKU (Standard/Premium).
+6. **AKS landing-zone subscription** — where the workload + AKS go.
+7. **service_name** — 3–10 lowercase chars (used in resource names; e.g. `aksapplz`).
+8. **environment_name** — ≤8 lowercase alphanumeric chars (e.g. `dev01`).
+9. **GitHub organization, approvers, AKS admin Entra group object id(s).**
+
+When the wizard finishes it:
+- Writes `config/inputs.<env>.yaml` — keep this file; future re-runs read from it.
+- Writes `config/aks-landing-zone.<env>.tfvars`.
+- Asks for one final confirmation, then runs `terraform init` → `plan` → `apply`.
+
+End-to-end timing:
+- ~10–15 min for bootstrap (state SA, identities, federated creds, workload GitHub repo).
+- ~25–40 min for AKS once you approve the workload repo's `apply` environment in GitHub Actions.
+
+**Re-run later** — every subsequent run is non-interactive:
+
+```powershell
+Deploy-AKSLandingZone -Environment dev01 -AutoApprove
+# equivalent to:
+# Deploy-AKSLandingZone -InputConfigPath .\config\inputs.dev01.yaml -AutoApprove
+```
+
+**Tear it all down:**
+
+```powershell
+Deploy-AKSLandingZone -Environment dev01 -Action destroy -AutoApprove
 ```
 
 ---
 
-## Path A — Standalone (single region, ~40 min)
+## Path B — Non-interactive (advanced)
 
-Best when you do **not** have an existing Azure hub VNet and want the simplest deploy.
+Skip the wizard when you already have an `inputs.yaml`. Templates are in [config/](config/) and [ALZ.AKS/templates/config/inputs.yaml](ALZ.AKS/templates/config/inputs.yaml).
 
-1. Open [config/inputs.s1-stdaln.yaml](config/inputs.s1-stdaln.yaml) (or copy it to `config/inputs.my-env.yaml`) and edit the values you need to change:
+### Standalone (~40 min)
 
-   ```yaml
-   service_name: aksapplz            # 3–10 lowercase chars (used in resource names)
-   environment_name: dev01           # ≤8 lowercase alphanumeric chars
-   bootstrap_location: swedencentral # any Azure region
-   aks_landing_zone_subscription_id: <your-sub-id>
-   bootstrap_subscription_id: <your-sub-id>
-   github_organization_name: <your-gh-org>
-   apply_approvers: ['your-gh-username']
-   aks_admin_group_object_ids: ['<entra-group-objectid>']  # Entra group that gets AKS cluster-admin
-   ```
+Copy a template to `config/inputs.my-env.yaml` and edit:
 
-2. Run the deploy:
+```yaml
+service_name: aksapplz            # 3–10 lowercase chars
+environment_name: dev01           # ≤8 lowercase alphanumeric chars
+bootstrap_location: swedencentral
+topology: standalone
+aks_landing_zone_subscription_id: <your-sub-id>
+bootstrap_subscription_id: <your-sub-id>
+github_organization_name: <your-gh-org>
+apply_approvers: ['your-gh-username']
+aks_admin_group_object_ids: ['<entra-group-objectid>']
+```
 
-   ```powershell
-   Deploy-AKSLandingZone -InputConfigPath .\config\inputs.s1-stdaln.yaml -AutoApprove
-   ```
+Deploy:
 
-3. What happens (~10–15 min for bootstrap):
-   - Creates 2 Azure resource groups (state + identity).
-   - Creates a GitHub repo `<service_name>-<env>-aks-landing-zone` with all the AKS Terraform code wired to OIDC.
-   - Triggers the workload repo's GitHub Actions workflow.
+```powershell
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.my-env.yaml -AutoApprove
+```
 
-4. Open the workload repo URL printed at the end. The `cd.yaml` workflow runs `plan` → waits for approval → `apply`. Approve the `apply` environment and AKS provisions in ~25–40 min.
+### Hub-and-spoke (~50 min)
 
-5. **To tear it all down:**
+```yaml
+service_name: aksapplz
+environment_name: hub01
+topology: hub_and_spoke           # ← key difference
+bootstrap_location: swedencentral
+connectivity_subscription_id: <your-sub-id>  # where the hub goes
+aks_landing_zone_subscription_id: <your-sub-id>
+bootstrap_subscription_id: <your-sub-id>
+hub_vnet_address_space: ['10.0.0.0/16']
+hub_deploy_firewall: true
+hub_firewall_sku_tier: Standard   # Standard or Premium (Basic not supported)
+github_organization_name: <your-gh-org>
+apply_approvers: ['your-gh-username']
+aks_admin_group_object_ids: ['<entra-group-objectid>']
+```
 
-   ```powershell
-   Deploy-AKSLandingZone -InputConfigPath .\config\inputs.s1-stdaln.yaml -Action destroy -AutoApprove
-   ```
+```powershell
+Deploy-AKSLandingZone -InputConfigPath .\config\inputs.my-env.yaml -AutoApprove
+```
 
----
-
-## Path B — Hub-and-spoke (single region, ~50 min)
-
-Best when you want enterprise-grade networking: a hub VNet with Azure Firewall, with the AKS spoke peered to it. The accelerator creates **both** the hub and the spoke for you.
-
-1. Copy [config/inputs.s2-hub.yaml](config/inputs.s2-hub.yaml) to `config/inputs.my-env.yaml` and edit:
-
-   ```yaml
-   service_name: aksapplz
-   environment_name: hub01           # ≤8 lowercase alphanumeric chars
-   topology: hub_and_spoke           # ← key difference vs standalone
-   bootstrap_location: swedencentral
-   connectivity_subscription_id: <your-sub-id>  # where the hub goes
-   aks_landing_zone_subscription_id: <your-sub-id>
-   bootstrap_subscription_id: <your-sub-id>
-   hub_vnet_address_space: ['10.0.0.0/16']
-   hub_deploy_firewall: true
-   hub_firewall_sku_tier: Standard   # Standard or Premium (Basic not supported)
-   github_organization_name: <your-gh-org>
-   apply_approvers: ['your-gh-username']
-   aks_admin_group_object_ids: ['<entra-group-objectid>']
-   ```
-
-2. Deploy:
-
-   ```powershell
-   Deploy-AKSLandingZone -InputConfigPath .\config\inputs.my-env.yaml -AutoApprove
-   ```
-
-3. What happens:
-   - **First**, the cmdlet creates the **hub composition** (~5 min): hub VNet, Azure Firewall, public IP, route table.
-   - **Then**, the workload (spoke) composition runs: spoke VNet, peering to hub, UDR routing egress through the firewall, identity + state RGs, workload GitHub repo.
-   - Approve the `apply` environment in GitHub to deploy the AKS cluster (~25–40 min).
-
-4. **To tear it all down (spoke first, then hub):**
-
-   ```powershell
-   Deploy-AKSLandingZone -InputConfigPath .\config\inputs.my-env.yaml -Action destroy -AutoApprove
-   ```
+The cmdlet creates the **hub composition first** (~5 min: hub VNet, Azure Firewall, public IP, route table), then the spoke + workload repo. Approve the `apply` environment in GitHub Actions to provision AKS (~25–40 min).
 
 ---
 
@@ -161,16 +179,16 @@ Best when you want enterprise-grade networking: a hub VNet with Azure Firewall, 
 
 ## Re-running the same environment
 
-The cmdlet is idempotent. Re-run the same command to pick up config changes (e.g. flipping a feature flag in `inputs.yaml`):
+The cmdlet is idempotent. Re-run to pick up config changes (e.g. flipping a feature flag in `inputs.yaml`):
 
 ```powershell
-Deploy-AKSLandingZone -InputConfigPath .\config\inputs.my-env.yaml -AutoApprove
+Deploy-AKSLandingZone -Environment dev01 -AutoApprove
 ```
 
-If you want to preview what would change **without** touching anything:
+Preview what would change without touching anything:
 
 ```powershell
-Deploy-AKSLandingZone -InputConfigPath .\config\inputs.my-env.yaml -DryRun
+Deploy-AKSLandingZone -Environment dev01 -DryRun
 ```
 
 For details on the drift / hand-edit safety contract, see [ADVANCED.md → Re-run contract](ADVANCED.md#re-run-contract).
@@ -182,6 +200,7 @@ For details on the drift / hand-edit safety contract, see [ADVANCED.md → Re-ru
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `Get-Module ALZ.AKS` returns nothing | Module not imported | `Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force` |
+| Wizard warns `TF_VAR_github_personal_access_token is not set` | PAT env var missing | Set both PAT env vars (prereq step 3) and re-run |
 | `terraform: command not found` | Terraform not on `PATH` | Reinstall or restart shell |
 | `az login` succeeds but cmdlet says wrong sub | Default subscription is wrong | `az account set --subscription <id>` |
 | `Name must be unique for this org` (GitHub team error) | Leftover team from a previous attempt | `gh api -X DELETE orgs/<org>/teams/<service>-<env>-approvers` |
