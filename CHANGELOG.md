@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-24
+
+GA release. Builds on rc5 with three fixes from live E2E validation and
+ships standalone (single + multi-region) and hub-and-spoke (single region)
+as supported topologies. Regulated and multi-region hub-and-spoke remain
+tech preview — see `KNOWN-ISSUES.md`.
+
+### Fixed
+- **BUG-B (data loss, hub-and-spoke)** — `Deploy-AKSLandingZone -Action refresh`
+  on a `hub_and_spoke` deployment no longer pushes a tfvars file with empty
+  `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`,
+  and `hub_firewall_private_ip` values. The refresh path now initialises the
+  hub composition workspace and reads its outputs before re-rendering the
+  workload tfvars, exactly as the apply path does. Eliminates the
+  apply↔refresh content ping-pong of `terraform/aks-landing-zone.auto.tfvars`.
+- **BUG-E (silent drift-bypass)** — `Get-WorkloadRepoFileContent` now
+  distinguishes a 404 from an empty file (`size: 0`). An empty managed file
+  that the operator hand-edited is classified as `[hand-edited]` instead of
+  `[add]`, which routes it through the hand-edit safety gate.
+- **BUG-F (refresh drift gate)** — resolved as a side effect of BUG-E. With
+  empty hand-edited files correctly classified as `hand-edited`, the existing
+  drift gate in the refresh path blocks the run and prints the affected
+  filenames unless `-Force` is supplied.
+
+### Validation
+- S1 (single_region_baseline / standalone) — 8/8 gates pass.
+- S2 (single_region_baseline / hub_and_spoke) — 8/8 gates pass post-fix.
+- S2.5 (multi_region_baseline / standalone) — 8/8 gates pass.
+
+### Known limitations (deferred to v1.4.1+)
+- Multi-region hub-and-spoke (S4) — tech preview only. Not in GA validation
+  matrix for v1.4.0.
+- Regulated scenarios (S3, S5) — blocked by BUG-D (private-endpoint state
+  storage account not reachable from operator workstation). Tech preview.
+
 ## [1.4.0-rc5] - 2026-05-23
 
 ### Added

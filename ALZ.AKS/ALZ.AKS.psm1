@@ -2525,7 +2525,12 @@ function Get-WorkloadRepoFileContent {
         [Parameter(Mandatory)][string]$Path
     )
     $b64 = & gh api "repos/$Owner/$Repo/contents/$Path" --jq '.content' 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($b64)) { return $null }
+    if ($LASTEXITCODE -ne 0) { return $null }
+    # File exists but is empty (e.g. operator truncated `.gitignore` to 0 bytes).
+    # gh prints an empty string for `.content` in that case — return "" so the
+    # caller can distinguish "absent" ($null → classified as add) from "present
+    # but empty" ("" → classified as hand-edited when state has content).
+    if ([string]::IsNullOrWhiteSpace($b64)) { return "" }
     try {
         # The GitHub contents API returns base64 with newlines every 60 chars.
         $clean = ($b64 -join '') -replace "`r", '' -replace "`n", '' -replace ' ', ''
@@ -3411,6 +3416,42 @@ terraform {
 
                 # Render templates + tfvars (must come before init: tfvars are evaluated).
                 Write-Log "Re-rendering managed files from templates..." -Severity "INFO"
+                # BUG-B fix: for hub_and_spoke topology, read the existing hub
+                # composition outputs and populate $config.hub_* BEFORE rendering.
+                # Without this the rendered aks-landing-zone.auto.tfvars contains
+                # empty strings for hub_vnet_resource_id / hub_vnet_name /
+                # hub_vnet_resource_group_name / hub_firewall_private_ip — the
+                # subsequent targeted apply would silently push the broken file
+                # to the workload repo and break spoke peering.
+                if ($config.topology -eq 'hub_and_spoke') {
+                    $repoRootForHub = Split-Path -Parent $script:ModuleRoot
+                    $hubRoot        = Join-Path $repoRootForHub "bootstrap/alz/hub"
+                    if (!(Test-Path $hubRoot)) {
+                        Write-Log "Hub composition not found at $hubRoot — cannot resolve hub_* outputs for refresh." -Severity "ERROR"; return
+                    }
+                    Push-Location $hubRoot
+                    try {
+                        Write-Log "Reading hub composition outputs for hub_and_spoke refresh..." -Severity "INFO"
+                        & terraform @('init','-input=false','-upgrade') | Out-Null
+                        if ($LASTEXITCODE -ne 0) { Write-Log "Hub terraform init failed during refresh." -Severity "ERROR"; return }
+                        $hubWs = $workspaceName
+                        & terraform workspace select $hubWs 2>$null
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Log "Hub workspace '$hubWs' not found — refresh requires the hub composition to have been previously applied." -Severity "ERROR"; return
+                        }
+                        $hubOutRaw = (& terraform output -json) | Out-String
+                        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($hubOutRaw)) {
+                            Write-Log "Hub terraform output returned no data — hub state appears empty." -Severity "ERROR"; return
+                        }
+                        $hubOut = $hubOutRaw | ConvertFrom-Json
+                        $config.hub_vnet_resource_id         = [string]$hubOut.hub_vnet_resource_id.value
+                        $config.hub_vnet_name                = [string]$hubOut.hub_vnet_name.value
+                        $config.hub_vnet_resource_group_name = [string]$hubOut.hub_vnet_resource_group_name.value
+                        $config.hub_firewall_private_ip      = [string]$hubOut.hub_firewall_private_ip.value
+                        Write-Log "Hub outputs loaded: vnet=$($config.hub_vnet_name), fw_ip=$($config.hub_firewall_private_ip)" -Severity "SUCCESS"
+                    }
+                    finally { Pop-Location }
+                }
                 $repoFiles = Get-RepositoryFilesMap -Config $config
                 $null      = New-TerraformTfvarsJson -Config $config -BootstrapRoot $BootstrapRoot -RepositoryFiles $repoFiles
                 Write-Log "Rendered $($repoFiles.Keys.Count) managed files." -Severity "SUCCESS"
@@ -3626,21 +3667,12 @@ terraform {
             }
         }
 
-        if ($PlanOnly) {
-            Write-Log "Running terraform plan (-PlanOnly mode)..." -Severity "INFO"
-            $planArgs = @('plan','-input=false','-out=bootstrap.tfplan')
-            & terraform @planArgs
-            if ($LASTEXITCODE -ne 0) { Write-Log "terraform plan failed." -Severity "ERROR"; return }
-            Write-Log "Plan saved to bootstrap.tfplan. Exiting (PlanOnly)." -Severity "SUCCESS"
-            return
-        }
-
         # ── Re-run contract: drift report + hand-edit safety check (v1.4.0-rc5) ──
-        # Only meaningful on apply against an already-applied env (terraform show
-        # returns state; gh api returns repo content). For a greenfield apply the
-        # state map is empty and every managed file shows as 'add' — that's fine.
+        # Run BEFORE the plan/apply split so `Action plan` (DryRun) shows the same
+        # render-vs-repo-vs-state table that operators rely on for Gate-2/4/7 checks.
         $hadGhTokenApply = $env:GH_TOKEN
         if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) { $env:GH_TOKEN = $env:TF_VAR_github_personal_access_token }
+        $blockedByHandEdit = $false
         try {
             $orgNameApply  = [string]$config.github_organization_name
             $repoNameApply = "$([string]$config.service_name)-$workspaceName"
@@ -3655,19 +3687,29 @@ terraform {
                     Write-Log "$($handEditsApply.Count) managed file(s) in $orgNameApply/$repoNameApply have been hand-edited and no longer match terraform state." -Severity "ERROR"
                     Write-Log "These files: $($handEditsApply.Path -join ', ')" -Severity "ERROR"
                     Write-Log "Re-run with -Force to OVERWRITE the operator edits, OR move the edits into the template tree under ALZ.AKS/templates/ and re-run without -Force." -Severity "INFO"
-                    return
+                    $blockedByHandEdit = $true
                 }
             } else {
                 Write-Log "No prior state for this env — first apply. Skipping drift report (every managed file is an add)." -Severity "INFO"
             }
-
-            if ($DryRun) {
-                Write-Log "DryRun: exiting before terraform apply." -Severity "INFO"
-                return
-            }
         }
         finally {
             if ([string]::IsNullOrWhiteSpace($hadGhTokenApply)) { Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue }
+        }
+        if ($blockedByHandEdit) { return }
+
+        if ($PlanOnly -or $Action -eq 'plan') {
+            Write-Log "Running terraform plan (-PlanOnly mode)..." -Severity "INFO"
+            $planArgs = @('plan','-input=false','-out=bootstrap.tfplan')
+            & terraform @planArgs
+            if ($LASTEXITCODE -ne 0) { Write-Log "terraform plan failed." -Severity "ERROR"; return }
+            Write-Log "Plan saved to bootstrap.tfplan. Exiting (PlanOnly)." -Severity "SUCCESS"
+            return
+        }
+
+        if ($DryRun) {
+            Write-Log "DryRun: exiting before terraform apply." -Severity "INFO"
+            return
         }
 
         $applyArgs = @('apply','-input=false')
