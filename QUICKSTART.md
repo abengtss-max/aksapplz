@@ -47,20 +47,60 @@ az account set --subscription <your-subscription-id>
 
 The cmdlet creates resource groups, managed identities, and role assignments — **Owner** on the target subscription is required.
 
-### Create two GitHub PATs
+### Create two fine-grained GitHub PATs
 
-You need a GitHub **organization** (personal accounts aren't supported). Create the PATs at <https://github.com/settings/personal-access-tokens/new>:
+You need a GitHub **organization** account — personal accounts aren't supported (the accelerator requires features only available to orgs). Create a free org [here](https://github.com/organizations/plan) if you don't have one.
 
-| PAT | Scopes | Required? |
-|---|---|---|
-| Landing-zone | `repo`, `admin:org` (Members R/W), `workflow` | Always |
-| Runners | `admin:org` Full | Only for self-hosted runners |
+> ⚠️ On a **Free** GitHub org plan, the accelerator must create **public** repositories. Use a paid plan (Team / Enterprise) for production.
 
-Set them as environment variables:
+Create the PATs at <https://github.com/settings/personal-access-tokens/new> (**not** the classic tokens page).
+
+#### Token 1 — Landing-zone PAT (always required)
+
+| Field | Value |
+|---|---|
+| **Token name** | `aks-landing-zone` |
+| **Resource owner** | *(select your organization from the dropdown)* |
+| **Expiration** | Custom → a date that fits your policy (tomorrow is fine for a one-off bootstrap) |
+| **Repository access** | **All repositories** |
+
+**Repository permissions** — set each of these to **Read and write**:
+
+- Actions
+- Administration
+- Contents
+- Environments
+- Secrets
+- Variables
+- Workflows
+
+**Organization permissions** — set to **Read and write**:
+
+- Members
+- Self-hosted runners *(only if you'll use org-level runner groups)*
+
+Click **Generate token**, copy it, and export it:
 
 ```powershell
-$env:TF_VAR_github_personal_access_token         = 'github_pat_...'
-$env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'   # optional
+$env:TF_VAR_github_personal_access_token = 'github_pat_...'
+```
+
+#### Token 2 — Runners PAT (only for self-hosted runners)
+
+Skip this if you're using GitHub-hosted runners (default).
+
+| Field | Value |
+|---|---|
+| **Token name** | `aks-landing-zone-runners` |
+| **Resource owner** | *(your organization)* |
+| **Expiration** | No expiration *(or set a policy and plan renewal)* |
+| **Repository access** | **All repositories** *(you can narrow this post-bootstrap to just the runner repo)* |
+
+**Repository permissions** (Read and write): `Administration`.
+**Organization permissions** (Read and write): `Self-hosted runners` *(only for org-level runner groups)*.
+
+```powershell
+$env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'
 ```
 
 ### Clone and import the module
