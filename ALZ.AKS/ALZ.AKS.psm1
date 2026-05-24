@@ -3376,6 +3376,22 @@ terraform {
                 } else {
                     Write-Log "GitHub repo $orgName/$templateRepo not present (already deleted or never created)." -Severity "INFO"
                 }
+
+                # 2b. Approvers team (e.g. aliapplz-prod-approvers). Naming
+                # mirrors Get-ResourceNames -> TeamName = "$svc-$env-approvers".
+                $teamSlug = "$svc-$workspaceName-approvers"
+                $teamCheck = gh api "orgs/$orgName/teams/$teamSlug" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Deleting GitHub team $orgName/$teamSlug ..." -Severity "WARNING"
+                    $teamDelOut = gh api -X DELETE "orgs/$orgName/teams/$teamSlug" 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Deleted team $orgName/$teamSlug" -Severity "SUCCESS"
+                    } else {
+                        Write-Log "gh team delete $orgName/$teamSlug failed: $(($teamDelOut | Out-String).Trim())" -Severity "ERROR"
+                    }
+                } else {
+                    Write-Log "GitHub team $orgName/$teamSlug not present (already deleted or never created)." -Severity "INFO"
+                }
             }
 
             # 3. State RG — reuse the value we already discovered above. The SA
