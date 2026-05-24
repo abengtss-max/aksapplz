@@ -2858,6 +2858,24 @@ function Deploy-AKSLandingZone {
         Write-Host ""
 
         if (-not $AutoApprove -and -not $PlanOnly) {
+            # Offer to open the generated files for review before bootstrap kicks off.
+            $codeCmd = Get-Command code -ErrorAction SilentlyContinue
+            if ($codeCmd) {
+                Write-Log "Open generated config in VS Code to review before deploy?" -Severity "INPUT REQUIRED"
+                Write-Host "  Files: $InputConfigPath"
+                Write-Host "         $tfvarsPath"
+                $openIt = Read-Host "Open in VS Code? (y/N)"
+                if ($openIt -eq 'y' -or $openIt -eq 'yes') {
+                    & code $InputConfigPath $tfvarsPath | Out-Null
+                    Write-Log "Opened in VS Code. Save your edits, then return here to continue." -Severity "INFO"
+                }
+            } else {
+                Write-Host "Tip: review the generated files before continuing:" -ForegroundColor DarkGray
+                Write-Host "  $InputConfigPath" -ForegroundColor DarkGray
+                Write-Host "  $tfvarsPath" -ForegroundColor DarkGray
+            }
+            Write-Host ""
+
             Write-Log "Ready to run the Terraform bootstrap now?" -Severity "INPUT REQUIRED"
             $proceed = Read-Host "Enter '[y]es' to continue or '[n]o' to stop here and review files"
             if ($proceed -ne "y" -and $proceed -ne "yes") {
