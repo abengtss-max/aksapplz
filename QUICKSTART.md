@@ -79,11 +79,12 @@ Create the PATs at <https://github.com/settings/personal-access-tokens/new> (**n
 - Members
 - Self-hosted runners *(only if you'll use org-level runner groups)*
 
-Click **Generate token**, copy it, and export it:
+Click **Generate token** and copy the value. **Keep it handy — the wizard will prompt you for it.**
 
-```powershell
-$env:TF_VAR_github_personal_access_token = 'github_pat_...'
-```
+> 💡 If you'd rather not paste it interactively (e.g. CI), export it first and the wizard will pick it up:
+> ```powershell
+> $env:TF_VAR_github_personal_access_token = 'github_pat_...'
+> ```
 
 #### Token 2 — Runners PAT (only for self-hosted runners)
 
@@ -98,6 +99,8 @@ Skip this if you're using GitHub-hosted runners (default).
 
 **Repository permissions** (Read and write): `Administration`.
 **Organization permissions** (Read and write): `Self-hosted runners` *(only for org-level runner groups)*.
+
+Same deal — the wizard prompts for it. Pre-export only if you want a fully non-interactive run:
 
 ```powershell
 $env:TF_VAR_github_runners_personal_access_token = 'github_pat_...'
@@ -183,7 +186,7 @@ YAML templates and field reference: [ADVANCED.md → inputs.yaml schema](ADVANCE
 | Symptom | Fix |
 |---|---|
 | `Get-Module ALZ.AKS` returns nothing | `Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force` |
-| Wizard warns `TF_VAR_github_personal_access_token is not set` | Set both PAT env vars and re-run |
+| Wizard warns `TF_VAR_github_personal_access_token is not set` | Harmless — the wizard will prompt you. Just paste the PAT when asked. |
 | `terraform: command not found` | Restart your shell after install |
 | Cmdlet hits the wrong subscription | `az account set --subscription <id>` |
 | `Name must be unique for this org` (GitHub team) | `gh api -X DELETE orgs/<org>/teams/<service>-<env>-approvers` |
