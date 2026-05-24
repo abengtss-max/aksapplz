@@ -1,0 +1,94 @@
+site_name: AKS Landing Zone Accelerator
+site_description: A Terraform-based accelerator that deploys a production-ready AKS Application Landing Zone on Azure.
+site_url: https://abengtss-max.github.io/aksapplz/
+repo_url: https://github.com/abengtss-max/aksapplz
+repo_name: abengtss-max/aksapplz
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+plugins:
+  - search
+  - include-markdown
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Quick start: QUICKSTART.md
+  - Reference:
+      - Advanced guide: ADVANCED.md
+      - Known issues: KNOWN-ISSUES.md
+      - Changelog: CHANGELOG.md
+  - GitHub: https://github.com/abengtss-max/aksapplz
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/abengtss-max/aksapplz
+  version:
+    provider: mike
+    default: latest
+
+copyright: Copyright &copy; 2026 abengtss-max &mdash; MIT License

@@ -62,3 +62,8 @@ bootstrap/alz/hub/terraform.tfvars.json
 # L3/L4 cloud-test transcripts (root-level)
 l3-*.log
 l4-*.log
+
+# MkDocs
+/site/
+/.venv-docs/
+
