@@ -797,14 +797,8 @@ function Get-InteractiveInputs {
 
     # ── Decision 10: Version Control System Settings ──
     Write-Log "github_personal_access_token" -Severity "INPUT REQUIRED"
-    Write-Host "A GitHub fine-grained Personal Access Token (token-1) used by Terraform to"
-    Write-Host "create the repos, push files, set secrets and variables, and configure environments."
-    Write-Host "Resource owner: your organization   |   Repository access: All repositories"
-    Write-Host "Repository permissions (all Read and write):"
-    Write-Host "  Actions, Administration, Contents, Environments, Secrets, Variables, Workflows"
-    Write-Host "Organization permissions (all Read and write):"
-    Write-Host "  Members, Self-hosted runners (only if using org-level runner groups)"
-    Write-Host "Create at: https://github.com/settings/personal-access-tokens (Fine-grained tokens)"
+    Write-Host "Token 1 of 2 — the Landing Zone PAT (used by Terraform to create repos, push files, set secrets/variables/environments)."
+    Write-Host "Permissions & setup: see QUICKSTART.md § Token 1  |  Create at https://github.com/settings/personal-access-tokens"
     Write-Host "Required: Yes"
     if ($env:TF_VAR_github_personal_access_token) {
         $masked = Get-MaskedValue -Value $env:TF_VAR_github_personal_access_token
@@ -828,13 +822,9 @@ function Get-InteractiveInputs {
     Write-Host ""
 
     Write-Log "github_runners_personal_access_token" -Severity "INPUT REQUIRED"
-    Write-Host "A GitHub fine-grained PAT (token-2) used by self-hosted runners to register with GitHub."
-    Write-Host "Resource owner: your organization   |   Repository access: All repositories"
-    Write-Host "Repository permissions (Read and write):"
-    Write-Host "  Administration"
-    Write-Host "Organization permissions (Read and write):"
-    Write-Host "  Self-hosted runners (only if using org-level runner groups)"
-    Write-Host "Create at: https://github.com/settings/personal-access-tokens (Fine-grained tokens)"
+    Write-Host "Token 2 of 2 — the Runners PAT (only needed if use_self_hosted_runners = true; lets runners register with GitHub)."
+    Write-Host "Permissions & setup: see QUICKSTART.md § Token 2  |  Create at https://github.com/settings/personal-access-tokens"
+    Write-Host "Optional: press Enter to skip if using GitHub-hosted runners."
     if ($env:TF_VAR_github_runners_personal_access_token) {
         $masked = Get-MaskedValue -Value $env:TF_VAR_github_runners_personal_access_token
         Write-Host "Environment variable TF_VAR_github_runners_personal_access_token is set ($masked)"
@@ -844,8 +834,7 @@ function Get-InteractiveInputs {
             $env:TF_VAR_github_runners_personal_access_token = $v
         }
     } else {
-        Write-Host "Optional: Only needed if use_self_hosted_runners = true"
-        $v = Read-Host -MaskInput "Enter PAT (masked, press enter to skip)"
+        $v = Read-Host -MaskInput "Enter PAT (masked, press Enter to skip)"
         if (![string]::IsNullOrEmpty($v)) {
             $env:TF_VAR_github_runners_personal_access_token = $v
         }
