@@ -44,15 +44,31 @@ function Write-Log {
 }
 
 function Show-Banner {
-    Write-Host ""
-    Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "  ║        AKS Application Landing Zone Accelerator            ║" -ForegroundColor Cyan
-    Write-Host "  ║                    v$script:ScriptVersion                              ║" -ForegroundColor Cyan
-    Write-Host "  ║                                                            ║" -ForegroundColor Cyan
-    Write-Host "  ║  Deploys a production-ready AKS cluster into an existing   ║" -ForegroundColor Cyan
-    Write-Host "  ║  Azure Landing Zone using the ALZ Accelerator pattern.     ║" -ForegroundColor Cyan
-    Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host ""
+    param([string]$Action = 'apply')
+    # Destroy gets a red, scary banner; everything else stays cyan/info.
+    if ($Action -eq 'destroy') {
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "  ║   !!  AKS Application Landing Zone — TEARDOWN  !!          ║" -ForegroundColor Red
+        Write-Host "  ║                    v$script:ScriptVersion                              ║" -ForegroundColor Red
+        Write-Host "  ║                                                            ║" -ForegroundColor Red
+        Write-Host "  ║  DESTRUCTIVE: deletes the bootstrap RG, state storage      ║" -ForegroundColor Red
+        Write-Host "  ║  account, generated GitHub workload repo, and federated    ║" -ForegroundColor Red
+        Write-Host "  ║  identities. AKS / spoke VNet / App Gateway must already   ║" -ForegroundColor Red
+        Write-Host "  ║  be torn down by the workload repo's CD pipeline.          ║" -ForegroundColor Red
+        Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+        Write-Host ""
+    } else {
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+        Write-Host "  ║        AKS Application Landing Zone Accelerator            ║" -ForegroundColor Cyan
+        Write-Host "  ║                    v$script:ScriptVersion                              ║" -ForegroundColor Cyan
+        Write-Host "  ║                                                            ║" -ForegroundColor Cyan
+        Write-Host "  ║  Deploys a production-ready AKS cluster into an existing   ║" -ForegroundColor Cyan
+        Write-Host "  ║  Azure Landing Zone using the ALZ Accelerator pattern.     ║" -ForegroundColor Cyan
+        Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+        Write-Host ""
+    }
 }
 
 function Test-SoftwareRequirements {
@@ -2788,7 +2804,7 @@ function Deploy-AKSLandingZone {
         Write-Log "-Force is only valid with -Action apply or -Action refresh (operator hand-edit override)." -Severity "ERROR"; return
     }
 
-    Show-Banner
+    Show-Banner -Action $Action
     $headerLabel = switch ($Action) { 'apply' { 'Bootstrap' } 'plan' { 'Bootstrap (PLAN)' } 'refresh' { 'RE-RENDER (managed files only)' } 'destroy' { 'TEARDOWN' } 'import' { 'STATE RECOVERY' } }
     if ($DryRun) { $headerLabel = "$headerLabel — DRY RUN" }
     Write-Log "=== AKS Application Landing Zone — $headerLabel ===" -Severity "INFO"
@@ -2917,13 +2933,16 @@ function Deploy-AKSLandingZone {
 
         # Register Microsoft.ContainerInstance (idempotent — Terraform cannot
         # cleanly own this because the RP is often already registered).
-        Write-Log "Ensuring Microsoft.ContainerInstance resource provider is registered..." -Severity "INFO"
-        $rpState = (az provider show --namespace Microsoft.ContainerInstance --query registrationState -o tsv 2>$null)
-        if ($rpState -ne 'Registered') {
-            az provider register --namespace Microsoft.ContainerInstance --wait | Out-Null
-            Write-Log "Microsoft.ContainerInstance registered." -Severity "SUCCESS"
-        } else {
-            Write-Log "Microsoft.ContainerInstance already registered." -Severity "SUCCESS"
+        # Skip on destroy — providers are irrelevant for teardown.
+        if ($Action -ne 'destroy') {
+            Write-Log "Ensuring Microsoft.ContainerInstance resource provider is registered..." -Severity "INFO"
+            $rpState = (az provider show --namespace Microsoft.ContainerInstance --query registrationState -o tsv 2>$null)
+            if ($rpState -ne 'Registered') {
+                az provider register --namespace Microsoft.ContainerInstance --wait | Out-Null
+                Write-Log "Microsoft.ContainerInstance registered." -Severity "SUCCESS"
+            } else {
+                Write-Log "Microsoft.ContainerInstance already registered." -Severity "SUCCESS"
+            }
         }
 
         if ([string]::IsNullOrEmpty($env:TF_VAR_github_personal_access_token)) {
@@ -3006,7 +3025,8 @@ function Deploy-AKSLandingZone {
     # If those resource providers are not registered up front, terraform apply
     # fails late with `MissingSubscriptionRegistration` (e.g. for
     # Microsoft.ContainerRegistry). Register them now in every relevant sub.
-    if (!$SkipPreflight) {
+    # Skip on destroy — provider registration is irrelevant for teardown.
+    if (!$SkipPreflight -and $Action -ne 'destroy') {
         $subsToRegister = @()
         foreach ($s in @($config.aks_landing_zone_subscription_id, $config.bootstrap_subscription_id, $config.connectivity_subscription_id)) {
             if (-not [string]::IsNullOrWhiteSpace([string]$s) -and $subsToRegister -notcontains $s) {
