@@ -1013,7 +1013,7 @@ function Get-DerivedNames {
         ContainerName       = "tfstate"
         ManagedIdentityName = "id-$svc-$env-$locShort-$num"
         RepoName            = "$svc-$env"
-        TemplateRepoName    = "$svc-$env-templates"
+        TemplateRepoName    = "$svc-templates"
         TeamName            = "$svc-$env-approvers"
         PlanEnvironment     = "$svc-plan"
         ApplyEnvironment    = "$svc-apply"

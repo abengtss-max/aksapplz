@@ -1316,7 +1316,7 @@ function Get-DerivedNames {
         ContainerName       = "tfstate"
         ManagedIdentityName = "id-$svc-$envName-$locShort-$num"
         RepoName            = "$svc-$envName"
-        TemplateRepoName    = "$svc-$envName-templates"
+        TemplateRepoName    = "$svc-templates"
         TeamName            = "$svc-$envName-approvers"
         PlanEnvironment     = "$svc-plan"
         ApplyEnvironment    = "$svc-apply"
@@ -3752,6 +3752,51 @@ terraform {
         Write-Log "Running terraform apply..." -Severity "INFO"
         & terraform @applyArgs
         if ($LASTEXITCODE -ne 0) { Write-Log "terraform apply failed." -Severity "ERROR"; return }
+
+        # ── Ensure the reusable-workflows (templates) repo exists & is populated ──
+        # The bootstrap composition only creates the workload repo. Its generated
+        # ci.yaml / cd.yaml reference reusable workflows in
+        # <org>/<service_name>-templates. If that repo is missing (or empty), the
+        # CD run fails with "workflow was not found". Create + populate + grant
+        # org access here so the workload repo can call into it.
+        try {
+            $tplOrg  = [string]$config.github_organization_name
+            $tplName = "$([string]$config.service_name)-templates"
+            $tplSlug = "$tplOrg/$tplName"
+            $wfSrc   = Join-Path $script:TemplateRoot "workflows"
+            if (-not (Test-Path (Join-Path $wfSrc "cd-template.yaml"))) {
+                Write-Log "Templates source not found at $wfSrc — skipping templates repo bootstrap." -Severity "WARNING"
+            } else {
+                # 1. Create the repo if it doesn't exist.
+                $exists = gh repo view $tplSlug --json name 2>$null
+                if (-not $exists) {
+                    Write-Log "Creating reusable-workflows repo $tplSlug..." -Severity "INFO"
+                    gh repo create $tplSlug --private --description "AKS Application Landing Zone - CI/CD reusable workflows" 2>&1 | Out-Null
+                } else {
+                    Write-Log "Reusable-workflows repo $tplSlug already exists — updating contents." -Severity "INFO"
+                }
+
+                # 2. Upsert ci-template.yaml + cd-template.yaml via Contents API
+                #    (avoids git+PAT auth dance; gh CLI carries its own token).
+                foreach ($f in @('ci-template.yaml','cd-template.yaml')) {
+                    $srcFile = Join-Path $wfSrc $f
+                    if (-not (Test-Path $srcFile)) { continue }
+                    $apiPath = ".github/workflows/$f"
+                    $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $srcFile -Raw)))
+                    $existingSha = gh api "/repos/$tplSlug/contents/$apiPath" --jq '.sha' 2>$null
+                    $args = @('api','-X','PUT',"/repos/$tplSlug/contents/$apiPath",'-f',"message=Bootstrap update $f",'-f',"content=$content")
+                    if ($existingSha) { $args += @('-f',"sha=$existingSha") }
+                    gh @args 2>&1 | Out-Null
+                }
+                Write-Log "Pushed ci-template.yaml + cd-template.yaml to $tplSlug" -Severity "SUCCESS"
+
+                # 3. Grant org access so private workload repos can call these workflows.
+                gh api -X PUT "/repos/$tplSlug/actions/permissions/access" -F access_level=organization 2>&1 | Out-Null
+                Write-Log "Actions access on $tplSlug set to 'organization'" -Severity "SUCCESS"
+            }
+        } catch {
+            Write-Log "Templates repo bootstrap encountered an error: $($_.Exception.Message). Workload CD may fail until templates repo exists." -Severity "WARNING"
+        }
 
         # ── Capture outputs ──
         $outputs = (& terraform output -json) | ConvertFrom-Json
