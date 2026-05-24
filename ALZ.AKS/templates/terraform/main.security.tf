@@ -1,7 +1,9 @@
 # -----------------------------------------------------------------------------
 # Azure Container Registry - Using Azure Verified Module
-# Corp:   Premium SKU, Private Endpoint, no public access
-# Online: Premium SKU, public access, no private endpoint
+# AKS Secure Baseline: Premium SKU, public network access disabled, private
+# endpoint REQUIRED. Applies to both Corp and Online — the baseline never
+# exposes the registry on the public internet.
+# Ref: https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks
 # -----------------------------------------------------------------------------
 
 module "acr" {
@@ -13,27 +15,26 @@ module "acr" {
   location            = azurerm_resource_group.main.location
   tags                = local.default_tags
 
-  sku = "Premium" # Required for zone redundancy (and private endpoints in Corp)
+  sku = "Premium" # Required for zone redundancy and private endpoints
 
   # Zone redundancy
   zone_redundancy_enabled = var.acr_zone_redundancy_enabled
 
-  # Corp: disable public access, use private endpoint
-  # Online: enable public access, no private endpoint
-  public_network_access_enabled = local.is_corp ? false : true
+  # AKS Secure Baseline: public access always off, private endpoint always on.
+  public_network_access_enabled = false
 
   # Network rule set
   network_rule_bypass_option = "AzureServices"
 
-  # Private endpoint for ACR (Corp only)
-  private_endpoints = local.is_corp ? {
+  # Private endpoint for ACR (always — AKS Secure Baseline)
+  private_endpoints = {
     primary = {
       name                          = "pe-${local.acr_name}"
       subnet_resource_id            = module.spoke_vnet.subnets["private_endpoints"].resource_id
       private_dns_zone_resource_ids = var.acr_private_dns_zone_ids
       tags                          = local.default_tags
     }
-  } : {}
+  }
 
   # Content trust (image signing)
   anonymous_pull_enabled = false
@@ -53,8 +54,9 @@ module "acr" {
 
 # -----------------------------------------------------------------------------
 # Azure Key Vault - Using Azure Verified Module
-# Corp:   RBAC, Soft Delete, Purge Protection, Private Endpoint
-# Online: RBAC, Soft Delete, Purge Protection, public access
+# AKS Secure Baseline: RBAC, Soft Delete, Purge Protection, public network
+# access disabled, private endpoint REQUIRED. Applies to both Corp and Online.
+# Ref: https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks
 # -----------------------------------------------------------------------------
 
 module "key_vault" {
@@ -76,24 +78,23 @@ module "key_vault" {
   soft_delete_retention_days = 90
   purge_protection_enabled   = true
 
-  # Corp: disable public access, use private endpoint
-  # Online: allow public access
-  public_network_access_enabled = local.is_corp ? false : true
+  # AKS Secure Baseline: public access always off, private endpoint always on.
+  public_network_access_enabled = false
 
-  network_acls = local.is_corp ? {
+  network_acls = {
     default_action = "Deny"
     bypass         = "AzureServices"
-  } : null
+  }
 
-  # Private endpoint (Corp only)
-  private_endpoints = local.is_corp ? {
+  # Private endpoint (always — AKS Secure Baseline)
+  private_endpoints = {
     primary = {
       name                          = "pe-${local.key_vault_name}"
       subnet_resource_id            = module.spoke_vnet.subnets["private_endpoints"].resource_id
       private_dns_zone_resource_ids = var.keyvault_private_dns_zone_ids
       tags                          = local.default_tags
     }
-  } : {}
+  }
 
   # Role assignments - AKS managed identity gets Secrets User
   role_assignments = {
