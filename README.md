@@ -5,10 +5,14 @@
 
 Deploy a production-ready **AKS cluster on Azure** in under an hour using a single PowerShell command.
 
-```text
-Deploy-AKSLandingZone   →   Azure (identities + state)
-                        →   GitHub repo (Terraform + Actions)
-                        →   AKS cluster
+```mermaid
+flowchart LR
+    A["👤 You<br/><code>Deploy-AKSLandingZone</code>"] --> B["☁️ Azure bootstrap<br/>Identities + Terraform state"]
+    B --> C["🐙 GitHub workload repo<br/>Terraform + Actions (OIDC)"]
+    C --> D["🚀 AKS cluster<br/>Private, Workload Identity, Defender"]
+
+    classDef step fill:#0d47a1,stroke:#0b3a87,color:#fff,stroke-width:1px,rx:8,ry:8;
+    class A,B,C,D step;
 ```
 
 ---
