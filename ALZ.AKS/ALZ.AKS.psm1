@@ -3239,47 +3239,145 @@ terraform {
                 Write-Log "Could not render tfvars before destroy: $($_.Exception.Message)" -Severity "ERROR"; return
             }
 
-            if (-not [string]::IsNullOrWhiteSpace($workspaceName)) {
-                & terraform workspace select $workspaceName 2>$null
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Log "Workspace '$workspaceName' not found in bootstrap state — nothing to destroy at the spoke layer (aborting to avoid false-positive success on 'default')." -Severity "WARNING"
-                    return
-                }
-                Write-Log "Selected workspace '$workspaceName'." -Severity "INFO"
+            # Resolve which workspace actually has state. Apply may have run
+            # without -Environment (state landed in 'default') or against a
+            # differently-named workspace. We list all workspaces, prefer the
+            # requested one, then 'default', then any other workspace that has
+            # resources. We skip terraform destroy only when no workspace has
+            # any tracked resources — but the final brute-force cleanup phase
+            # below always runs regardless, so orphans get cleaned up either way.
+            $tfDestroyRan = $false
+            $wsListRaw = (& terraform workspace list 2>$null) -join "`n"
+            $wsAvailable = @()
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($wsListRaw)) {
+                $wsAvailable = $wsListRaw -split "`n" | ForEach-Object { ($_ -replace '^\*?\s*','').Trim() } | Where-Object { $_ }
             }
+            Write-Log "Available terraform workspaces: $($wsAvailable -join ', ')" -Severity "INFO"
 
-            # Sanity check: if the workspace exists but has no resources, don't claim destroy ran.
-            $preState = & terraform state list 2>$null
-            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($preState -join "`n"))) {
-                Write-Log "Workspace '$workspaceName' state is empty — no tracked resources to destroy." -Severity "WARNING"
-                return
-            }
+            $candidates = @()
+            if (-not [string]::IsNullOrWhiteSpace($workspaceName)) { $candidates += $workspaceName }
+            $candidates += 'default'
+            foreach ($w in $wsAvailable) { if ($candidates -notcontains $w) { $candidates += $w } }
 
-            $destroyArgs = @('destroy','-input=false')
-            if ($AutoApprove) { $destroyArgs += '-auto-approve' }
-            Write-Log "Running terraform destroy against bootstrap composition..." -Severity "INFO"
-            & terraform @destroyArgs 2>&1 | Tee-Object -Variable destroyTee | Out-Host
-            $destroyExit = $LASTEXITCODE
-            if ($destroyExit -ne 0) {
-                # Self-referential teardown: terraform destroyed its own backend storage
-                # account, then fails to persist state / release lock against the now-gone
-                # SA (404 ResourceNotFound). The actual destroy succeeded — detect this
-                # and report success rather than a false-negative ERROR.
-                $joined = ($destroyTee | Out-String)
-                $isBackendGone = $joined -match 'Failed to persist state to backend' `
-                              -or $joined -match 'Failed to save state' `
-                              -or $joined -match 'Error releasing the state lock' `
-                              -or ($joined -match 'ResourceNotFound' -and $joined -match 'Destruction complete')
-                if ($isBackendGone) {
-                    Write-Log "Terraform destroyed its own backend storage account; the post-destroy state save returned 404 (expected). Treating destroy as successful." -Severity "WARNING"
+            $picked = $null
+            foreach ($w in $candidates) {
+                if ($wsAvailable -notcontains $w) { continue }
+                & terraform workspace select $w 2>$null | Out-Null
+                if ($LASTEXITCODE -ne 0) { continue }
+                $stateLines = & terraform state list 2>$null
+                if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($stateLines -join "`n"))) {
+                    $picked = $w
+                    Write-Log "Selected workspace '$w' (contains $($stateLines.Count) tracked resources)." -Severity "INFO"
+                    break
                 } else {
-                    Write-Log "bootstrap terraform destroy failed." -Severity "ERROR"
-                    return
+                    Write-Log "Workspace '$w' is empty — skipping." -Severity "INFO"
                 }
             }
-            Write-Log "Bootstrap composition destroyed." -Severity "SUCCESS"
+
+            if ($null -eq $picked) {
+                Write-Log "No terraform workspace contains tracked resources — skipping terraform destroy and falling through to direct Azure/GitHub cleanup." -Severity "WARNING"
+            } else {
+                $destroyArgs = @('destroy','-input=false')
+                if ($AutoApprove) { $destroyArgs += '-auto-approve' }
+                Write-Log "Running terraform destroy against bootstrap composition (workspace='$picked')..." -Severity "INFO"
+                & terraform @destroyArgs 2>&1 | Tee-Object -Variable destroyTee | Out-Host
+                $destroyExit = $LASTEXITCODE
+                if ($destroyExit -ne 0) {
+                    # Self-referential teardown: terraform destroyed its own backend storage
+                    # account, then fails to persist state / release lock against the now-gone
+                    # SA (404 ResourceNotFound). The actual destroy succeeded — detect this
+                    # and report success rather than a false-negative ERROR.
+                    $joined = ($destroyTee | Out-String)
+                    $isBackendGone = $joined -match 'Failed to persist state to backend' `
+                                  -or $joined -match 'Failed to save state' `
+                                  -or $joined -match 'Error releasing the state lock' `
+                                  -or ($joined -match 'ResourceNotFound' -and $joined -match 'Destruction complete')
+                    if ($isBackendGone) {
+                        Write-Log "Terraform destroyed its own backend storage account; the post-destroy state save returned 404 (expected). Treating destroy as successful." -Severity "WARNING"
+                        $tfDestroyRan = $true
+                    } else {
+                        Write-Log "bootstrap terraform destroy failed — falling through to direct Azure/GitHub cleanup." -Severity "WARNING"
+                    }
+                } else {
+                    $tfDestroyRan = $true
+                    Write-Log "Bootstrap composition destroyed." -Severity "SUCCESS"
+                }
+            }
         }
         finally { Pop-Location }
+
+        # ── BELT-AND-SUSPENDERS CLEANUP ──
+        # Always runs, regardless of whether terraform destroy ran or succeeded.
+        # The user's expectation is "destroy means destroy" — leftover state
+        # mismatches, empty workspaces, or failed apply attempts must NOT leave
+        # orphan resources behind. We brute-force delete what the bootstrap
+        # composition would have created, idempotently.
+        Write-Log "Running final cleanup of bootstrap RG + state RG + GitHub repos (idempotent)..." -Severity "INFO"
+        try {
+            $svc         = [string]$config.service_name
+            $subId       = [string]$config.bootstrap_subscription_id
+            $orgName     = [string]$config.github_organization_name
+            $workloadRepo = "$svc-$workspaceName"
+            $templateRepo = "$svc-templates"
+
+            # 1. Workload GitHub repo (e.g. aliapplz-prod)
+            if (-not [string]::IsNullOrWhiteSpace($orgName)) {
+                $repoCheck = gh repo view "$orgName/$workloadRepo" --json name 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Deleting GitHub repo $orgName/$workloadRepo ..." -Severity "WARNING"
+                    gh repo delete "$orgName/$workloadRepo" --yes 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Deleted $orgName/$workloadRepo" -Severity "SUCCESS"
+                    } else {
+                        Write-Log "Could not delete $orgName/$workloadRepo — check 'gh auth status' has delete_repo scope (gh auth refresh -s delete_repo)." -Severity "WARNING"
+                    }
+                } else {
+                    Write-Log "GitHub repo $orgName/$workloadRepo not present (already deleted or never created)." -Severity "INFO"
+                }
+
+                # 2. Templates GitHub repo (e.g. aliapplz-templates) — created by
+                # the wizard outside terraform, so terraform destroy never removes it.
+                $tplCheck = gh repo view "$orgName/$templateRepo" --json name 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Deleting GitHub repo $orgName/$templateRepo ..." -Severity "WARNING"
+                    gh repo delete "$orgName/$templateRepo" --yes 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "Deleted $orgName/$templateRepo" -Severity "SUCCESS"
+                    } else {
+                        Write-Log "Could not delete $orgName/$templateRepo — check 'gh auth status' has delete_repo scope (gh auth refresh -s delete_repo)." -Severity "WARNING"
+                    }
+                } else {
+                    Write-Log "GitHub repo $orgName/$templateRepo not present (already deleted or never created)." -Severity "INFO"
+                }
+            }
+
+            # 3. State RG (contains the backend SA). Re-discover in case
+            # terraform already nuked it.
+            $stateRgs = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-state-')].name" -o tsv 2>$null
+            foreach ($rg in ($stateRgs -split "`n" | Where-Object { $_ })) {
+                Write-Log "Deleting state RG $rg ..." -Severity "WARNING"
+                az group delete -n $rg --subscription $subId --yes --no-wait -o none 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Submitted delete for $rg (async)" -Severity "SUCCESS"
+                } else {
+                    Write-Log "Could not delete $rg." -Severity "WARNING"
+                }
+            }
+
+            # 4. Bootstrap identity RG (federated MIs for the GHA workflows)
+            $idRgs = az group list --subscription $subId --query "[?starts_with(name,'rg-$svc-$workspaceName-') && contains(name,'-identity')].name" -o tsv 2>$null
+            foreach ($rg in ($idRgs -split "`n" | Where-Object { $_ })) {
+                Write-Log "Deleting identity RG $rg ..." -Severity "WARNING"
+                az group delete -n $rg --subscription $subId --yes --no-wait -o none 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Submitted delete for $rg (async)" -Severity "SUCCESS"
+                } else {
+                    Write-Log "Could not delete $rg." -Severity "WARNING"
+                }
+            }
+        } catch {
+            Write-Log "Final cleanup phase hit an error: $($_.Exception.Message)" -Severity "WARNING"
+        }
 
         # Hub destroy (only for hub_and_spoke topology)
         if ($config.topology -eq 'hub_and_spoke') {
