@@ -2997,6 +2997,30 @@ function Deploy-AKSLandingZone {
         }
     }
 
+    # ── Pre-flight: Register required resource providers across all subs ──
+    # The ALZ accelerator bootstrap creates ACR / ACI / KeyVault / etc. in the
+    # AKS landing zone subscription (and connectivity sub for hub topologies).
+    # If those resource providers are not registered up front, terraform apply
+    # fails late with `MissingSubscriptionRegistration` (e.g. for
+    # Microsoft.ContainerRegistry). Register them now in every relevant sub.
+    if (!$SkipPreflight) {
+        $subsToRegister = @()
+        foreach ($s in @($config.aks_landing_zone_subscription_id, $config.bootstrap_subscription_id, $config.connectivity_subscription_id)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$s) -and $subsToRegister -notcontains $s) {
+                $subsToRegister += $s
+            }
+        }
+        if ($subsToRegister.Count -gt 0) {
+            $origAksSub = $config.aks_landing_zone_subscription_id
+            foreach ($subId in $subsToRegister) {
+                Write-Log "Registering required resource providers in subscription $subId..." -Severity "INFO"
+                $config.aks_landing_zone_subscription_id = $subId
+                Register-RequiredProviders -Config $config
+            }
+            $config.aks_landing_zone_subscription_id = $origAksSub
+        }
+    }
+
     # ── DESTROY PATH ──
     # Self-contained teardown: spoke first (deletes the generated workload repo +
     # GHA federated identities), then hub (if topology=hub_and_spoke). Returns
