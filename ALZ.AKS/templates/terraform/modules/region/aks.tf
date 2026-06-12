@@ -17,12 +17,10 @@ resource "azurerm_role_assignment" "aks_network_contributor" {
   principal_id         = azurerm_user_assigned_identity.aks.principal_id
 }
 
-# Role assignment: AKS identity needs AcrPull on the shared (global) ACR
-resource "azurerm_role_assignment" "aks_acr_pull" {
-  scope                = var.acr_id
-  role_definition_name = "AcrPull"
-  principal_id         = module.aks.kubelet_identity.objectId
-}
+# NOTE: The AcrPull grant for this region's kubelet identity is created at the
+# root (main.acr.tf), scoped to the real ACR resource. Keeping it here would
+# require the deterministic ACR id (to avoid a region<->acr cycle), which loses
+# the dependency on the ACR resource and can race ahead of its creation.
 
 # AKS Cluster using Azure Verified Module
 module "aks" {

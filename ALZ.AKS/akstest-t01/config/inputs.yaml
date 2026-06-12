@@ -14,7 +14,7 @@ subnet_address_prefix_aks_api_server: "10.10.5.0/28"
 subnet_address_prefix_app_gateway: "10.10.6.0/24"
 subnet_address_prefix_private_endpoints: "10.10.7.0/24"
 subnet_address_prefix_ingress: "10.10.8.0/24"
-kubernetes_version: "1.31"
+kubernetes_version: "1.33"
 aks_sku_tier: "Standard"
 aks_private_cluster: false
 aks_admin_group_object_ids:

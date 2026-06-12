@@ -17,6 +17,14 @@ resource "azurerm_public_ip" "app_gateway" {
   # public IPs are unchanged.
   domain_name_label = var.assign_public_dns_label ? var.public_dns_label : null
   tags              = local.default_tags
+
+  lifecycle {
+    # The provider reports a spurious `ip_tags` diff on refresh which would
+    # otherwise force replacement of this public IP while it is still attached
+    # to the Application Gateway (delete fails with a 400). We never set
+    # ip_tags, so it is safe to ignore drift on it and keep re-applies idempotent.
+    ignore_changes = [ip_tags]
+  }
 }
 
 # WAF Policy

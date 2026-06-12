@@ -29,6 +29,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   See `ALZ.AKS/docs/scenarios-and-options.md` ("Using azd").
 
 ### Fixed
+- **Multi-region App Gateway public IP idempotency** — `azurerm_public_ip.app_gateway`
+  exhibited a spurious `ip_tags` ForceNew diff on refresh, causing Terraform to
+  attempt to replace the public IP while it was still attached to the App
+  Gateway (`400 PublicIPAddressCannotBeDeleted`). Added
+  `lifecycle { ignore_changes = [ip_tags] }`. Discovered and fixed during the
+  live multi-region failover drill (2026-06-12).
+- **AcrPull role-assignment race** — the per-region `aks_acr_pull` role
+  assignment referenced a deterministic ACR resource id, so it had no
+  dependency on the actual ACR resource and could be created before the
+  registry existed (`404`). Moved the assignment to root `main.acr.tf`
+  (`for_each = module.region`, scoped to `module.acr.resource_id`, principal =
+  each region's kubelet identity), which preserves a real dependency and breaks
+  the region↔acr cycle. Discovered and fixed during the live multi-region
+  failover drill (2026-06-12).
 - **BUG-D (state migration on private storage)** — the apply path's
   post-apply `terraform init -migrate-state` no longer fails with
   `403 AuthorizationFailure` on regulated topologies whose bootstrap state

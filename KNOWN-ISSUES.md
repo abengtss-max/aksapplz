@@ -1,6 +1,21 @@
 # Known Issues & Limitations
 
-Last reviewed: 2026-05-24 — applies to `1.4.0` GA.
+Last reviewed: 2026-06-12 — applies to `1.4.0` GA.
+
+## Live multi-region failover — VALIDATED (2026-06-12)
+
+The end-to-end multi-region failover drill has now been **executed live** in subscription `applz-5`
+(`08436ef1-79fc-4f99-a8c3-1ea611f64196`) across `swedencentral` (primary) + `westeurope` (secondary),
+after a temporary, scoped MCAPS policy exclusion was applied to the test subscription and **restored
+afterwards**. Result: both AKS clusters (K8s 1.33.12) healthy, fleet members joined, ACR geo-replicated,
+both App Gateways serving region-distinct content, and **Azure Front Door priority routing failed over
+from primary → secondary when the primary app was taken down, then failed back to primary on restore.**
+All ephemeral test resources were destroyed and the MCAPS policy posture was restored.
+
+| ID | Area | Resolution |
+|---|---|---|
+| BUG-G | App Gateway public IP idempotency | **Fixed.** `azurerm_public_ip.app_gateway` showed a spurious `ip_tags` ForceNew diff on refresh, causing Terraform to try to replace the PIP while it was still attached to the App Gateway (`400 PublicIPAddressCannotBeDeleted`). Added `lifecycle { ignore_changes = [ip_tags] }`. Verified live: re-plan produced 0 destroys. |
+| BUG-H | AcrPull role assignment race | **Fixed.** The `aks_acr_pull` role assignment in `modules/region` referenced a deterministic ACR resource id, so it had no dependency on the real ACR resource and could run before the registry existed (`404`). Moved it to root `main.acr.tf` (`for_each = module.region`, `scope = module.acr.resource_id`, `principal_id = each.value.aks_kubelet_identity.objectId`), breaking the region↔acr cycle while preserving a real dependency. Verified live: both AcrPull assignments applied cleanly. |
 
 ## Fixed in v1.4.0 GA (resolved 2026-05-24)
 
@@ -15,7 +30,7 @@ Last reviewed: 2026-05-24 — applies to `1.4.0` GA.
 | Scenario | Topology | Region mode | GA status | Notes |
 |---|---|---|---|---|
 | `single_region_baseline` | `standalone` | single | ✅ **GA — supported** | S1 8/8 |
-| `multi_region_baseline` | `standalone` | multi | ✅ **GA — supported** | S2.5 8/8 |
+| `multi_region_baseline` | `standalone` | multi | ✅ **GA — supported** | S2.5 8/8; live Front Door failover drill validated 2026-06-12 |
 | `single_region_baseline` | `hub_and_spoke` | single | ✅ **GA — supported** | S2 8/8 post-fix |
 | `multi_region_baseline` | `hub_and_spoke` | multi | ⚠️ **Tech preview** | S4 not validated for v1.4.0 GA; planned for v1.4.1. |
 | `single_region_regulated` | `hub_and_spoke` | single | ⚠️ **Tech preview** | Blocked by BUG-D below. Planned for v1.4.1. |
@@ -44,7 +59,7 @@ Treat the current release as **preview / release-candidate** if you need any of 
 | Area | Limitation | Origin |
 |---|---|---|
 | Log Analytics AVM | `log_analytics` AVM module emits a deprecated `local_authentication_disabled` warning during `terraform plan` | Upstream AVM module — waiting for fix |
-| Live multi-region **failover test** in the current dev tenant | The end-to-end failover drill (deploy both regions, then drain/fail the primary and confirm the global LB shifts traffic to the secondary) cannot be exercised in dev tenant `79ee578e`. A Microsoft governance policy `MCAPSGovDenyPolicies → VMSS_LimitNodesCount_Deny (v1.0.0)` is assigned at the management-group / tenant-root scope and inherited by all subscriptions. Its policy rule calls `empty()` on an integer, which errors and **denies all AKS node-pool VMSS creation tenant-wide**, so no cluster nodes can be created. The assignment sits above subscription scope and is not modifiable from these subscriptions. **The Terraform/IaC is validated** (95/97 resources deployed; the only 2 failures were this policy on the primary node pool and an unrelated zone-availability mismatch on the secondary, now fixed via `secondary_availability_zones`). The live failover drill requires either an MCAPS policy exemption for the target RG or a different tenant. | Microsoft MCAPS governance policy (tenant-root scope) |
+| Live multi-region **failover test** in the current dev tenant | **Resolved 2026-06-12.** Previously blocked by `MCAPSGovDenyPolicies → VMSS_LimitNodesCount_Deny (v1.0.0)` (tenant-root scope) which denied all AKS node-pool VMSS creation. With a temporary, scoped policy exclusion on the test subscription (since restored), the full live failover drill was executed successfully — see the **Live multi-region failover — VALIDATED** section at the top of this document. In tenants where the MCAPS policy cannot be excluded, deploying AKS node pools still requires an MCAPS policy exemption for the target subscription/RG or a different tenant. | Microsoft MCAPS governance policy (tenant-root scope) |
 
 ## Operational caveats
 

@@ -38,12 +38,6 @@ variable "tags" {
   default     = {}
 }
 
-# --- Global registry (created once at the root, shared across regions) ---
-variable "acr_id" {
-  description = "Resource ID of the shared (global) Azure Container Registry. The region's AKS kubelet identity is granted AcrPull on it."
-  type        = string
-}
-
 # --- Networking ---
 variable "vnet_address_space" {
   description = "The address space for this region's spoke VNet."

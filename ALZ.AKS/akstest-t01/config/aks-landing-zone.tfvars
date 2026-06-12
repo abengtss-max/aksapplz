@@ -55,7 +55,7 @@ use_remote_gateways          = false
 # -----------------------------------------------------------------------------
 # AKS Configuration
 # -----------------------------------------------------------------------------
-kubernetes_version = "1.31"
+kubernetes_version = "1.33"
 aks_sku_tier       = "Standard"
 availability_zones = ["1", "2", "3"]
 

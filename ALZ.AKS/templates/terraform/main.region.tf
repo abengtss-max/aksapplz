@@ -21,9 +21,6 @@ module "region" {
   environment_short = var.environment_short
   tags              = var.tags
 
-  # Shared global registry (deterministic ID avoids a region<->acr cycle)
-  acr_id = local.acr_resource_id
-
   # Per-region networking
   vnet_address_space           = each.value.vnet_address_space
   subnet_address_prefixes      = each.value.subnet_address_prefixes

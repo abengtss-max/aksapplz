@@ -55,3 +55,15 @@ module "acr" {
     }
   ] : []
 }
+
+# Role assignment: each region's AKS kubelet identity needs AcrPull on the
+# shared (global) ACR. Granted here at the root (rather than inside the region
+# module) so it depends on the real ACR resource and the region's cluster
+# without re-introducing a region<->acr dependency cycle.
+resource "azurerm_role_assignment" "aks_acr_pull" {
+  for_each = module.region
+
+  scope                = module.acr.resource_id
+  role_definition_name = "AcrPull"
+  principal_id         = each.value.aks_kubelet_identity.objectId
+}

@@ -51,7 +51,7 @@ use_remote_gateways          = false        # Set to true if hub has VPN/ER gate
 # -----------------------------------------------------------------------------
 # AKS Configuration
 # -----------------------------------------------------------------------------
-kubernetes_version = "1.30"
+kubernetes_version = "1.33"
 aks_sku_tier       = "Standard"  # Standard = 99.95% SLA with availability zones
 availability_zones = ["1", "2", "3"]
 
