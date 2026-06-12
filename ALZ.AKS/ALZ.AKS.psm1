@@ -519,11 +519,33 @@ function Get-InteractiveInputs {
         $fleetAns = Read-Host "Enable Fleet Manager? (Y/n)"
         $config.enable_fleet_manager = [string]::IsNullOrWhiteSpace($fleetAns) -or $fleetAns -match '^(y|yes)$'
         Write-Host ""
+
+        # ── Secondary region availability zones (multi-region only) ──
+        # Zone support varies by region and VM SKU (e.g. some regions expose only
+        # zone "3" for a given size). Leaving this blank makes the secondary region
+        # inherit the primary's zones; set it explicitly when they differ to avoid
+        # AKS "AvailabilityZoneNotSupported" errors.
+        Write-Log "secondary_availability_zones" -Severity "INPUT REQUIRED"
+        Write-Host "Availability zones for the SECONDARY region's AKS node pools."
+        Write-Host "Some regions/SKUs support only a subset of zones (e.g. only '3')."
+        Write-Host "Enter a comma-separated list (e.g. 1,2,3 or just 3), or leave blank"
+        Write-Host "to inherit the primary region's zones."
+        Write-Host "Default: (blank — inherit primary)"
+        $secZonesAns = Read-Host "Secondary availability zones"
+        if ([string]::IsNullOrWhiteSpace($secZonesAns)) {
+            $config.secondary_availability_zones = @()
+        } else {
+            $config.secondary_availability_zones = @(
+                $secZonesAns -split '[,\s]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+            )
+        }
+        Write-Host ""
     } else {
         $config.secondary_location = ""
         $config.enable_acr_geo_replication = $false
         $config.global_lb_type = "none"
         $config.enable_fleet_manager = $false
+        $config.secondary_availability_zones = @()
     }
 
     # ── Decision 1: Bootstrap Location ──
@@ -1061,6 +1083,10 @@ secondary_location: "$($Config.secondary_location)"
 global_lb_type: "$(if ($Config.global_lb_type) { $Config.global_lb_type } else { 'none' })"
 # enable_fleet_manager: auto-join every regional AKS cluster into an Azure Kubernetes Fleet Manager
 enable_fleet_manager: $(if ($Config.enable_fleet_manager -eq $true) { "true" } else { "false" })
+# secondary_availability_zones: zones for the secondary region's AKS node pools.
+# Empty list inherits the primary region's zones; set explicitly when the
+# secondary region/SKU supports a different set (e.g. only "3").
+secondary_availability_zones: $(if ($Config.secondary_availability_zones -and @($Config.secondary_availability_zones).Count -gt 0) { "[" + ((@($Config.secondary_availability_zones) | ForEach-Object { '"' + $_ + '"' }) -join ", ") + "]" } else { "[]" })
 
 ## Topology: standalone | spoke
 # - standalone : no hub, no VNet peering, NAT gateway egress only
@@ -1219,6 +1245,10 @@ secondary_location = "$($Config.secondary_location)"
 # global_lb_type: none | front_door | traffic_manager
 global_lb_type       = "$(if ($Config.global_lb_type) { $Config.global_lb_type } else { 'none' })"
 enable_fleet_manager = $(if ($Config.enable_fleet_manager -eq $true) { "true" } else { "false" })
+# secondary_availability_zones: zones for the secondary region's AKS node pools.
+# Empty list inherits the primary's availability_zones; set explicitly when the
+# secondary region/SKU supports a different set (e.g. only "3").
+secondary_availability_zones = $(if ($Config.secondary_availability_zones -and @($Config.secondary_availability_zones).Count -gt 0) { "[" + ((@($Config.secondary_availability_zones) | ForEach-Object { '"' + $_ + '"' }) -join ", ") + "]" } else { "[]" })
 
 # -----------------------------------------------------------------------------
 # Core Settings

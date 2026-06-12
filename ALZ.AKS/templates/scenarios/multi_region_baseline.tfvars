@@ -38,6 +38,11 @@ secondary_subnet_address_prefixes = {
   ingress           = "10.20.8.0/24"
 }
 
+# Availability zones for the SECONDARY region's AKS node pools. Empty list
+# inherits the primary's availability_zones. Set explicitly when the secondary
+# region/SKU supports a different set (e.g. westeurope may offer only ["3"]).
+secondary_availability_zones = []
+
 # --- Networking ---
 network_plugin      = "azure"
 network_plugin_mode = "overlay"

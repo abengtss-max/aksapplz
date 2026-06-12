@@ -35,12 +35,18 @@ The default scenario. Deploys the [AKS Baseline Reference Architecture](https://
 
 ### Multi Region Baseline
 
-Extends the baseline for [multi-region deployments](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-multi-region/aks-multi-cluster):
+Extends the baseline into a fully-automated [multi-region deployment](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-multi-region/aks-multi-cluster). Setting `secondary_location` provisions a complete second region (AKS + App Gateway + VNet + Key Vault + monitoring) from a single run — no manual second pass:
 
 - Everything in single-region baseline, plus:
+- **Two full regional stacks** built from one reusable region module (`for_each`)
+- **Azure Front Door** (default) or **Traffic Manager** global load balancer, with both regions' App Gateways pre-wired as origins/endpoints and priority failover
+- **Azure Kubernetes Fleet Manager** auto-joining both clusters
+- **Geo-replicated ACR** across the two regions
 - **Flux v2 GitOps** for consistent multi-cluster deployments
 - **VPA** for right-sizing across regions
 - **Azure Backup** for cross-region recovery
+
+See [multi-region.md](../templates/docs/multi-region.md) for the full architecture, load-balancer choices, and per-region availability-zone guidance.
 
 ### Single Region Regulated (PCI-DSS 4.0.1)
 
@@ -131,8 +137,13 @@ Options are feature toggles that can be customized within any scenario. Each sce
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `secondary_location` | `""` | Secondary Azure region for geo-replication |
+| `secondary_location` | `""` | Secondary Azure region. Set it to provision a full second regional stack (AKS + App Gateway + VNet + Key Vault + monitoring). |
+| `global_lb_type` | `front_door` (MR scenarios) | Global load balancer in front of both regions: `none` \| `front_door` \| `traffic_manager` |
+| `enable_fleet_manager` | `true` (MR scenarios) | Auto-join both clusters into an Azure Kubernetes Fleet Manager |
 | `enable_acr_geo_replication` | Scenario | Geo-replicate ACR to secondary region |
+| `secondary_vnet_address_space` | `10.20.0.0/16` | Secondary spoke VNet CIDR (must not overlap primary) |
+| `secondary_subnet_address_prefixes` | scenario | Per-subnet CIDRs for the secondary region |
+| `secondary_availability_zones` | `[]` | AKS node-pool zones for the secondary region; empty inherits the primary's zones (set explicitly when the secondary region/SKU supports a different set) |
 
 ---
 

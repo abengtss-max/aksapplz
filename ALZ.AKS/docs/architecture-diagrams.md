@@ -148,28 +148,43 @@ flowchart LR
 
 ## Multi-region overlay (scenarios 07-10)
 
-Adds to any of the three topologies:
+Setting `secondary_location` adds a complete second regional stack to any of the
+three topologies, plus an opt-in global load balancer in front of both regions:
 
 ```mermaid
-flowchart LR
+flowchart TB
+    user[(End users)]
+    glb["Global LB (opt-in)<br/>Front Door OR Traffic Manager<br/>priority failover + health probes"]
     subgraph primary["Primary region (e.g. swedencentral)"]
+        agw1["App Gateway (WAF)"]
         aks1["AKS cluster"]
-        acr["ACR (primary)"]
+        kv1["Key Vault"]
+        agw1 --> aks1
     end
     subgraph secondary["Secondary region (e.g. westeurope)"]
-        acrRepl["ACR geo-replication"]
+        agw2["App Gateway (WAF)"]
+        aks2["AKS cluster"]
+        kv2["Key Vault"]
+        agw2 --> aks2
     end
-    user[(End users)]
-    fd["Front Door<br/>(future v1.5)"]
-    acr -. geo-replicate .- acrRepl
+    subgraph shared["Shared"]
+        acr["ACR (geo-replicated)"]
+        fleet["Fleet Manager (opt-in)"]
+    end
+    user --> glb
+    glb -->|priority 1| agw1
+    glb -. failover .-> agw2
     aks1 -. pulls .-> acr
-    user --> fd
-    fd --> aks1
-    fd -. failover .-> secondary
+    aks2 -. pulls .-> acr
+    fleet -. manages .-> aks1
+    fleet -. manages .-> aks2
 ```
 
-**Currently shipped**: ACR geo-replication + Flux for multi-cluster consistency + VPA + Backup.
-**Future (v1.5+)**: Front Door, Fleet Manager, second AKS cluster.
+**Shipped**: both full regional stacks (AKS + App Gateway + VNet + Key Vault +
+monitoring) from one run, Azure Front Door **or** Traffic Manager wired to both
+App Gateways, Fleet Manager auto-joining both clusters, geo-replicated ACR, plus
+Flux / VPA / Backup. Per-region availability zones via `availability_zones` and
+`secondary_availability_zones`.
 
 ---
 

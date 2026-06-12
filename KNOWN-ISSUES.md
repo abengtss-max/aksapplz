@@ -44,6 +44,7 @@ Treat the current release as **preview / release-candidate** if you need any of 
 | Area | Limitation | Origin |
 |---|---|---|
 | Log Analytics AVM | `log_analytics` AVM module emits a deprecated `local_authentication_disabled` warning during `terraform plan` | Upstream AVM module — waiting for fix |
+| Live multi-region **failover test** in the current dev tenant | The end-to-end failover drill (deploy both regions, then drain/fail the primary and confirm the global LB shifts traffic to the secondary) cannot be exercised in dev tenant `79ee578e`. A Microsoft governance policy `MCAPSGovDenyPolicies → VMSS_LimitNodesCount_Deny (v1.0.0)` is assigned at the management-group / tenant-root scope and inherited by all subscriptions. Its policy rule calls `empty()` on an integer, which errors and **denies all AKS node-pool VMSS creation tenant-wide**, so no cluster nodes can be created. The assignment sits above subscription scope and is not modifiable from these subscriptions. **The Terraform/IaC is validated** (95/97 resources deployed; the only 2 failures were this policy on the primary node pool and an unrelated zone-availability mismatch on the secondary, now fixed via `secondary_availability_zones`). The live failover drill requires either an MCAPS policy exemption for the target RG or a different tenant. | Microsoft MCAPS governance policy (tenant-root scope) |
 
 ## Operational caveats
 
