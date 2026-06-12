@@ -1,7 +1,5 @@
 # -----------------------------------------------------------------------------
-# Monitoring - Log Analytics, Managed Prometheus, Managed Grafana
-# Best Practices: Centralized monitoring, Azure Monitor workspace,
-# Prometheus data collection rules, Grafana dashboards
+# Region module - Monitoring (Log Analytics, Managed Prometheus, Managed Grafana)
 # -----------------------------------------------------------------------------
 
 # Log Analytics Workspace (for Container Insights & diagnostics)
@@ -88,9 +86,8 @@ resource "azurerm_monitor_data_collection_rule_association" "prometheus_dce" {
 }
 
 # -----------------------------------------------------------------------------
-# Managed Grafana - Using Azure Verified Module
-# ----------------------------------------------------------------------------- 
-
+# Managed Grafana
+# -----------------------------------------------------------------------------
 resource "azurerm_dashboard_grafana" "main" {
   count = var.enable_managed_grafana ? 1 : 0
 
@@ -119,7 +116,6 @@ resource "azurerm_dashboard_grafana" "main" {
 }
 
 # Role assignment: Grafana Admin for the specified group
-# Skipped when no admin group is provided (e.g. standalone POC topology)
 resource "azurerm_role_assignment" "grafana_admin" {
   count = var.enable_managed_grafana && var.grafana_admin_group_object_id != "" ? 1 : 0
 
@@ -128,7 +124,7 @@ resource "azurerm_role_assignment" "grafana_admin" {
   principal_id         = var.grafana_admin_group_object_id
 }
 
-# Role assignment: Grafana needs Monitoring Reader on the resource group (least privilege)
+# Role assignment: Grafana needs Monitoring Reader on the resource group
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
   count = var.enable_managed_grafana ? 1 : 0
 

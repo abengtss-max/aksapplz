@@ -54,5 +54,21 @@ provider "azuread" {
 
 provider "github" {
   owner = var.github_organization_name
-  token = var.github_personal_access_token
+
+  # PAT auth (default). When the PAT is empty (OIDC-only mode), token is null so
+  # the provider falls back to GITHUB_TOKEN/GH_TOKEN from the environment or to
+  # the app_auth block below.
+  token = var.github_personal_access_token != "" ? var.github_personal_access_token : null
+
+  # GitHub App auth (PAT-less). Enabled only when all three app inputs are set
+  # (typically via TF_VAR_github_app_* from -OidcOnly). Mutually exclusive with a
+  # non-empty token, which is why token is null in that case.
+  dynamic "app_auth" {
+    for_each = (var.github_app_id != "" && var.github_app_installation_id != "" && var.github_app_pem_file != "") ? [1] : []
+    content {
+      id              = var.github_app_id
+      installation_id = var.github_app_installation_id
+      pem_file        = file(var.github_app_pem_file)
+    }
+  }
 }

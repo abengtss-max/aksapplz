@@ -25,7 +25,7 @@ Last reviewed: 2026-05-24 — applies to `1.4.0` GA.
 
 | ID | Area | Severity | Description |
 |---|---|---|---|
-| BUG-D | Apply path — state migration on private storage | **Tech-preview limitation (regulated topologies only)** | The post-apply `terraform init -migrate-state` to the new azurerm backend fails with `403 AuthorizationFailure` because the bootstrap state storage account is created with `publicNetworkAccess: Disabled` and `defaultAction: Deny`, exposing only a **private endpoint** in the workload spoke VNet. The operator running the cmdlet from their workstation cannot reach the SA data plane at all — RBAC is granted correctly (`Storage Blob Data Contributor` on the SA) but there is no network path. Confirmed on S3 (single_region_regulated / hub_and_spoke) Gate 1, 2026-05-24. Baseline scenarios (S1, S2, S2.5) are unaffected because their state SAs allow public access. **Workaround today (manual):** `az storage account network-rule add --subscription <sub> -g <state-rg> -n <state-sa> --ip-address <operator-ip>` then rerun `Deploy-AKSLandingZone -Action apply -SkipPreflight`, then remove the rule after migration succeeds. **Planned fix (v1.4.1):** auto-add the operator's public IP to the SA firewall for the migration window, then revert. |
+| BUG-D | Apply path — state migration on private storage | **Fixed in code (v1.4.1) — regulated cloud verification pending** | The post-apply `terraform init -migrate-state` to the new azurerm backend failed with `403 AuthorizationFailure` because the bootstrap state storage account is created with `publicNetworkAccess: Disabled` and `defaultAction: Deny`, exposing only a **private endpoint** in the workload spoke VNet. The operator running the cmdlet from their workstation could not reach the SA data plane (RBAC granted, no network path). **Fix:** the apply path now records the SA's original `publicNetworkAccess` / `networkRuleSet.defaultAction`, and for regulated state accounts temporarily opens a firewall window (`--public-network-access Enabled --default-action Allow`, 60s settle, one-shot 90s retry on 403) for the migration, then **restores the original posture in a `finally` block** (guarded by `$saNetOpened`). Baseline scenarios (S1, S2, S2.5) are unaffected. **Manual fallback if needed:** `az storage account network-rule add --subscription <sub> -g <state-rg> -n <state-sa> --ip-address <operator-ip>`, rerun `Deploy-AKSLandingZone -Action apply -SkipPreflight`, then remove the rule. |
 
 
 
@@ -36,10 +36,7 @@ Treat the current release as **preview / release-candidate** if you need any of 
 
 | Area | Limitation | Workaround | Target |
 |---|---|---|---|
-| Self-referential teardown leftovers | `-Action destroy` leaves the state RG and identity RG as empty shells because terraform loses access to its own backend mid-destroy when it deletes the state storage account. All resources inside the RGs are destroyed correctly. | Run `az group delete -n rg-<svc>-<env>-state-* --yes --no-wait` and `az group delete -n rg-<svc>-<env>-identity-* --yes --no-wait` after `-Action destroy` completes. | v1.5.0 |
-| Secrets — PAT-less | OIDC-only mode for the GitHub provider is not supported (Terraform `github` provider still needs a PAT) | Provide a fine-scoped PAT via `TF_VAR_github_personal_access_token` | v1.5.0 |
-| Secrets — Key Vault | No `-PatFromKeyVault` switch for retrieving PATs from Key Vault at run-time | Pre-export PATs into shell env vars before invoking the wizard | v1.5.0 |
-| `azd` integration | No `azure.yaml` wrapper for `azd up` | Use `Deploy-AKSLandingZone` directly | v1.5.0 |
+| Self-referential teardown leftovers | `-Action destroy` may briefly leave the state RG and identity RG as empty shells because terraform loses access to its own backend mid-destroy when it deletes the state storage account. All resources inside the RGs are destroyed correctly. The destroy path now **verifies and retries** RG deletion (polls up to 3 min, then issues a final synchronous `az group delete --yes`) and reports an ERROR only if an RG is still present (e.g. due to a resource lock). | If an RG persists after the error, check for resource locks then run `az group delete -n <rg> --yes`. | v1.5.0 |
 | PSGallery | Module is not published to PowerShell Gallery | `Import-Module .\ALZ.AKS\ALZ.AKS.psd1` from a local clone | v1.4.0 |
 
 ## Externally-blocked items (cannot fix in this repo)
@@ -47,7 +44,6 @@ Treat the current release as **preview / release-candidate** if you need any of 
 | Area | Limitation | Origin |
 |---|---|---|
 | Log Analytics AVM | `log_analytics` AVM module emits a deprecated `local_authentication_disabled` warning during `terraform plan` | Upstream AVM module — waiting for fix |
-| GitHub environment reviewers | GitHub Free-plan orgs cannot enforce reviewer protection rules on private repos. The `apply_approvers` wiring is silently dropped. | GitHub plan limitation. **Workaround**: upgrade the org to GitHub Team, OR make the workload repo public, OR enforce review via CODEOWNERS + branch protection (also paid). |
 
 ## Operational caveats
 
@@ -55,6 +51,7 @@ Treat the current release as **preview / release-candidate** if you need any of 
 - **Plan-only mode** (`-PlanOnly`) of `Deploy-AKSLandingZone` still requires Azure provider authentication — provider must be able to read existing resources to compute the plan.
 - **`hub_and_spoke` topology** keeps hub state as Terraform **local state** (per-env workspace) inside `bootstrap/alz/hub/`. Remote-state migration for the hub composition is pending and tracked in CHANGELOG v1.3.0 "Notes".
 - **Azure Firewall Basic SKU** is intentionally not supported in v1.3+. Use Standard or Premium.
+- **CD approval gate depends on your GitHub plan (informational, not a defect)**. The CD Apply job always runs against the `apply_environment` GitHub Environment and the module always wires the `apply_approvers` as required reviewers. Whether the manual-approval gate is *enforced* depends on the repo's GitHub plan: GitHub **Team**, **Enterprise**, or **any public repo** enforce environment protection rules, so the approval gate works as intended. On a **Free plan with a private repo**, GitHub does not support environment protection rules, so the reviewers are silently ignored — deployments still succeed, just without a manual gate. To enable the gate, upgrade the org to GitHub Team/Enterprise, make the workload repo public, or add CODEOWNERS + branch protection.
 
 ## Known terraform warnings (non-blocking)
 

@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# azd wrapper for the ALZ.AKS accelerator.
+# ---------------------------------------------------------------------------
+# IMPORTANT: `azd up` here is only a thin launcher for the interactive
+# `Deploy-AKSLandingZone` wizard. The accelerator is NOT a conventional azd
+# template — it provisions a GitHub workload repository, federated workload
+# identities across multiple subscriptions, a Terraform remote-state backend,
+# and then migrates its own state. None of that maps onto azd's declarative
+# provision/deploy lifecycle, so the real work is done by the PowerShell
+# module invoked from the `preprovision` hook below.
+#
+# The `infra/` folder referenced here is an intentional NO-OP Terraform shim
+# (zero Azure resources) whose only purpose is to let azd's provision step
+# complete cleanly after the wizard has already done the bootstrap. See
+# infra/main.tf and docs/scenarios-and-options.md ("Using azd") for details.
+#
+# Prefer running the module directly for full control:
+#   Import-Module ./ALZ.AKS/ALZ.AKS.psd1 -Force
+#   Deploy-AKSLandingZone
+name: aks-landing-zone-accelerator
+metadata:
+  template: ALZ.AKS@1.4.1
+
+infra:
+  provider: terraform
+  path: infra
+
+hooks:
+  # Run the interactive accelerator wizard before azd's (no-op) provision step.
+  # PowerShell 7 is a hard prerequisite of the accelerator, so we use pwsh on
+  # every platform.
+  preprovision:
+    shell: pwsh
+    interactive: true
+    continueOnError: false
+    run: |
+      $manifest = Join-Path $PWD 'ALZ.AKS/ALZ.AKS.psd1'
+      if (-not (Test-Path $manifest)) { throw "ALZ.AKS module not found at $manifest. Run azd from the repository root." }
+      Import-Module $manifest -Force
+      Deploy-AKSLandingZone

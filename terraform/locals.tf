@@ -1,5 +1,6 @@
 # -----------------------------------------------------------------------------
-# AKS Application Landing Zone - Local Values
+# Root - Local Values
+# Global naming + per-region configuration map consumed by module.region.
 # -----------------------------------------------------------------------------
 
 locals {
@@ -12,80 +13,29 @@ locals {
     eastus2       = "eu2"
   }
 
-  loc_short = lookup(local.location_short, var.location, substr(var.location, 0, 3))
+  loc_short           = lookup(local.location_short, var.location, substr(var.location, 0, 3))
+  secondary_loc_short = var.secondary_location != "" ? lookup(local.location_short, var.secondary_location, substr(var.secondary_location, 0, 3)) : ""
 
-  # Short form of environment for resource naming. Defaults to var.environment (no change
-  # for existing deployments). Set var.environment_short to a 1-6 char string when
-  # var.environment exceeds 6 chars to keep within Azure resource name limits.
   env_short = var.environment_short != "" ? var.environment_short : var.environment
 
-  # Naming convention: {resource_type}-{workload_name}-{env_short}-{location_short}
+  # Global naming
   name_prefix = "${var.workload_name}-${local.env_short}-${local.loc_short}"
+  acr_name    = replace("acr${var.workload_name}${local.env_short}${local.loc_short}", "-", "")
 
-  # Resource names
-  # NOTE: Resources with short Azure-imposed name limits use a length-safe pattern:
-  #   <prefix>-<truncated name_prefix><3-char sha256(name_prefix)>
-  # See https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
-  resource_group_name    = "rg-${local.name_prefix}"
-  vnet_name              = "vnet-${local.name_prefix}"
-  aks_name               = "aks-${local.name_prefix}"
-  acr_name               = replace("acr${var.workload_name}${local.env_short}${local.loc_short}", "-", "")
-  # Key Vault max length = 24. Truncate + append 3-char deterministic hash when over.
-  _kv_full               = "kv-${local.name_prefix}"
-  key_vault_name         = length(local._kv_full) <= 24 ? local._kv_full : "kv-${substr(local.name_prefix, 0, 17)}${substr(sha256(local.name_prefix), 0, 3)}"
-  app_gateway_name       = "agw-${local.name_prefix}"
-  waf_policy_name        = "waf-${local.name_prefix}"
-  log_analytics_name     = "log-${local.name_prefix}"
-  monitor_workspace_name = "amon-${local.name_prefix}"
-  grafana_name           = length("grf-${local.name_prefix}") <= 23 ? "grf-${local.name_prefix}" : "grf-${substr(local.name_prefix, 0, 16)}${substr(sha256(local.name_prefix), 0, 3)}"
-  # Data Collection Endpoint max length = 44; DCR max length = 64.
-  # "dce-prometheus-" prefix is 15 chars, leaving 29 for name_prefix before hashing.
-  _dce_full              = "dce-prometheus-${local.name_prefix}"
-  dce_prometheus_name    = length(local._dce_full) <= 44 ? local._dce_full : "dce-prometheus-${substr(local.name_prefix, 0, 26)}${substr(sha256(local.name_prefix), 0, 3)}"
-  _dcr_full              = "dcr-prometheus-${local.name_prefix}"
-  dcr_prometheus_name    = length(local._dcr_full) <= 64 ? local._dcr_full : "dcr-prometheus-${substr(local.name_prefix, 0, 46)}${substr(sha256(local.name_prefix), 0, 3)}"
-  route_table_name       = "rt-${local.name_prefix}"
-  nsg_appgw_name         = "nsg-agw-${local.name_prefix}"
-  nsg_pe_name            = "nsg-pe-${local.name_prefix}"
-  managed_identity_name  = "id-${local.name_prefix}"
-  nsg_aks_system_name    = "nsg-aks-system-${local.name_prefix}"
-  nsg_aks_user_name      = "nsg-aks-user-${local.name_prefix}"
+  # ACR is created at the root and lives in the primary region's resource group.
+  # We build its resource ID deterministically so the region module can grant
+  # AcrPull without creating a dependency cycle (region -> acr -> region subnet).
+  primary_resource_group_name = "rg-${local.name_prefix}"
+  acr_resource_id             = "/subscriptions/${var.subscription_id}/resourceGroups/${local.primary_resource_group_name}/providers/Microsoft.ContainerRegistry/registries/${local.acr_name}"
 
-  # Subnet configurations — system and user node pools on separate subnets (AKS baseline best practice)
-  subnets = {
-    aks_system_nodes = {
-      name             = "snet-aks-system-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.aks_system_nodes]
-    }
-    aks_user_nodes = {
-      name             = "snet-aks-user-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.aks_user_nodes]
-    }
-    aks_api_server = {
-      name             = "snet-aks-apiserver-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.aks_api_server]
-      delegation = {
-        aks = {
-          name = "Microsoft.ContainerService/managedClusters"
-          actions = [
-            "Microsoft.Network/virtualNetworks/subnets/join/action"
-          ]
-        }
-      }
-    }
-    app_gateway = {
-      name             = "snet-agw-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.app_gateway]
-    }
-    private_endpoints = {
-      name             = "snet-pe-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.private_endpoints]
-    }
-    ingress = {
-      name             = "snet-ingress-${local.name_prefix}"
-      address_prefixes = [var.subnet_address_prefixes.ingress]
-    }
-  }
+  # Front Door / Traffic Manager / Fleet global resource names
+  resource_group_name_global = "rg-${var.workload_name}-${local.env_short}-global"
+  frontdoor_profile_name     = "afd-${var.workload_name}-${local.env_short}"
+  frontdoor_endpoint_name    = "fde-${var.workload_name}-${local.env_short}"
+  traffic_manager_name       = "tm-${var.workload_name}-${local.env_short}"
+  # Traffic Manager DNS relative name must be globally unique.
+  traffic_manager_dns_name = lower("${var.workload_name}-${local.env_short}-${substr(sha256("${var.subscription_id}-${var.workload_name}-${local.env_short}"), 0, 8)}")
+  fleet_name               = "fleet-${var.workload_name}-${local.env_short}"
 
   # Tags
   default_tags = merge(var.tags, {
@@ -95,13 +45,68 @@ locals {
     project     = "aksapplz"
   })
 
-  # Hub firewall private IP for UDR (only used in Corp)
-  hub_firewall_private_ip = var.hub_firewall_private_ip != "" ? var.hub_firewall_private_ip : "0.0.0.0"
-
   # DNS zone names for private endpoints
   private_dns_zones = {
     acr      = "privatelink.azurecr.io"
     keyvault = "privatelink.vaultcore.azure.net"
     aks      = "privatelink.${var.location}.azmk8s.io"
   }
+
+  # Multi-region is enabled whenever a secondary location is supplied.
+  is_multi_region = var.secondary_location != ""
+
+  # Global load balancing selection (only meaningful when multi-region).
+  global_lb_type   = local.is_multi_region ? var.global_lb_type : "none"
+  use_front_door   = local.global_lb_type == "front_door"
+  use_traffic_mgr  = local.global_lb_type == "traffic_manager"
+  assign_dns_label = local.use_traffic_mgr
+
+  # Fleet Manager is opt-in and only meaningful with more than one cluster.
+  enable_fleet = local.is_multi_region && var.enable_fleet_manager
+
+  # A global resource group is required for Front Door / Traffic Manager / Fleet.
+  need_global_rg = local.use_front_door || local.use_traffic_mgr || local.enable_fleet
+
+  # ACR uses a private endpoint whenever any region exposes a PE subnet (corp).
+  # In a fully-standalone deployment there is no PE subnet, so ACR stays public.
+  acr_has_private_endpoint = length([
+    for k, r in module.region : k if r.private_endpoints_subnet_id != null
+  ]) > 0
+
+  # ---------------------------------------------------------------------------
+  # Per-region configuration map. The primary region is always present; the
+  # secondary is added only when var.secondary_location is set.
+  # ---------------------------------------------------------------------------
+  regions = merge(
+    {
+      primary = {
+        location                     = var.location
+        loc_short                    = local.loc_short
+        vnet_address_space           = var.vnet_address_space
+        subnet_address_prefixes      = var.subnet_address_prefixes
+        hub_vnet_resource_id         = var.hub_vnet_resource_id
+        hub_vnet_name                = var.hub_vnet_name
+        hub_vnet_resource_group_name = var.hub_vnet_resource_group_name
+        hub_firewall_private_ip      = var.hub_firewall_private_ip
+        use_remote_gateways          = var.use_remote_gateways
+        availability_zones           = var.availability_zones
+        public_dns_label             = lower("${var.workload_name}${local.env_short}${local.loc_short}${substr(sha256("${var.subscription_id}-primary"), 0, 6)}")
+      }
+    },
+    local.is_multi_region ? {
+      secondary = {
+        location                     = var.secondary_location
+        loc_short                    = local.secondary_loc_short
+        vnet_address_space           = var.secondary_vnet_address_space
+        subnet_address_prefixes      = var.secondary_subnet_address_prefixes
+        hub_vnet_resource_id         = var.secondary_hub_vnet_resource_id
+        hub_vnet_name                = var.secondary_hub_vnet_name
+        hub_vnet_resource_group_name = var.secondary_hub_vnet_resource_group_name
+        hub_firewall_private_ip      = var.secondary_hub_firewall_private_ip
+        use_remote_gateways          = var.use_remote_gateways
+        availability_zones           = length(var.secondary_availability_zones) > 0 ? var.secondary_availability_zones : var.availability_zones
+        public_dns_label             = lower("${var.workload_name}${local.env_short}${local.secondary_loc_short}${substr(sha256("${var.subscription_id}-secondary"), 0, 6)}")
+      }
+    } : {}
+  )
 }

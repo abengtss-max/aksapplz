@@ -1,7 +1,5 @@
 # -----------------------------------------------------------------------------
-# Monitoring - Log Analytics, Managed Prometheus, Managed Grafana
-# Best Practices: Centralized monitoring, Azure Monitor workspace,
-# Prometheus data collection rules, Grafana dashboards
+# Region module - Monitoring (Log Analytics, Managed Prometheus, Managed Grafana)
 # -----------------------------------------------------------------------------
 
 # Log Analytics Workspace (for Container Insights & diagnostics)
@@ -32,7 +30,7 @@ resource "azurerm_monitor_workspace" "main" {
 resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
   count = var.enable_managed_prometheus ? 1 : 0
 
-  name                = "dce-prometheus-${local.name_prefix}"
+  name                = local.dce_prometheus_name
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   kind                = "Linux"
@@ -43,7 +41,7 @@ resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
 resource "azurerm_monitor_data_collection_rule" "prometheus" {
   count = var.enable_managed_prometheus ? 1 : 0
 
-  name                        = "dcr-prometheus-${local.name_prefix}"
+  name                        = local.dcr_prometheus_name
   resource_group_name         = azurerm_resource_group.main.name
   location                    = azurerm_resource_group.main.location
   data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.prometheus[0].id
@@ -88,9 +86,8 @@ resource "azurerm_monitor_data_collection_rule_association" "prometheus_dce" {
 }
 
 # -----------------------------------------------------------------------------
-# Managed Grafana - Using Azure Verified Module
-# ----------------------------------------------------------------------------- 
-
+# Managed Grafana
+# -----------------------------------------------------------------------------
 resource "azurerm_dashboard_grafana" "main" {
   count = var.enable_managed_grafana ? 1 : 0
 
@@ -103,7 +100,7 @@ resource "azurerm_dashboard_grafana" "main" {
   zone_redundancy_enabled       = var.grafana_zone_redundancy
   public_network_access_enabled = var.grafana_public_access
   api_key_enabled               = true
-  grafana_major_version         = "10"
+  grafana_major_version         = var.grafana_major_version
 
   identity {
     type = "SystemAssigned"
@@ -120,14 +117,14 @@ resource "azurerm_dashboard_grafana" "main" {
 
 # Role assignment: Grafana Admin for the specified group
 resource "azurerm_role_assignment" "grafana_admin" {
-  count = var.enable_managed_grafana ? 1 : 0
+  count = var.enable_managed_grafana && var.grafana_admin_group_object_id != "" ? 1 : 0
 
   scope                = azurerm_dashboard_grafana.main[0].id
   role_definition_name = "Grafana Admin"
   principal_id         = var.grafana_admin_group_object_id
 }
 
-# Role assignment: Grafana needs Monitoring Reader on the resource group (least privilege)
+# Role assignment: Grafana needs Monitoring Reader on the resource group
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
   count = var.enable_managed_grafana ? 1 : 0
 

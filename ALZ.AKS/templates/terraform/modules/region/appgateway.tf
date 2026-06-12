@@ -1,6 +1,5 @@
 # -----------------------------------------------------------------------------
-# Application Gateway with WAF v2
-# Best Practices: WAF_v2 SKU, OWASP 3.2, Autoscaling, Diagnostic Logging
+# Region module - Application Gateway with WAF v2
 # -----------------------------------------------------------------------------
 
 # Public IP for Application Gateway
@@ -13,7 +12,11 @@ resource "azurerm_public_ip" "app_gateway" {
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = var.availability_zones
-  tags                = local.default_tags
+  # A public DNS label is required when this IP is used as an Azure endpoint
+  # behind Traffic Manager. Left null for single-region deployments so existing
+  # public IPs are unchanged.
+  domain_name_label = var.assign_public_dns_label ? var.public_dns_label : null
+  tags              = local.default_tags
 }
 
 # WAF Policy

@@ -214,3 +214,47 @@ Override any option in your `inputs.yaml` or `aks-landing-zone.tfvars`:
 scenario: "single_region_baseline"
 enable_istio: true
 ```
+
+---
+
+## Using azd
+
+The repository ships an `azure.yaml` so the accelerator can be launched with
+the [Azure Developer CLI](https://aka.ms/azd):
+
+```powershell
+azd up
+```
+
+**`azd up` is only a thin launcher.** The `preprovision` hook in `azure.yaml`
+imports the `ALZ.AKS` module and runs the interactive `Deploy-AKSLandingZone`
+wizard — exactly the same code path as calling the cmdlet directly. The
+`infra/` folder is an intentional **no-op Terraform shim** (zero Azure
+resources) that exists only so azd's provision step completes cleanly after
+the wizard has finished.
+
+### Why azd is not the primary provisioning model
+
+The accelerator does not fit azd's declarative provision → deploy lifecycle:
+
+- It is **interactive** — it prompts for topology, GitHub PATs, and
+  per-environment values that azd's pipeline cannot supply declaratively.
+- It provisions a **GitHub workload repository**, federated workload
+  identities, and reusable workflow templates — none of which are Azure
+  resources azd can model.
+- It targets **multiple subscriptions** (bootstrap, AKS landing zone,
+  connectivity) within a single run.
+- It creates a **Terraform remote-state backend and then migrates its own
+  state** into it — a bootstrap concern that sits outside any single
+  `terraform apply`.
+- The real workload infrastructure (`terraform/`) is applied by the generated
+  workload repository's **CD pipeline**, not from the operator's machine.
+
+For full control over actions (`apply`, `refresh`, `destroy`, `import`),
+`-DryRun`, multi-environment loops, and `-AutoApprove`, invoke the module
+directly:
+
+```powershell
+Import-Module ./ALZ.AKS/ALZ.AKS.psd1 -Force
+Deploy-AKSLandingZone
+```

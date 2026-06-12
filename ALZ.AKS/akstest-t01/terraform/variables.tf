@@ -35,12 +35,22 @@ variable "workload_name" {
 }
 
 variable "environment" {
-  description = "The environment name (e.g., dev, staging, prod, or test identifier)."
+  description = "The environment name (e.g., dev, staging, prod, standalone, production). Long form used in tags/labels."
   type        = string
   default     = "prod"
   validation {
-    condition     = can(regex("^[a-z0-9]{1,8}$", var.environment))
-    error_message = "Environment must be 1-8 lowercase alphanumeric characters."
+    condition     = can(regex("^[a-z0-9]{1,16}$", var.environment))
+    error_message = "Environment must be 1-16 lowercase alphanumeric characters."
+  }
+}
+
+variable "environment_short" {
+  description = "Short form of the environment name (1-6 lowercase alphanumeric chars) used in resource naming where Azure name limits are tight (Key Vault, Grafana, storage, DCE/DCR). Defaults to var.environment when empty — keep empty to preserve existing resource names; set explicitly when var.environment exceeds 6 chars."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.environment_short == "" || can(regex("^[a-z0-9]{1,6}$", var.environment_short))
+    error_message = "environment_short must be empty or 1-6 lowercase alphanumeric characters."
   }
 }
 
@@ -71,12 +81,12 @@ variable "subnet_address_prefixes" {
     ingress           = string
   })
   default = {
-    aks_system_nodes  = "10.10.0.0/24" # 256 IPs - System node pool (CriticalAddonsOnly)
-    aks_user_nodes    = "10.10.1.0/22" # 1024 IPs - User/workload node pools
-    aks_api_server    = "10.10.5.0/28" # 16 IPs - API server VNet integration
-    app_gateway       = "10.10.6.0/24" # 256 IPs - App Gateway
-    private_endpoints = "10.10.7.0/24" # 256 IPs - Private endpoints
-    ingress           = "10.10.8.0/24" # 256 IPs - Ingress/load balancer
+    aks_system_nodes  = "10.10.0.0/24"  # 256 IPs  - System node pool (CriticalAddonsOnly)
+    aks_user_nodes    = "10.10.16.0/22" # 1024 IPs - User/workload node pools
+    aks_api_server    = "10.10.20.0/28" # 16 IPs   - API server VNet integration
+    app_gateway       = "10.10.21.0/24" # 256 IPs  - App Gateway
+    private_endpoints = "10.10.22.0/24" # 256 IPs  - Private endpoints
+    ingress           = "10.10.23.0/24" # 256 IPs  - Ingress/load balancer
   }
 }
 
@@ -117,7 +127,7 @@ variable "use_remote_gateways" {
 variable "kubernetes_version" {
   description = "The version of Kubernetes for AKS."
   type        = string
-  default     = "1.30"
+  default     = "1.33"
 }
 
 variable "aks_sku_tier" {
@@ -577,10 +587,16 @@ variable "grafana_sku" {
   default     = "Standard"
 }
 
+variable "grafana_major_version" {
+  description = "Grafana major version. Valid values: 11, 12."
+  type        = string
+  default     = "11"
+}
+
 variable "grafana_zone_redundancy" {
   description = "Enable zone redundancy for Grafana."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "grafana_public_access" {

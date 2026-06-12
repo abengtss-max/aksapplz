@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`-PatFromKeyVault <vaultName>`** on `Deploy-AKSLandingZone` (with
+  `-PatSecretName` / `-RunnerPatSecretName`, defaulting to `github-pat` /
+  `github-runners-pat`) — resolves GitHub PATs from an Azure Key Vault at
+  run-time into `TF_VAR_github_personal_access_token` and
+  `TF_VAR_github_runners_personal_access_token` via the new
+  `Resolve-KeyVaultPats` helper. Values are masked in logs.
+- **`-OidcOnly`** on `Deploy-AKSLandingZone` — PAT-less mode for the GitHub
+  provider. Clears the PAT `TF_VAR`s and validates either GitHub App
+  credentials (`GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`,
+  `GITHUB_APP_PEM_FILE` → `TF_VAR_github_app_*`) or a `GH_TOKEN` /
+  `GITHUB_TOKEN` environment token. The wizard skips its PAT prompts in this
+  mode. The bootstrap `github` provider now uses a conditional `token` plus a
+  `dynamic "app_auth"` block, with new `github_app_id`,
+  `github_app_installation_id`, `github_app_pem_file` variables.
+  `-PatFromKeyVault` and `-OidcOnly` are mutually exclusive.
+- **`azd` wrapper** — a thin `azure.yaml` at the repo root with a
+  `preprovision` hook (pwsh, interactive) that imports `ALZ.AKS.psd1` and runs
+  `Deploy-AKSLandingZone`, plus a no-op `infra/main.tf` shim so `azd up` works.
+  See `ALZ.AKS/docs/scenarios-and-options.md` ("Using azd").
+
+### Fixed
+- **BUG-D (state migration on private storage)** — the apply path's
+  post-apply `terraform init -migrate-state` no longer fails with
+  `403 AuthorizationFailure` on regulated topologies whose bootstrap state
+  storage account is private (`publicNetworkAccess: Disabled`,
+  `defaultAction: Deny`). The cmdlet now records the SA's original network
+  posture, opens a temporary firewall window for the migration (60s settle,
+  one-shot 90s retry on 403), and **restores the original posture in a
+  `finally` block**. Regulated cloud verification still pending.
+- **Destroy path — orphaned RG shells** — `-Action destroy` now verifies and
+  retries deletion of the state and identity resource groups (polls up to
+  3 min, then a final synchronous `az group delete --yes`) and reports an
+  ERROR only if an RG is still present (e.g. a resource lock), instead of
+  leaving the fire-and-forget `--no-wait` deletions unverified.
+
 ## [1.4.0] - 2026-05-24
 
 GA release. Builds on rc5 with three fixes from live E2E validation and

@@ -1,7 +1,5 @@
 # -----------------------------------------------------------------------------
-# AKS Cluster - Using Azure Verified Module v0.4.3
-# Best Practices: Entra ID, Workload Identity, Defender, Autoscaling,
-# System + User Node Pools, Private Cluster, API Server VNet Integration
+# Region module - AKS Cluster (Azure Verified Module)
 # -----------------------------------------------------------------------------
 
 # User-Assigned Managed Identity for AKS
@@ -19,9 +17,9 @@ resource "azurerm_role_assignment" "aks_network_contributor" {
   principal_id         = azurerm_user_assigned_identity.aks.principal_id
 }
 
-# Role assignment: AKS identity needs AcrPull on ACR
+# Role assignment: AKS identity needs AcrPull on the shared (global) ACR
 resource "azurerm_role_assignment" "aks_acr_pull" {
-  scope                = module.acr.resource_id
+  scope                = var.acr_id
   role_definition_name = "AcrPull"
   principal_id         = module.aks.kubelet_identity.objectId
 }
@@ -29,18 +27,22 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 # AKS Cluster using Azure Verified Module
 module "aks" {
   source  = "Azure/avm-res-containerservice-managedcluster/azurerm"
-  version = "~> 0.4"
+  version = "~> 0.4.0"
 
   name      = local.aks_name
   parent_id = azurerm_resource_group.main.id
   location  = azurerm_resource_group.main.location
   tags      = local.default_tags
 
+  # DNS prefix for the cluster
+  dns_prefix = local.aks_name
+
   # Kubernetes version
   kubernetes_version = var.kubernetes_version
 
   # SKU
   sku = {
+    name = "Base"
     tier = var.aks_sku_tier # "Standard" for production, "Free" for dev
   }
 
@@ -116,7 +118,6 @@ module "aks" {
 
   # --------------------------------------------------------------------------
   # System Node Pool (default_agent_pool)
-  # Best Practice: Dedicated system pool on its own subnet, CriticalAddonsOnly auto-taint
   # --------------------------------------------------------------------------
   default_agent_pool = {
     name                = "system"
@@ -141,7 +142,6 @@ module "aks" {
 
   # --------------------------------------------------------------------------
   # User Node Pool(s)
-  # Best Practice: Separate pool on its own subnet for workloads, autoscaling enabled
   # --------------------------------------------------------------------------
   agent_pools = {
     user = {
@@ -177,9 +177,7 @@ module "aks" {
   }
 
   # --------------------------------------------------------------------------
-  # Maintenance Configuration - Scheduled window for auto-upgrades
-  # Best Practice: Define maintenance windows to control when upgrades happen
-  # Uses the AVM maintenanceconfiguration sub-module
+  # Maintenance Configuration
   # --------------------------------------------------------------------------
   maintenanceconfiguration = {
     auto_upgrade = {
@@ -238,7 +236,7 @@ module "aks" {
   } : null
 
   # --------------------------------------------------------------------------
-  # KEDA (Kubernetes Event-Driven Autoscaler) & VPA
+  # KEDA & VPA
   # --------------------------------------------------------------------------
   workload_auto_scaler_profile = {
     keda = {
@@ -300,9 +298,6 @@ module "aks" {
 
 # =============================================================================
 # AKS Backup Extension (via AzAPI)
-# Best Practice: Enable backup for disaster recovery
-# Note: After deployment, configure backup vault and backup policy via Azure Portal
-# or CLI: az dataprotection backup-instance create ...
 # =============================================================================
 resource "azapi_resource" "aks_backup_extension" {
   count = var.enable_backup ? 1 : 0
@@ -316,6 +311,10 @@ resource "azapi_resource" "aks_backup_extension" {
       extensionType           = "Microsoft.DataProtection.Kubernetes"
       autoUpgradeMinorVersion = true
       releaseTrain            = "Stable"
+      # Required for the velero secret rendered by the extension's Helm chart
+      configurationSettings = {
+        "credentials.tenantId" = var.tenant_id
+      }
     }
   }
 }

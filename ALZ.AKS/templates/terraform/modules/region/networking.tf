@@ -1,15 +1,6 @@
 # -----------------------------------------------------------------------------
-# Networking - Spoke VNet, Subnets, NSGs, UDR, VNet Peering
-# Uses Azure Verified Module: avm-res-network-virtualnetwork
-#
-# Corp:   UDR to hub firewall, VNet peering, private endpoints subnet
-# Online: No UDR, no peering, direct internet egress
+# Region module - Networking (Spoke VNet, Subnets, NSGs, UDR, VNet Peering)
 # -----------------------------------------------------------------------------
-
-locals {
-  # This accelerator deploys a corp (hub-spoke, private) landing zone.
-  is_corp = true
-}
 
 # Resource Group
 resource "azurerm_resource_group" "main" {
@@ -46,6 +37,17 @@ resource "azurerm_network_security_group" "aks_system_nodes" {
 # NSG - AKS User Node Pool Subnet
 resource "azurerm_network_security_group" "aks_user_nodes" {
   name                = local.nsg_aks_user_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+}
+
+# NSG - AKS API Server (VNet integration) Subnet
+# Required because the ALZ "Deny-Subnet-Without-Nsg" policy denies any subnet
+# without an NSG. The subnet is delegated to managedClusters; an empty NSG
+# (default rules only) satisfies the policy without affecting API server traffic.
+resource "azurerm_network_security_group" "aks_api_server" {
+  name                = local.nsg_apiserver_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   tags                = local.default_tags
@@ -187,6 +189,9 @@ module "spoke_vnet" {
       aks_api_server = {
         name             = local.subnets.aks_api_server.name
         address_prefixes = local.subnets.aks_api_server.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.aks_api_server.id
+        }
         delegations = [{
           name = "Microsoft.ContainerService.managedClusters"
           service_delegation = {
@@ -230,8 +235,6 @@ module "spoke_vnet" {
 
 # =============================================================================
 # VNet Peering (Corp only)
-# In a Corp landing zone, the platform team provisions the hub. The spoke
-# peers to it and traffic is forced through the hub firewall via UDR.
 # =============================================================================
 
 # VNet Peering: Spoke -> Hub

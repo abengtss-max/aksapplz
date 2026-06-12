@@ -91,9 +91,28 @@ variable "github_organization_name" {
 }
 
 variable "github_personal_access_token" {
-  description = "Fine-grained PAT with admin:org + repo scopes (read via TF_VAR_github_personal_access_token)."
+  description = "Fine-grained PAT with admin:org + repo scopes (read via TF_VAR_github_personal_access_token). Leave empty for PAT-less / OIDC-only mode (GitHub App or GITHUB_TOKEN)."
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "github_app_id" {
+  description = "GitHub App ID for PAT-less auth (read via TF_VAR_github_app_id). Set together with github_app_installation_id and github_app_pem_file."
+  type        = string
+  default     = ""
+}
+
+variable "github_app_installation_id" {
+  description = "GitHub App installation ID for PAT-less auth (read via TF_VAR_github_app_installation_id)."
+  type        = string
+  default     = ""
+}
+
+variable "github_app_pem_file" {
+  description = "Path to the GitHub App private key (.pem) for PAT-less auth (read via TF_VAR_github_app_pem_file)."
+  type        = string
+  default     = ""
 }
 
 variable "github_runners_personal_access_token" {

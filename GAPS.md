@@ -49,22 +49,22 @@ Owner: @abengtss-max
 ## C. Productisation & hygiene
 
 - [ ] **PSGallery publication**: add `Publish-Module` script, set up API key, decide on SemVer policy, add `CHANGELOG.md`  *(CHANGELOG added in 1.1.0 — still need publish script + API key)*
-- [ ] **azd story**: ship an `azure.yaml` wrapper so `azd up` triggers `Deploy-AKSLandingZone` (or document why we don't)
+- [x] **azd story**: shipped a thin `azure.yaml` wrapper at repo root with a `preprovision` hook (pwsh, interactive) that imports `ALZ.AKS/ALZ.AKS.psd1` and runs `Deploy-AKSLandingZone`, plus a no-op `infra/main.tf` shim so `azd up` works. Documented the launcher approach and why azd isn't the primary model in [scenarios-and-options.md](ALZ.AKS/docs/scenarios-and-options.md) "Using azd".
 - [x] **Idempotency / re-run**: contract defined and enforced in v1.4.0-rc5. Re-render overwrites managed files (`terraform/*.tf`, `.github/workflows/{ci,cd}.yaml`, `terraform/aks-landing-zone.auto.tfvars`, `.gitignore`) by design; operator hand-edits to those paths are detected and block the re-run unless `-Force` is passed. `-Action refresh` ships as the templates-only path (`terraform apply -target=module.github.github_repository_file.this`). `-DryRun` previews drift without touching anything. See README "Re-run contract" and day2-runbook §7.
   - [x] Decide: does re-render overwrite user edits in the workload repo?  *(answer: yes, by design — with safety gate)*
   - [x] Add `-Refresh` (re-render + push only) vs `-Apply` (full bootstrap) distinction  *(shipped as `-Action refresh`)*
 - [x] **State recovery**: `-Action import` on `Deploy-AKSLandingZone` (v1.4.0-rc4) pushes a known-good state file to the remote backend; auto-discovers `errored.tfstate` or accepts explicit `-StateBackup <path>`
 - [x] **Destroy path**: `-Action destroy` on `Deploy-AKSLandingZone` (v1.4.0-rc3) drains GitHub repo + GHA identities, runs `terraform destroy`, deletes bootstrap RGs (state and identity RG shells remain empty due to self-referential teardown — documented in KNOWN-ISSUES)
-- [ ] **Secrets handling**:
-  - [ ] Optional Key Vault integration for PATs (`-PatFromKeyVault`)
-  - [ ] OIDC-only mode (no PATs at all) using GitHub App or Workload Identity Federation for the GitHub provider
+- [x] **Secrets handling**:
+  - [x] Optional Key Vault integration for PATs (`-PatFromKeyVault`) — added `-PatFromKeyVault <vaultName>` with `-PatSecretName`/`-RunnerPatSecretName`; resolves secrets to `TF_VAR_github_personal_access_token` / `TF_VAR_github_runners_personal_access_token` via `Resolve-KeyVaultPats`
+  - [x] OIDC-only mode (no PATs at all) using GitHub App or Workload Identity Federation for the GitHub provider — added `-OidcOnly`; clears PAT TF_VARs, validates GitHub App env (`GITHUB_APP_ID`/`_INSTALLATION_ID`/`_PEM_FILE`) or `GH_TOKEN`/`GITHUB_TOKEN`, and the `github` provider now uses conditional `token` + `dynamic "app_auth"`
 
 ---
 
 ## D. Smaller correctness gaps
 
 - [x] **Standalone + `multi_region_*` scenarios** — validated 2026-05-23 via terraform plan in sandbox: `Plan: 49 to add, 0 to change, 0 to destroy`, no errors. ACR `georeplications { location = "westeurope" }` correctly generated. `is_corp=false` properly bypasses private endpoints / UDR / private DNS zone; scenario's `private_cluster_enabled=true` is overridden to `false` by the `local.is_corp` gate in `main.aks.tf` (no broken refs). Cloud apply not run — covered by the existing single_region_baseline + standalone validation (run `26334915216`).
-- [ ] **Preflight validation** in `Test-DeploymentPrerequisites`:
+- [x] **Preflight validation** in `Test-DeploymentPrerequisites`:
   - [x] Enforce `topology: spoke` ⇒ `hub_vnet_resource_id`, `hub_vnet_name`, `hub_vnet_resource_group_name`, `hub_firewall_private_ip`, `connectivity_subscription_id` all non-empty
   - [x] Enforce `topology: standalone` ⇒ hub_* and `connectivity_subscription_id` all empty (warn + auto-clear, or fail)
   - [x] Fail fast with a clear error before `terraform init`

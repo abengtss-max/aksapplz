@@ -8,7 +8,7 @@ terraform {
     }
     azapi = {
       source  = "Azure/azapi"
-      version = "~> 2.0"
+      version = "~> 2.4"
     }
     azuread = {
       source  = "hashicorp/azuread"
@@ -21,10 +21,10 @@ terraform {
 
 # -----------------------------------------------------------------------------
 # Provider: Main subscription (landing zone)
-# resource_provider_registrations = "none" — we register explicitly below
+# resource_provider_registrations = "core" — azurerm handles standard providers
 # -----------------------------------------------------------------------------
 provider "azurerm" {
-  resource_provider_registrations = "none"
+  resource_provider_registrations = "core"
   subscription_id                 = var.subscription_id
 
   features {
@@ -38,77 +38,16 @@ provider "azurerm" {
 }
 
 # -----------------------------------------------------------------------------
-# Provider: Connectivity subscription (hub) — only used for Corp peering
+# Provider: Connectivity subscription (hub) — used for hub VNet peering.
+# In standalone topology connectivity_subscription_id is empty; fall back to
+# the workload subscription so the provider block stays valid. No resources
+# reference this alias when standalone (peering module is conditional).
 # -----------------------------------------------------------------------------
 provider "azurerm" {
   alias                           = "connectivity"
-  subscription_id                 = var.connectivity_subscription_id
-  resource_provider_registrations = "none"
+  subscription_id                 = var.connectivity_subscription_id != "" ? var.connectivity_subscription_id : var.subscription_id
+  resource_provider_registrations = "core"
   features {}
 }
 
 provider "azuread" {}
-
-# -----------------------------------------------------------------------------
-# Explicit Resource Provider Registration
-# Never assume providers are registered — register exactly what we need
-# -----------------------------------------------------------------------------
-resource "azurerm_resource_provider_registration" "compute" {
-  name = "Microsoft.ContainerService"
-}
-
-resource "azurerm_resource_provider_registration" "network" {
-  name = "Microsoft.Network"
-}
-
-resource "azurerm_resource_provider_registration" "storage" {
-  name = "Microsoft.Storage"
-}
-
-resource "azurerm_resource_provider_registration" "keyvault" {
-  name = "Microsoft.KeyVault"
-}
-
-resource "azurerm_resource_provider_registration" "container_registry" {
-  name = "Microsoft.ContainerRegistry"
-}
-
-resource "azurerm_resource_provider_registration" "operational_insights" {
-  name = "Microsoft.OperationalInsights"
-}
-
-resource "azurerm_resource_provider_registration" "insights" {
-  name = "microsoft.insights"
-}
-
-resource "azurerm_resource_provider_registration" "monitor" {
-  name = "Microsoft.Monitor"
-}
-
-resource "azurerm_resource_provider_registration" "dashboard" {
-  count = var.enable_managed_grafana ? 1 : 0
-  name  = "Microsoft.Dashboard"
-}
-
-resource "azurerm_resource_provider_registration" "managed_identity" {
-  name = "Microsoft.ManagedIdentity"
-}
-
-resource "azurerm_resource_provider_registration" "authorization" {
-  name = "Microsoft.Authorization"
-}
-
-resource "azurerm_resource_provider_registration" "security" {
-  count = var.enable_defender ? 1 : 0
-  name  = "Microsoft.Security"
-}
-
-resource "azurerm_resource_provider_registration" "kubernetes_configuration" {
-  count = var.enable_flux || var.enable_backup ? 1 : 0
-  name  = "Microsoft.KubernetesConfiguration"
-}
-
-resource "azurerm_resource_provider_registration" "data_protection" {
-  count = var.enable_backup ? 1 : 0
-  name  = "Microsoft.DataProtection"
-}

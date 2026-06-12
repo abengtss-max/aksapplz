@@ -16,10 +16,30 @@
 scenario = "multi_region_regulated"
 
 # --- Multi-Region ---
-# Set secondary_location to enable ACR geo-replication
-# For full multi-region (second AKS cluster, Fleet Manager, Front Door), see docs/multi-region.md
-secondary_location          = ""  # e.g. "westeurope"
-enable_acr_geo_replication   = true
+# Set secondary_location to enable a full second region (AKS + App Gateway +
+# VNet + Key Vault) and ACR geo-replication. Leave empty for single-region.
+secondary_location         = ""  # e.g. "westeurope"
+enable_acr_geo_replication = true
+
+# Global load balancer in front of both regional clusters (multi-region only).
+# Front Door Premium is recommended for regulated workloads (integrated WAF + TLS).
+#   none | front_door | traffic_manager
+global_lb_type = "front_door"
+
+# Azure Kubernetes Fleet Manager — auto-joins every regional cluster (multi-region only)
+enable_fleet_manager = true
+
+# Secondary-region networking (used only when secondary_location is set).
+# Must not overlap the primary vnet_address_space below.
+secondary_vnet_address_space = "10.20.0.0/16"
+secondary_subnet_address_prefixes = {
+  aks_system_nodes  = "10.20.0.0/24"
+  aks_user_nodes    = "10.20.16.0/22"
+  aks_api_server    = "10.20.5.0/28"
+  app_gateway       = "10.20.6.0/24"
+  private_endpoints = "10.20.7.0/24"
+  ingress           = "10.20.8.0/24"
+}
 
 # --- Networking ---
 network_plugin      = "azure"

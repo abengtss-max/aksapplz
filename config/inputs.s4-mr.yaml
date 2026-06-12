@@ -2,6 +2,8 @@
 # S4: multi_region_baseline / hub_and_spoke (S2 + ACR geo-replica + Flux)
 scenario: "multi_region_baseline"
 secondary_location: "westeurope"
+global_lb_type: "front_door"
+enable_fleet_manager: true
 topology: "hub_and_spoke"
 bootstrap_location: "swedencentral"
 aks_landing_zone_subscription_id: "029039e3-76a6-4c2e-b3c0-1473059b0193"

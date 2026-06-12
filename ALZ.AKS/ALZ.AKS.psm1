@@ -284,6 +284,40 @@ function Get-MaskedValue {
     return "$($Value.Substring(0,3))***$($Value.Substring($Value.Length - 3))"
 }
 
+function Resolve-KeyVaultPats {
+    # Hydrate the GitHub PAT environment variables from an Azure Key Vault so
+    # operators never have to paste tokens interactively or pre-export them.
+    # The values are loaded into TF_VAR_* env vars for the current process only
+    # (never written to disk), exactly like the manual export flow.
+    param(
+        [Parameter(Mandatory)][string]$VaultName,
+        [Parameter(Mandatory)][string]$PatSecretName,
+        [Parameter()][string]$RunnerPatSecretName
+    )
+    Write-Log "Resolving GitHub PAT(s) from Key Vault '$VaultName'..." -Severity "INFO"
+
+    # Landing-zone PAT (always required).
+    $pat = az keyvault secret show --vault-name $VaultName --name $PatSecretName --query value -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($pat)) {
+        Write-Log "Could not read secret '$PatSecretName' from Key Vault '$VaultName'. Confirm the secret exists and you have data-plane 'get' permission (RBAC role 'Key Vault Secrets User', or an access policy with Get on secrets)." -Severity "ERROR"
+        return $false
+    }
+    $env:TF_VAR_github_personal_access_token = $pat
+    Write-Log "Loaded TF_VAR_github_personal_access_token from $VaultName/$PatSecretName ($(Get-MaskedValue -Value $pat))." -Severity "SUCCESS"
+
+    # Runner PAT (only needed when use_self_hosted_runners = true).
+    if (-not [string]::IsNullOrWhiteSpace($RunnerPatSecretName)) {
+        $rpat = az keyvault secret show --vault-name $VaultName --name $RunnerPatSecretName --query value -o tsv 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($rpat)) {
+            $env:TF_VAR_github_runners_personal_access_token = $rpat
+            Write-Log "Loaded TF_VAR_github_runners_personal_access_token from $VaultName/$RunnerPatSecretName ($(Get-MaskedValue -Value $rpat))." -Severity "SUCCESS"
+        } else {
+            Write-Log "Runner PAT secret '$RunnerPatSecretName' not found in '$VaultName' — skipping (only required when use_self_hosted_runners = true)." -Severity "INFO"
+        }
+    }
+    return $true
+}
+
 function Read-FlatYaml {
     param([string]$Path)
 
@@ -372,7 +406,13 @@ function Initialize-FolderStructure {
 # Interactive Inputs
 # =============================================================================
 function Get-InteractiveInputs {
-    param([hashtable]$AzureContext)
+    param(
+        [hashtable]$AzureContext,
+        # PAT-less / OIDC-only mode: skip the GitHub PAT prompts entirely. The
+        # Terraform `github` provider authenticates via a GitHub App
+        # (GITHUB_APP_*) or an externally-supplied GH_TOKEN/GITHUB_TOKEN.
+        [switch]$OidcOnly
+    )
 
     $config       = @{}
     $locations    = $AzureContext.Locations
@@ -453,9 +493,37 @@ function Get-InteractiveInputs {
             -DefaultIndex $defaultSecIdx -PromptLabel "Enter selection"
         $config.enable_acr_geo_replication = $true
         Write-Host ""
+
+        # ── Global load balancer (multi-region only) ──
+        Write-Log "global_lb_type" -Severity "INPUT REQUIRED"
+        Write-Host "Choose a global load balancer to route traffic across both regional AKS clusters:"
+        Write-Host "  - front_door     : Azure Front Door Premium (anycast HTTP/S, WAF, TLS, fast failover)"
+        Write-Host "  - traffic_manager: Azure Traffic Manager (DNS-based, priority failover)"
+        Write-Host "  - none           : no global LB (you manage DNS/routing yourself)"
+        Write-Host "Default: front_door"
+        $lbOptions = @(
+            [pscustomobject]@{ label = "Azure Front Door Premium"; value = "front_door" }
+            [pscustomobject]@{ label = "Azure Traffic Manager";     value = "traffic_manager" }
+            [pscustomobject]@{ label = "None";                       value = "none" }
+        )
+        Show-NumberedList -Items $lbOptions -LabelProperty "label" -ValueProperty "value" -CurrentValue "front_door"
+        $config.global_lb_type = Read-NumberedSelection -Items $lbOptions -ValueProperty "value" `
+            -DefaultIndex 0 -PromptLabel "Enter selection"
+        Write-Host ""
+
+        # ── Fleet Manager toggle (multi-region only) ──
+        Write-Log "enable_fleet_manager" -Severity "INPUT REQUIRED"
+        Write-Host "Enable Azure Kubernetes Fleet Manager to centrally orchestrate both clusters"
+        Write-Host "(staged update runs, multi-cluster rollouts). Both clusters are auto-joined."
+        Write-Host "Default: yes"
+        $fleetAns = Read-Host "Enable Fleet Manager? (Y/n)"
+        $config.enable_fleet_manager = [string]::IsNullOrWhiteSpace($fleetAns) -or $fleetAns -match '^(y|yes)$'
+        Write-Host ""
     } else {
         $config.secondary_location = ""
         $config.enable_acr_geo_replication = $false
+        $config.global_lb_type = "none"
+        $config.enable_fleet_manager = $false
     }
 
     # ── Decision 1: Bootstrap Location ──
@@ -830,6 +898,14 @@ function Get-InteractiveInputs {
     Write-Host ""
 
     # ── Decision 10: Version Control System Settings ──
+    if ($OidcOnly) {
+        # PAT-less mode: do not prompt for or store any PAT. The github provider
+        # will authenticate via GitHub App / GITHUB_TOKEN at terraform time.
+        $env:TF_VAR_github_personal_access_token = ""
+        Write-Log "OIDC-only mode: skipping GitHub PAT prompts (provider authenticates via GitHub App / GITHUB_TOKEN)." -Severity "INFO"
+        Write-Host ""
+    }
+    else {
     Write-Log "github_personal_access_token" -Severity "INPUT REQUIRED"
     Write-Host "Token 1 of 2 — the Landing Zone PAT (used by Terraform to create repos, push files, set secrets/variables/environments)."
     Write-Host "Permissions & setup: see QUICKSTART.md § Token 1  |  Create at https://github.com/settings/personal-access-tokens"
@@ -872,6 +948,7 @@ function Get-InteractiveInputs {
         if (![string]::IsNullOrEmpty($v)) {
             $env:TF_VAR_github_runners_personal_access_token = $v
         }
+    }
     }
 
     Write-Log "github_organization_name" -Severity "INPUT REQUIRED"
@@ -978,6 +1055,12 @@ function Write-InputsYaml {
 ## Scenario
 scenario: "$($Config.scenario)"
 secondary_location: "$($Config.secondary_location)"
+
+## Multi-region global load balancing (only used when secondary_location is set)
+# global_lb_type: none | front_door | traffic_manager
+global_lb_type: "$(if ($Config.global_lb_type) { $Config.global_lb_type } else { 'none' })"
+# enable_fleet_manager: auto-join every regional AKS cluster into an Azure Kubernetes Fleet Manager
+enable_fleet_manager: $(if ($Config.enable_fleet_manager -eq $true) { "true" } else { "false" })
 
 ## Topology: standalone | spoke
 # - standalone : no hub, no VNet peering, NAT gateway egress only
@@ -1131,6 +1214,11 @@ scenario = "$($Config.scenario)"
 
 # Secondary region (multi-region scenarios only)
 secondary_location = "$($Config.secondary_location)"
+
+# Multi-region global load balancing (only used when secondary_location is set)
+# global_lb_type: none | front_door | traffic_manager
+global_lb_type       = "$(if ($Config.global_lb_type) { $Config.global_lb_type } else { 'none' })"
+enable_fleet_manager = $(if ($Config.enable_fleet_manager -eq $true) { "true" } else { "false" })
 
 # -----------------------------------------------------------------------------
 # Core Settings
@@ -2445,11 +2533,17 @@ function Get-RepositoryFilesMap {
 
     $files = @{}
 
-    # Terraform code -> /terraform/*.tf in the workload repo
+    # Terraform code -> /terraform/**/*.tf in the workload repo.
+    # Preserve sub-directory structure (e.g. modules/region/*.tf) instead of
+    # flattening on $f.Name — flattening would collide same-named files across
+    # modules and break the module source paths.
     $tfSrc = Join-Path $TemplateRoot "terraform"
     if (Test-Path $tfSrc) {
+        $tfSrcFull = (Resolve-Path $tfSrc).Path
         foreach ($f in Get-ChildItem -Path $tfSrc -Recurse -File) {
-            $rel = "terraform/$($f.Name)"
+            $relPath = $f.FullName.Substring($tfSrcFull.Length).TrimStart('\', '/')
+            $relPath = $relPath -replace '\\', '/'
+            $rel = "terraform/$relPath"
             $files[$rel] = (Get-Content $f.FullName -Raw)
         }
     }
@@ -2754,6 +2848,31 @@ function Show-DriftReport {
     intentionally want to discard the operator edits and push the freshly
     rendered templates.
 
+.PARAMETER PatFromKeyVault
+    Name of an Azure Key Vault from which to read the GitHub PATs at run-time
+    (via `az keyvault secret show`). The resolved values are exported to
+    TF_VAR_github_personal_access_token and
+    TF_VAR_github_runners_personal_access_token. See -PatSecretName /
+    -RunnerPatSecretName for the secret names. Mutually exclusive with
+    -OidcOnly.
+
+.PARAMETER PatSecretName
+    Key Vault secret name for the landing-zone GitHub PAT. Defaults to
+    'github-pat'. Only used with -PatFromKeyVault.
+
+.PARAMETER RunnerPatSecretName
+    Key Vault secret name for the self-hosted-runner GitHub PAT. Defaults to
+    'github-runners-pat'. Optional — when the secret is absent the runner PAT
+    is simply not set. Only used with -PatFromKeyVault.
+
+.PARAMETER OidcOnly
+    PAT-less mode for the Terraform `github` provider. Clears the PAT
+    TF_VARs and requires either GitHub App credentials in the environment
+    (GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, GITHUB_APP_PEM_FILE — mapped to
+    TF_VAR_github_app_id / _installation_id / _pem_file) or a GH_TOKEN /
+    GITHUB_TOKEN environment token. The wizard skips its PAT prompts in this
+    mode. Mutually exclusive with -PatFromKeyVault.
+
 .EXAMPLE
     # Interactive (recommended)
     Deploy-AKSLandingZone
@@ -2801,7 +2920,19 @@ function Deploy-AKSLandingZone {
         # Re-run contract (v1.4.0-rc5): override the hand-edit safety check that
         # blocks apply/refresh when an operator has edited a managed file in the
         # workload repo directly. Valid with -Action apply|refresh.
-        [Parameter()][switch]$Force
+        [Parameter()][switch]$Force,
+        # Secrets — Key Vault integration (v1.4.1): retrieve the GitHub PAT(s)
+        # from an Azure Key Vault at run-time instead of prompting or requiring
+        # the operator to pre-export TF_VAR_github_personal_access_token. The
+        # values are loaded into TF_VAR_* env vars for this process only.
+        [Parameter()][string]$PatFromKeyVault,
+        [Parameter()][string]$PatSecretName = 'github-pat',
+        [Parameter()][string]$RunnerPatSecretName = 'github-runners-pat',
+        # Secrets — PAT-less / OIDC-only mode (v1.4.1): skip every PAT prompt and
+        # require the Terraform `github` provider to authenticate via a GitHub
+        # App installation token (GITHUB_APP_*) or an externally-provided
+        # GH_TOKEN/GITHUB_TOKEN (e.g. from OIDC/Workload Identity Federation).
+        [Parameter()][switch]$OidcOnly
     )
 
     # Backward compatibility: -PlanOnly is equivalent to -Action plan.
@@ -2817,6 +2948,54 @@ function Deploy-AKSLandingZone {
     }
     if ($Force -and $Action -notin @('apply','refresh')) {
         Write-Log "-Force is only valid with -Action apply or -Action refresh (operator hand-edit override)." -Severity "ERROR"; return
+    }
+    if ($PatFromKeyVault -and $OidcOnly) {
+        Write-Log "-PatFromKeyVault and -OidcOnly are mutually exclusive: one supplies a PAT, the other runs PAT-less." -Severity "ERROR"; return
+    }
+
+    # ── Optional: hydrate GitHub PAT(s) from Key Vault (-PatFromKeyVault) ──
+    if (-not [string]::IsNullOrWhiteSpace($PatFromKeyVault)) {
+        if (-not (Resolve-KeyVaultPats -VaultName $PatFromKeyVault -PatSecretName $PatSecretName -RunnerPatSecretName $RunnerPatSecretName)) {
+            Write-Log "Aborting: required GitHub PAT could not be retrieved from Key Vault '$PatFromKeyVault'." -Severity "ERROR"
+            return
+        }
+    }
+
+    # ── Optional: PAT-less / OIDC-only mode (-OidcOnly) ──
+    # The Terraform `github` provider can authenticate without a PAT in two ways:
+    #   1. GitHub App  — set GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, and
+    #      GITHUB_APP_PEM_FILE (path to the App private key). These are mapped to
+    #      TF_VAR_github_app_* and consumed by the provider's app_auth block.
+    #   2. Pre-minted token — set GH_TOKEN or GITHUB_TOKEN (e.g. an installation
+    #      token obtained out-of-band via OIDC / Workload Identity Federation).
+    # Either way no long-lived PAT is stored or prompted for.
+    if ($OidcOnly) {
+        $appId   = $env:GITHUB_APP_ID
+        $appInst = $env:GITHUB_APP_INSTALLATION_ID
+        $appPem  = $env:GITHUB_APP_PEM_FILE
+        $haveApp = -not [string]::IsNullOrWhiteSpace($appId) -and -not [string]::IsNullOrWhiteSpace($appInst) -and -not [string]::IsNullOrWhiteSpace($appPem)
+        $haveTok = -not [string]::IsNullOrWhiteSpace($env:GH_TOKEN) -or -not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)
+
+        if (-not $haveApp -and -not $haveTok) {
+            Write-Log "-OidcOnly requires either a GitHub App (GITHUB_APP_ID + GITHUB_APP_INSTALLATION_ID + GITHUB_APP_PEM_FILE) or a pre-minted GH_TOKEN/GITHUB_TOKEN. None were found in the environment." -Severity "ERROR"
+            return
+        }
+
+        # No PAT in PAT-less mode — the github provider variable defaults to "".
+        $env:TF_VAR_github_personal_access_token = ""
+        $env:TF_VAR_github_runners_personal_access_token = ""
+
+        if ($haveApp) {
+            if (-not (Test-Path -LiteralPath $appPem)) {
+                Write-Log "GITHUB_APP_PEM_FILE points to '$appPem' which does not exist." -Severity "ERROR"; return
+            }
+            $env:TF_VAR_github_app_id              = $appId
+            $env:TF_VAR_github_app_installation_id = $appInst
+            $env:TF_VAR_github_app_pem_file        = (Resolve-Path -LiteralPath $appPem).Path
+            Write-Log "OIDC-only mode: GitHub App auth (app id $appId, installation $appInst)." -Severity "SUCCESS"
+        } else {
+            Write-Log "OIDC-only mode: using pre-minted GH_TOKEN/GITHUB_TOKEN from the environment (no PAT, no GitHub App)." -Severity "SUCCESS"
+        }
     }
 
     Show-Banner -Action $Action
@@ -2862,7 +3041,7 @@ function Deploy-AKSLandingZone {
         Write-Log "Querying Azure for subscriptions and regions..." -Severity "INFO"
         $azureContext = Get-AzureContext
 
-        $config = Get-InteractiveInputs -AzureContext $azureContext
+        $config = Get-InteractiveInputs -AzureContext $azureContext -OidcOnly:$OidcOnly
         if ($null -eq $config) {
             Write-Log "Wizard cancelled — no configuration written." -Severity "WARN"
             return
@@ -3533,6 +3712,63 @@ terraform {
             }
         }
 
+        # ── Verify the self-referential shells are actually gone ──
+        # The brute-force cleanup above issues `az group delete --no-wait` for
+        # the state RG and the identity RG, but terraform's self-referential
+        # teardown (it deletes its own backend SA mid-destroy) historically left
+        # these two as empty shells. Fire-and-forget deletes can also be silently
+        # rejected (e.g. a lingering lock). Poll for their disappearance and, if
+        # any still exist after the grace window, re-issue a synchronous delete
+        # so "destroy means destroy".
+        try {
+            $subIdVerify = [string]$config.bootstrap_subscription_id
+            $svcVerify   = [string]$config.service_name
+            $shellRgs = @()
+            if (-not [string]::IsNullOrWhiteSpace($stateRg)) { $shellRgs += $stateRg }
+            $idJsonVerify = az group list --subscription $subIdVerify -o json 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($idJsonVerify)) {
+                try {
+                    $idRgs = ($idJsonVerify | ConvertFrom-Json) | Where-Object {
+                        $_.name -like "rg-$svcVerify-$workspaceName-*-identity" -or $_.name -like "rg-$svcVerify-$workspaceName-state-*"
+                    } | Select-Object -ExpandProperty name
+                    foreach ($r in @($idRgs)) { if ($r -and $shellRgs -notcontains $r) { $shellRgs += $r } }
+                } catch { }
+            }
+            $shellRgs = $shellRgs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+            if ($shellRgs.Count -gt 0) {
+                Write-Log "Verifying state/identity RG teardown: $($shellRgs -join ', ')" -Severity "INFO"
+                # Grace window for the async deletes already submitted to complete.
+                $deadline = (Get-Date).AddMinutes(3)
+                $remaining = @($shellRgs)
+                while ((Get-Date) -lt $deadline -and $remaining.Count -gt 0) {
+                    Start-Sleep -Seconds 20
+                    $remaining = @($remaining | Where-Object {
+                        (az group exists -n $_ --subscription $subIdVerify 2>$null) -eq 'true'
+                    })
+                    if ($remaining.Count -gt 0) {
+                        Write-Log "Still present: $($remaining -join ', ') — waiting for async delete to finish..." -Severity "INFO"
+                    }
+                }
+                # Anything still standing after the grace window gets a final,
+                # synchronous (blocking) delete so we can confirm the outcome.
+                foreach ($r in $remaining) {
+                    Write-Log "RG $r still present after grace window — issuing final synchronous delete..." -Severity "WARNING"
+                    az group delete -n $r --subscription $subIdVerify --yes -o none 2>&1 | Out-Null
+                    if ((az group exists -n $r --subscription $subIdVerify 2>$null) -eq 'true') {
+                        Write-Log "RG $r could NOT be deleted automatically (check for resource locks). Remove it manually: az group delete -n $r --subscription $subIdVerify --yes" -Severity "ERROR"
+                    } else {
+                        Write-Log "RG $r deleted." -Severity "SUCCESS"
+                    }
+                }
+                if ($remaining.Count -eq 0) {
+                    Write-Log "All state/identity resource groups confirmed deleted — no shells left behind." -Severity "SUCCESS"
+                }
+            }
+        } catch {
+            Write-Log "RG teardown verification hit an error: $($_.Exception.Message). Verify manually with: az group list -o table" -Severity "WARNING"
+        }
+
         Write-Host ""
         Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
         Write-Host "  ║   Teardown Complete                                          ║" -ForegroundColor Green
@@ -4188,13 +4424,70 @@ terraform {
             }
         }
 
-        Write-Log "Migrating state to azurerm backend..." -Severity "INFO"
-        $migrateArgs = @('init','-migrate-state','-force-copy','-input=false')
-        & terraform @migrateArgs
-        if ($LASTEXITCODE -ne 0) {
-            Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight after RBAC propagates." -Severity "WARNING"
-        } else {
-            Write-Log "State migrated to $sa/$ct/bootstrap.tfstate" -Severity "SUCCESS"
+        # ── BUG-D: open a reversible firewall window for regulated state SAs ──
+        # Regulated topologies create the bootstrap state SA with
+        # publicNetworkAccess=Disabled and/or networkRuleSet.defaultAction=Deny,
+        # exposing only a private endpoint in the workload spoke VNet. The
+        # operator running this cmdlet from their workstation has no network
+        # path to the SA data plane, so `terraform init -migrate-state` (which
+        # uses use_azuread_auth=true and lists blobs over the data plane) fails
+        # with 403 AuthorizationFailure even though RBAC is correct. Unlike the
+        # destroy path (where the SA is deleted seconds later), the SA must
+        # SURVIVE here, so we record the original posture, open it for the
+        # migration window, then restore it in a finally block.
+        $saNetOpened   = $false
+        $saOrigPublic  = $null
+        $saOrigDefault = $null
+        try {
+            $saOrigPublic  = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query publicNetworkAccess -o tsv 2>$null)
+            $saOrigDefault = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query networkRuleSet.defaultAction -o tsv 2>$null)
+            $isRegulatedSa = ($saOrigPublic -and $saOrigPublic -ieq 'Disabled') -or ($saOrigDefault -and $saOrigDefault -ieq 'Deny')
+            if ($isRegulatedSa) {
+                Write-Log "State SA '$sa' is locked down (publicNetworkAccess=$saOrigPublic, defaultAction=$saOrigDefault). Opening a temporary firewall window for state migration; original posture will be restored." -Severity "WARNING"
+                az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
+                    --public-network-access Enabled --default-action Allow `
+                    --bypass AzureServices Logging Metrics -o none 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $saNetOpened = $true
+                    Write-Log "Opened $sa for migration. Waiting 60s for storage firewall propagation..." -Severity "INFO"
+                    Start-Sleep -Seconds 60
+                } else {
+                    Write-Log "Could not open state SA firewall; migration may fail with 403. Manual workaround: az storage account network-rule add -g $rg -n $sa --ip-address <your-ip>." -Severity "WARNING"
+                }
+            }
+
+            Write-Log "Migrating state to azurerm backend..." -Severity "INFO"
+            $migrateArgs = @('init','-migrate-state','-force-copy','-input=false')
+            & terraform @migrateArgs 2>&1 | Tee-Object -Variable migrateTee | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                # One-shot retry for the storage-firewall propagation race.
+                $joinedMigrate = ($migrateTee | Out-String)
+                if ($saNetOpened -and ($joinedMigrate -match '403' -or $joinedMigrate -match 'AuthorizationFailure')) {
+                    Write-Log "Migration failed with 403 — waiting an extra 90s for firewall propagation, then retrying once..." -Severity "WARNING"
+                    Start-Sleep -Seconds 90
+                    & terraform @migrateArgs
+                }
+            }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight after RBAC/firewall propagates." -Severity "WARNING"
+            } else {
+                Write-Log "State migrated to $sa/$ct/bootstrap.tfstate" -Severity "SUCCESS"
+            }
+        }
+        finally {
+            # Always restore the original network posture so the regulated SA
+            # is never left publicly reachable after the migration window.
+            if ($saNetOpened) {
+                $restorePublic  = if ($saOrigPublic)  { $saOrigPublic }  else { 'Disabled' }
+                $restoreDefault = if ($saOrigDefault) { $saOrigDefault } else { 'Deny' }
+                az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
+                    --public-network-access $restorePublic --default-action $restoreDefault -o none 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Restored $sa firewall (publicNetworkAccess=$restorePublic, defaultAction=$restoreDefault)." -Severity "SUCCESS"
+                } else {
+                    Write-Log "FAILED to restore $sa firewall to its locked-down posture — restore it manually: az storage account update -n $sa -g $rg --public-network-access $restorePublic --default-action $restoreDefault" -Severity "ERROR"
+                }
+            }
         }
 
         Write-Host ""
