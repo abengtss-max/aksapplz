@@ -28,6 +28,8 @@ in one region:
 - ACR (Premium, zone-redundant) + Key Vault
 - System and user node pools on separate subnets
 
+<p align="center"><img src="../../assets/arch-baseline.png" alt="Single-region baseline architecture: a hub virtual network with Azure Bastion, Azure Firewall, and a gateway subnet to on-premises, peered to a spoke virtual network containing subnets for Private Link endpoints, API server VNet integration, ingress resources, and the Application Gateway. The cluster nodes subnet holds the private AKS cluster with separate system (CoreDNS, metric-server) and user (workload) node pools. Key Vault and Container Registry connect over Private Link; Azure Monitor workspace collects metrics and Managed Prometheus." width="900" style="background:#ffffff;border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)"></p>
+
 ## Multi-region baseline
 
 Everything in the baseline, plus a complete second region from a single run:
@@ -38,6 +40,8 @@ Everything in the baseline, plus a complete second region from a single run:
 - **Geo-replicated ACR** across both regions
 - **Flux v2 GitOps** and **VPA** for consistent, right-sized multi-cluster workloads
 - **Azure Backup** for cross-region recovery
+
+<p align="center"><img src="../../assets/arch-multi-region.png" alt="Multi-region baseline architecture: two regions (A and B), each with a regional hub network (Azure Bastion, Azure Firewall) peered to a spoke virtual network running Kubernetes services, an internal load balancer, and Application Gateway, plus a regional Key Vault, Container Registry replica, and Log Analytics. A shared-resources column holds the source Container Registry, Azure Front Door as the global load balancer, Azure Kubernetes Fleet Manager, and Log Analytics. A Microsoft-managed Fleet hub cluster coordinates both regional clusters." width="960" style="background:#ffffff;border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)"></p>
 
 See **[Multi-region](../concepts/multi-region.md)** for the architecture and load-balancer choices.
 
