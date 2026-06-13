@@ -26,6 +26,7 @@ normal_font   = Font(name="Segoe UI", size=10)
 input_fill    = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 title_font    = Font(name="Segoe UI", size=14, bold=True, color="0078D4")
 subtitle_font = Font(name="Segoe UI", size=10, italic=True, color="555555")
+link_font     = Font(name="Segoe UI", size=10, color="0563C1", underline="single")
 
 thin_border = Border(
     left=Side(style="thin", color="D9D9D9"),
@@ -70,26 +71,121 @@ def dropdown(ws, row, col, values):
     dv.add(ws.cell(row=row, column=col))
 
 
+# ─── Microsoft Learn / GitHub Docs reference per setting ─────────────────────
+REFERENCES = {
+    # Scenario & topology
+    "scenario": "https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/baseline-aks",
+    "secondary_location": "https://learn.microsoft.com/azure/aks/ha-dr-overview",
+    "topology": "https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke",
+    "global_lb_type": "https://learn.microsoft.com/azure/architecture/guide/technology-choices/load-balancing-overview",
+    # Where to deploy
+    "bootstrap_location": "https://learn.microsoft.com/azure/reliability/regions-overview",
+    "aks_landing_zone_subscription_id": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/design-area/resource-org-subscriptions",
+    "connectivity_subscription_id": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/design-area/network-topology-and-connectivity",
+    # Hub network
+    "hub_vnet_resource_id": "https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke",
+    "hub_firewall_private_ip": "https://learn.microsoft.com/azure/aks/limit-egress-traffic",
+    "hub_vnet_address_space": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview",
+    "hub_firewall_subnet_address_prefix": "https://learn.microsoft.com/azure/firewall/firewall-faq",
+    "hub_deploy_firewall": "https://learn.microsoft.com/azure/firewall/overview",
+    "hub_firewall_sku_tier": "https://learn.microsoft.com/azure/firewall/choose-firewall-sku",
+    # Spoke subnets
+    "spoke_vnet_address_space": "https://learn.microsoft.com/azure/aks/concepts-network",
+    "subnet_address_prefix_aks_system_nodes": "https://learn.microsoft.com/azure/aks/azure-cni-overlay",
+    "subnet_address_prefix_aks_user_nodes": "https://learn.microsoft.com/azure/aks/azure-cni-overlay",
+    "subnet_address_prefix_aks_api_server": "https://learn.microsoft.com/azure/aks/api-server-vnet-integration",
+    "subnet_address_prefix_app_gateway": "https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview",
+    "subnet_address_prefix_private_endpoints": "https://learn.microsoft.com/azure/private-link/private-endpoint-overview",
+    "subnet_address_prefix_ingress": "https://learn.microsoft.com/azure/aks/internal-lb",
+    "subnet_address_prefix_agc": "https://learn.microsoft.com/azure/application-gateway/for-containers/overview",
+    # Cluster settings
+    "kubernetes_version": "https://learn.microsoft.com/azure/aks/supported-kubernetes-versions",
+    "aks_sku_tier": "https://learn.microsoft.com/azure/aks/free-standard-pricing-tiers",
+    "aks_private_cluster": "https://learn.microsoft.com/azure/aks/private-clusters",
+    "aks_admin_group_object_ids": "https://learn.microsoft.com/azure/aks/azure-ad-rbac",
+    # State & naming
+    "bootstrap_subscription_id": "https://learn.microsoft.com/azure/developer/terraform/store-state-in-azure-storage",
+    "service_name": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming",
+    "environment_name": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming",
+    "postfix_number": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming",
+    # Runners & GitHub
+    "use_self_hosted_runners": "https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners",
+    "use_private_networking": "https://learn.microsoft.com/azure/container-registry/container-registry-private-link",
+    "github_personal_access_token": "https://docs.github.com/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens",
+    "github_runners_personal_access_token": "https://docs.github.com/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens",
+    "github_organization_name": "https://docs.github.com/organizations/collaborating-with-groups-in-organizations/about-organizations",
+    "apply_approvers": "https://docs.github.com/actions/deployment/targeting-different-environments/using-environments-for-deployment",
+    # Add-ons
+    "enable_defender": "https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction",
+    "enable_workload_identity": "https://learn.microsoft.com/azure/aks/workload-identity-overview",
+    "enable_azure_policy": "https://learn.microsoft.com/azure/aks/use-azure-policy",
+    "enable_prometheus": "https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-metrics-overview",
+    "enable_grafana": "https://learn.microsoft.com/azure/managed-grafana/overview",
+    "enable_app_gateway": "https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview",
+    "enable_agc": "https://learn.microsoft.com/azure/application-gateway/for-containers/overview",
+    "enable_keda": "https://learn.microsoft.com/azure/aks/keda-about",
+    "enable_vpa": "https://learn.microsoft.com/azure/aks/vertical-pod-autoscaler",
+    "enable_node_auto_provisioning": "https://learn.microsoft.com/azure/aks/node-autoprovision",
+    "enable_istio": "https://learn.microsoft.com/azure/aks/istio-about",
+    "enable_flux": "https://learn.microsoft.com/azure/azure-arc/kubernetes/conceptual-gitops-flux2",
+    "enable_dapr": "https://learn.microsoft.com/azure/aks/dapr",
+    "enable_fips": "https://learn.microsoft.com/azure/aks/enable-fips-nodes",
+    "enable_backup": "https://learn.microsoft.com/azure/backup/azure-kubernetes-service-backup-overview",
+    "enable_cost_analysis": "https://learn.microsoft.com/azure/aks/cost-analysis",
+    # Advanced cluster settings (Tab 2)
+    "system_node_pool.vm_size": "https://learn.microsoft.com/azure/aks/use-system-pools",
+    "system_node_pool.min_count": "https://learn.microsoft.com/azure/aks/cluster-autoscaler-overview",
+    "system_node_pool.max_count": "https://learn.microsoft.com/azure/aks/cluster-autoscaler-overview",
+    "user_node_pool.vm_size": "https://learn.microsoft.com/azure/aks/create-node-pools",
+    "user_node_pool.min_count": "https://learn.microsoft.com/azure/aks/cluster-autoscaler-overview",
+    "user_node_pool.max_count": "https://learn.microsoft.com/azure/aks/cluster-autoscaler-overview",
+    "network_policy": "https://learn.microsoft.com/azure/aks/use-network-policies",
+    "service_cidr": "https://learn.microsoft.com/azure/aks/configure-azure-cni",
+    "dns_service_ip": "https://learn.microsoft.com/azure/aks/configure-azure-cni",
+    "pod_cidr": "https://learn.microsoft.com/azure/aks/azure-cni-overlay",
+    "automatic_upgrade_channel": "https://learn.microsoft.com/azure/aks/auto-upgrade-cluster",
+    "node_os_upgrade_channel": "https://learn.microsoft.com/azure/aks/auto-upgrade-node-os-image",
+    "app_gateway_sku": "https://learn.microsoft.com/azure/web-application-firewall/ag/ag-overview",
+    "app_gateway_min_capacity": "https://learn.microsoft.com/azure/application-gateway/application-gateway-autoscaling-zone-redundant",
+    "app_gateway_max_capacity": "https://learn.microsoft.com/azure/application-gateway/application-gateway-autoscaling-zone-redundant",
+    "log_analytics_retention_days": "https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure",
+}
+
+
+def set_reference(ws, row, col, setting):
+    """Put a clickable Microsoft Learn link in the Reference column."""
+    cell = ws.cell(row=row, column=col)
+    url = REFERENCES.get(setting)
+    if url:
+        cell.value = "Microsoft Learn \u2197"
+        cell.hyperlink = url
+        cell.font = link_font
+        cell.alignment = wrap_alignment
+
+
 # ============================================================================
 # TAB 1 — Bootstrap Decisions
 # ============================================================================
 ws1 = wb.active
 ws1.title = "Bootstrap Decisions"
 
-ws1.merge_cells("A1:F1")
+ws1.merge_cells("A1:H1")
 ws1["A1"].value = "AKS Application Landing Zone — Planning Checklist"
 ws1["A1"].font = title_font
 ws1["A1"].alignment = Alignment(vertical="center")
 ws1.row_dimensions[1].height = 30
 
-ws1.merge_cells("A2:F2")
-ws1["A2"].value = "Fill in the yellow column. Each row matches one question the wizard will ask you."
+ws1.merge_cells("A2:H2")
+ws1["A2"].value = (
+    "Fill in the yellow columns. Each row matches one question the wizard will ask you. "
+    "Use 'Reference' for the Microsoft Learn docs and 'Comments' for your own notes."
+)
 ws1["A2"].font = subtitle_font
 ws1.row_dimensions[2].height = 20
 
-for col, h in enumerate(["#", "Setting", "What it is", "Example / options", "Default", "Your value"], 1):
+for col, h in enumerate(["#", "Setting", "What it is", "Example / options", "Default", "Your value", "Reference", "Comments"], 1):
     ws1.cell(row=4, column=col, value=h)
-style_header(ws1, 4, 6)
+style_header(ws1, 4, 8)
 
 ws1.column_dimensions["A"].width = 6
 ws1.column_dimensions["B"].width = 38
@@ -97,6 +193,8 @@ ws1.column_dimensions["C"].width = 55
 ws1.column_dimensions["D"].width = 55
 ws1.column_dimensions["E"].width = 22
 ws1.column_dimensions["F"].width = 28
+ws1.column_dimensions["G"].width = 20
+ws1.column_dimensions["H"].width = 34
 
 # (number, setting, what it is, example/options, default)
 decisions = [
@@ -338,9 +436,9 @@ row = 5
 for num, setting, what, opts, default in decisions:
     if num == "":
         ws1.cell(row=row, column=1, value="")
-        ws1.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
+        ws1.merge_cells(start_row=row, start_column=2, end_row=row, end_column=8)
         ws1.cell(row=row, column=2, value=setting)
-        style_section(ws1, row, 6)
+        style_section(ws1, row, 8)
     else:
         ws1.cell(row=row, column=1, value=num)
         ws1.cell(row=row, column=2, value=setting)
@@ -348,7 +446,9 @@ for num, setting, what, opts, default in decisions:
         ws1.cell(row=row, column=4, value=opts)
         ws1.cell(row=row, column=5, value=default)
         ws1.cell(row=row, column=6, value="")
-        style_data(ws1, row, 6, input_col=6)
+        style_data(ws1, row, 8, input_col=6)
+        set_reference(ws1, row, 7, setting)
+        ws1.cell(row=row, column=8).fill = input_fill
         ws1.cell(row=row, column=1).alignment = center_alignment
     row += 1
 
@@ -382,13 +482,13 @@ for r in range(5, row):
 # ============================================================================
 ws2 = wb.create_sheet("Advanced Cluster Settings")
 
-ws2.merge_cells("A1:E1")
+ws2.merge_cells("A1:G1")
 ws2["A1"].value = "Advanced Cluster Settings"
 ws2["A1"].font = title_font
 ws2["A1"].alignment = Alignment(vertical="center")
 ws2.row_dimensions[1].height = 30
 
-ws2.merge_cells("A2:E2")
+ws2.merge_cells("A2:G2")
 ws2["A2"].value = (
     "These come from the scenario you picked (see Tab 1, Decision 0a). "
     "Only change them if you have a specific reason. Edit `aks-landing-zone.auto.tfvars` "
@@ -397,15 +497,17 @@ ws2["A2"].value = (
 ws2["A2"].font = subtitle_font
 ws2.row_dimensions[2].height = 30
 
-for col, h in enumerate(["Setting", "What it does", "Example / options", "Default", "Your value"], 1):
+for col, h in enumerate(["Setting", "What it does", "Example / options", "Default", "Your value", "Reference", "Comments"], 1):
     ws2.cell(row=4, column=col, value=h)
-style_header(ws2, 4, 5)
+style_header(ws2, 4, 7)
 
 ws2.column_dimensions["A"].width = 38
 ws2.column_dimensions["B"].width = 55
 ws2.column_dimensions["C"].width = 45
 ws2.column_dimensions["D"].width = 22
 ws2.column_dimensions["E"].width = 28
+ws2.column_dimensions["F"].width = 20
+ws2.column_dimensions["G"].width = 34
 
 advanced = [
     ("", "SYSTEM NODE POOL  (small pool that runs Kubernetes itself)", "", "", ""),
@@ -489,9 +591,9 @@ row2 = 5
 for tup in advanced:
     if tup[0] == "":
         # section header row uses column B for label
-        ws2.merge_cells(start_row=row2, start_column=1, end_row=row2, end_column=5)
+        ws2.merge_cells(start_row=row2, start_column=1, end_row=row2, end_column=7)
         ws2.cell(row=row2, column=1, value=tup[1])
-        style_section(ws2, row2, 5)
+        style_section(ws2, row2, 7)
     else:
         setting, what, example, default = tup
         ws2.cell(row=row2, column=1, value=setting)
@@ -499,7 +601,9 @@ for tup in advanced:
         ws2.cell(row=row2, column=3, value=example)
         ws2.cell(row=row2, column=4, value=default)
         ws2.cell(row=row2, column=5, value="")
-        style_data(ws2, row2, 5, input_col=5)
+        style_data(ws2, row2, 7, input_col=5)
+        set_reference(ws2, row2, 6, setting)
+        ws2.cell(row=row2, column=7).fill = input_fill
     row2 += 1
 
 for r in range(5, row2):
@@ -531,6 +635,8 @@ intro = [
     ("", normal_font),
     ("1. Open the 'Bootstrap Decisions' tab and fill in every yellow cell.", normal_font),
     ("   - Pick a scenario first (row 0a) — it sets sensible defaults for the rest.", normal_font),
+    ("   - Use the 'Reference' column links to read the Microsoft Learn docs for any setting.", normal_font),
+    ("   - Use the 'Comments' column (yellow) to record why you chose a value — handy for your team and auditors.", normal_font),
     ("   - Pick a topology (row 0c) — 'spoke' if you already have an ALZ hub, 'hub_and_spoke' to create a new hub this run, or 'standalone' for an isolated subscription. Standalone skips Decisions 3 and 4.", normal_font),
     ("   - Don't put GitHub tokens in the workbook. The wizard asks for them with hidden input.", normal_font),
     ("", normal_font),

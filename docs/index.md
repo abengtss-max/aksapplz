@@ -17,11 +17,29 @@ flowchart LR
 
 ---
 
-## The journey — three steps
+## The journey — four steps
+
+Decisions first, then setup, then deploy.
 
 <div class="grid cards" markdown>
 
--   :material-numeric-1-circle:{ .lg .middle } **Prepare**
+-   :material-numeric-1-circle:{ .lg .middle } **Plan**
+
+    ---
+
+    Make your decisions first. Download the planning checklist and agree on names, networks, and add-ons.
+
+    [:octicons-arrow-right-24: Planning checklist](get-started/planning-checklist.md)
+
+-   :material-numeric-2-circle:{ .lg .middle } **Choose a scenario**
+
+    ---
+
+    Pick a pre-tuned blueprint — baseline or PCI-DSS regulated, single or multi-region.
+
+    [:octicons-arrow-right-24: Scenarios](get-started/scenarios.md)
+
+-   :material-numeric-3-circle:{ .lg .middle } **Prepare**
 
     ---
 
@@ -29,21 +47,13 @@ flowchart LR
 
     [:octicons-arrow-right-24: Prerequisites](get-started/prerequisites.md)
 
--   :material-numeric-2-circle:{ .lg .middle } **Deploy**
+-   :material-numeric-4-circle:{ .lg .middle } **Deploy**
 
     ---
 
     Run one command. An interactive wizard walks you through everything.
 
     [:octicons-arrow-right-24: Quickstart](get-started/quickstart.md)
-
--   :material-numeric-3-circle:{ .lg .middle } **Choose a scenario**
-
-    ---
-
-    Pick a pre-tuned blueprint — baseline or PCI-DSS regulated, single or multi-region.
-
-    [:octicons-arrow-right-24: Scenarios](get-started/scenarios.md)
 
 </div>
 
@@ -77,5 +87,5 @@ Want a specific, locked version instead? See [Releases & versions](releases.md).
 
 ## New here?
 
-Start with **[Prerequisites](get-started/prerequisites.md)**, then the **[Quickstart](get-started/quickstart.md)**.
+Start by **[planning your decisions](get-started/planning-checklist.md)**, then run the **[Prerequisites](get-started/prerequisites.md)** and the **[Quickstart](get-started/quickstart.md)**.
 If you just want to understand the architecture first, read **[Topologies](concepts/topologies.md)**.
