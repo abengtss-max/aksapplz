@@ -1,0 +1,68 @@
+# Checkov configuration — AKS Application Landing Zone Accelerator
+# -----------------------------------------------------------------------------
+# Shared by:
+#   * the local scan        (tools/Invoke-SecurityScan.ps1)
+#   * the accelerator CI     (.github/workflows/static-analysis.yml)
+#   * every generated workload repo (pushed by the bootstrap so customer CI
+#     applies the exact same triaged policy — see Get-RepositoryFilesMap).
+#
+# Every skip below is either a reviewed FALSE POSITIVE or an explicitly
+# ACCEPTED, by-design control. Full triage: SECURITY.md § "Security scanning".
+# Do not add a skip here without a one-line justification.
+framework:
+  - terraform
+compact: true
+quiet: true
+# Never reach out to the registry/git during a scan — deterministic, offline,
+# and avoids scanning vendored module code we don't own.
+download-external-modules: false
+skip-path:
+  - .terraform        # downloaded AVM modules — not our code
+  - .venv-docs
+  - site
+skip-check:
+  # CKV_TF_1 — "module sources use a commit hash". Not applicable: we consume
+  # version-pinned Azure Verified Modules from the public Terraform registry
+  # plus local ./modules/* path modules; neither uses a git source.
+  - CKV_TF_1
+  # CKV_AZURE_120 — "Application Gateway enables WAF". False positive: WAF IS
+  # enabled via the WAF_v2 SKU + a dedicated azurerm_web_application_firewall_policy
+  # attached through firewall_policy_id (checkov misses the separate policy).
+  - CKV_AZURE_120
+  # CKV_AZURE_217 / CKV_AZURE_218 — App Gateway HTTP listener / TLS protocols.
+  # By design: the bootstrap creates a placeholder HTTP listener that AGIC
+  # (Application Gateway Ingress Controller) replaces with the real HTTPS
+  # listeners + certificates at runtime (see lifecycle ignore_changes in
+  # modules/region/appgateway.tf).
+  - CKV_AZURE_217
+  - CKV_AZURE_218
+  # CKV_AZURE_160 — "restrict HTTP (port 80) from the internet" on the App
+  # Gateway NSG. By design: App Gateway v2 needs the frontend port for client
+  # traffic / HTTP→HTTPS redirect; east-west traffic to pods is mTLS via Istio.
+  - CKV_AZURE_160
+  # CKV_AZURE_235 — "container env vars use secure values only". False positive:
+  # the GitHub runner token is passed via secure_environment_variables; only the
+  # non-sensitive runner URL/name/mode are in plaintext environment_variables.
+  - CKV_AZURE_235
+  # CKV_AZURE_220 — "Firewall policy has IDPS mode as deny". Accepted: IDPS is a
+  # Premium-tier-only feature; the hub firewall defaults to Standard tier. Threat
+  # intelligence is set to Deny instead (CKV_AZURE_216 is satisfied). Deployments
+  # that select Premium can add an intrusion_detection block.
+  - CKV_AZURE_220
+  # CKV_AZURE_216 — "DenyIntelMode is set to Deny". False positive for
+  # policy-based firewalls: threat_intelligence_mode = "Deny" is set on the
+  # azurerm_firewall_policy (the only supported location when firewall_policy_id
+  # is used); checkov only inspects the deprecated attribute on the firewall.
+  - CKV_AZURE_216
+  # CKV_GIT_3 — "repository has vulnerability alerts enabled". False positive:
+  # alerts ARE enabled via a dedicated github_repository_vulnerability_alerts
+  # resource rather than the inline attribute checkov inspects.
+  - CKV_GIT_3
+  # CKV_GIT_5 — "PRs require at least 2 approvals". By design: the accelerator
+  # ships a single-approver model (required_approving_review_count = 1) suitable
+  # for small platform teams; raise it in github/repository.tf if your org needs it.
+  - CKV_GIT_5
+  # CKV_GIT_6 — "branch protection requires signed commits". By design: the
+  # bootstrap itself pushes files and runner commits unsigned via automation;
+  # enforcing signed commits would break the unattended provisioning flow.
+  - CKV_GIT_6

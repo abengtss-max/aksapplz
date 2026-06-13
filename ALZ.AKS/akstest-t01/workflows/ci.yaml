@@ -10,6 +10,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  security-events: write # allow the reusable workflow's Checkov job to upload SARIF
 
 jobs:
   CI:

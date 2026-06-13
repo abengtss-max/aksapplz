@@ -40,12 +40,13 @@ resource "azurerm_public_ip" "firewall" {
 }
 
 resource "azurerm_firewall_policy" "hub" {
-  count               = var.deploy_firewall ? 1 : 0
-  name                = local.firewall_policy_name
-  resource_group_name = azurerm_resource_group.hub.name
-  location            = azurerm_resource_group.hub.location
-  sku                 = var.firewall_sku_tier
-  tags                = var.tags
+  count                    = var.deploy_firewall ? 1 : 0
+  name                     = local.firewall_policy_name
+  resource_group_name      = azurerm_resource_group.hub.name
+  location                 = azurerm_resource_group.hub.location
+  sku                      = var.firewall_sku_tier
+  threat_intelligence_mode = "Deny" # Actively block known-malicious traffic (valid on Standard and Premium tiers).
+  tags                     = var.tags
 }
 
 resource "azurerm_firewall" "hub" {

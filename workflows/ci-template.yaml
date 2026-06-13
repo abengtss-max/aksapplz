@@ -81,3 +81,35 @@ jobs:
           name: tfplan
           path: ${{ inputs.working_directory }}/tfplan
           retention-days: 5
+
+  security:
+    name: "Security scan (Checkov)"
+    # Always on GitHub-hosted runners: deterministic, has Docker, and avoids a
+    # dependency on the self-hosted ACI runner so the gate is never flaky.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning (advisory)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkov (shared .checkov.yaml policy)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ${{ inputs.working_directory }}
+          # Triaged false-positives / by-design controls live in .checkov.yaml
+          # at the repo root (shipped by the AKS landing-zone accelerator).
+          config_file: .checkov.yaml
+          framework: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: false # any finding NOT in .checkov.yaml fails the PR gate
+
+      - name: Upload Checkov SARIF
+        if: always()
+        continue-on-error: true # don't fail the gate if code scanning is unavailable
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov

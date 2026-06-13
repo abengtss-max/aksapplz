@@ -2657,6 +2657,15 @@ function Get-RepositoryFilesMap {
 .terraform.lock.hcl
 "@
 
+    # .checkov.yaml — shared, documented IaC scan policy consumed by the
+    # workload repo's CI security job (ci-template.yaml). Ships the same triaged
+    # false-positive / by-design suppressions the accelerator uses, so customer
+    # PR gates are deterministic. See SECURITY.md "Security scanning".
+    $checkovSrc = Join-Path $TemplateRoot ".checkov.yaml"
+    if (Test-Path $checkovSrc) {
+        $files[".checkov.yaml"] = (Get-Content $checkovSrc -Raw)
+    }
+
     return $files
 }
 

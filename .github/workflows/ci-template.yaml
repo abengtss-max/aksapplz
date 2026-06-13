@@ -17,13 +17,23 @@ on:
       working_directory:
         required: false
         type: string
-        default: "."
-        description: "Working directory for Terraform commands"
+        default: "terraform"
+        description: "Working directory for Terraform commands (workload TF lives under /terraform)."
+      runner_label:
+        required: false
+        type: string
+        default: "self-hosted"
+        description: "Runner label: 'self-hosted' (ACI runner) or 'ubuntu-latest' (GitHub-hosted)"
+      backend_key:
+        required: false
+        type: string
+        default: "aks-landing-zone.tfstate"
+        description: "Object key inside the state container for this workload."
 
 jobs:
   plan:
     name: "Plan with Terraform"
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_label }}
     environment: ${{ inputs.environment }}
 
     defaults:
@@ -31,9 +41,9 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
 
     env:
-      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: true
 
     steps:
@@ -52,10 +62,10 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="resource_group_name=${{ vars.BACKEND_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ vars.BACKEND_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=${{ vars.BACKEND_CONTAINER }}" \
-            -backend-config="key=${{ vars.BACKEND_KEY }}" \
+            -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
+            -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
+            -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
+            -backend-config="key=${{ inputs.backend_key }}" \
             -backend-config="use_oidc=true" \
             -backend-config="use_azuread_auth=true"
 
@@ -71,3 +81,35 @@ jobs:
           name: tfplan
           path: ${{ inputs.working_directory }}/tfplan
           retention-days: 5
+
+  security:
+    name: "Security scan (Checkov)"
+    # Always on GitHub-hosted runners: deterministic, has Docker, and avoids a
+    # dependency on the self-hosted ACI runner so the gate is never flaky.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning (advisory)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkov (shared .checkov.yaml policy)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ${{ inputs.working_directory }}
+          # Triaged false-positives / by-design controls live in .checkov.yaml
+          # at the repo root (shipped by the AKS landing-zone accelerator).
+          config_file: .checkov.yaml
+          framework: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: false # any finding NOT in .checkov.yaml fails the PR gate
+
+      - name: Upload Checkov SARIF
+        if: always()
+        continue-on-error: true # don't fail the gate if code scanning is unavailable
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov

@@ -1,9 +1,16 @@
 name: Static Analysis
 
-# PSScriptAnalyzer + tfsec + checkov as advisory PR gates.
-# Hard-fails on PSScriptAnalyzer Error severity; warnings/info are reported but
-# allowed through. tfsec/checkov are informational for the rc1 line (will be
-# tightened to fail on HIGH/CRITICAL for 1.4.0 GA).
+# Security gates for the accelerator source. Three scanners, all run on every
+# PR that touches PowerShell / Terraform / bootstrap code:
+#
+#   * psscriptanalyzer - PSScriptAnalyzer + InjectionHunter (injection rules).
+#                        Hard-fails on Error severity; warnings are advisory.
+#   * checkov          - Terraform IaC, using the shared .checkov.yaml policy
+#                        across every tree. Uploads SARIF to code scanning and
+#                        hard-fails on any finding NOT triaged in .checkov.yaml.
+#   * secrets          - detect-secrets diffed against .secrets.baseline.
+#
+# Triage rationale for every suppression: SECURITY.md "Security scanning".
 
 on:
   pull_request:
@@ -12,6 +19,9 @@ on:
       - 'ALZ.AKS/**'
       - 'terraform/**'
       - 'bootstrap/**'
+      - 'tools/**'
+      - '.checkov.yaml'
+      - '.secrets.baseline'
       - '.github/workflows/static-analysis.yml'
   workflow_dispatch:
 
@@ -20,46 +30,81 @@ permissions:
 
 jobs:
   psscriptanalyzer:
-    name: PSScriptAnalyzer
+    name: PSScriptAnalyzer + InjectionHunter
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - shell: pwsh
-        name: Install PSScriptAnalyzer
-        run: Install-Module PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
-      - shell: pwsh
-        name: Run PSScriptAnalyzer (fail on Error)
+        name: Install analyzers
         run: |
-          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Severity @('Information','Warning','Error') -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions,PSAvoidUsingConvertToSecureStringWithPlainText,PSUseDeclaredVarsMoreThanAssignments
+          Install-Module PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+          Install-Module InjectionHunter  -Force -SkipPublisherCheck -Scope CurrentUser
+      - shell: pwsh
+        name: Run analyzers (fail on Error)
+        run: |
+          $ih = Get-Module -ListAvailable -Name InjectionHunter | Select-Object -First 1
+          $rulePath = Join-Path $ih.ModuleBase 'InjectionHunter.psd1'
+          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Severity @('Information','Warning','Error') `
+            -CustomRulePath $rulePath `
+            -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions,PSAvoidUsingConvertToSecureStringWithPlainText,PSUseDeclaredVarsMoreThanAssignments |
+            Where-Object { $_.ScriptPath -notmatch '[\\/]\.terraform[\\/]' }
           $errors   = @($findings | Where-Object { $_.Severity -eq 'Error' })
           $warnings = @($findings | Where-Object { $_.Severity -eq 'Warning' })
           Write-Host ("Findings: {0} Error, {1} Warning, {2} Info" -f $errors.Count, $warnings.Count, ($findings.Count - $errors.Count - $warnings.Count))
           $findings | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize | Out-String | Write-Host
           if ($errors.Count -gt 0) { exit 1 }
 
-  tfsec:
-    name: tfsec (advisory)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: aquasecurity/tfsec-action@v1.0.3
-        with:
-          working_directory: ALZ.AKS/templates/terraform
-          soft_fail: true
-
   checkov:
-    name: checkov (advisory)
+    name: Checkov (Terraform)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
     steps:
       - uses: actions/checkout@v4
-      - uses: bridgecrewio/checkov-action@v12
+      - name: Checkov (shared .checkov.yaml policy)
+        uses: bridgecrewio/checkov-action@v12
         with:
-          directory: ALZ.AKS/templates/terraform
+          directory: .
+          config_file: .checkov.yaml
           framework: terraform
-          quiet: true
-          soft_fail: true
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: false # any finding NOT in .checkov.yaml fails the gate
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+  secrets:
+    name: Secret scan (detect-secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install detect-secrets
+        run: pip install --quiet detect-secrets==1.5.0
+      - name: Scan vs baseline
+        run: |
+          set -euo pipefail
+          detect-secrets scan \
+            --exclude-files '\.terraform/|\.venv|site/|/results/|\.git/|\.secrets\.baseline' \
+            > .secrets.new
+          python - <<'PY'
+          import json, sys
+          base = json.load(open('.secrets.baseline'))['results']
+          new  = json.load(open('.secrets.new'))['results']
+          if base != new:
+              print('::error::Secret findings differ from .secrets.baseline. '
+                    'Refresh with: detect-secrets scan > .secrets.baseline '
+                    '&& detect-secrets audit .secrets.baseline')
+              sys.exit(1)
+          print('No new secrets beyond the reviewed baseline.')
+          PY
