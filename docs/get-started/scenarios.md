@@ -47,18 +47,36 @@ See **[Multi-region](../concepts/multi-region.md)** for the architecture and loa
 
 ## Regulated (PCI-DSS 4.0.1)
 
-Hardened for [PCI-DSS](https://learn.microsoft.com/azure/aks/pci-network-segmentation):
+Hardened for [PCI-DSS](https://learn.microsoft.com/azure/aks/pci-network-segmentation), aligned with
+the Microsoft Learn [AKS regulated cluster reference architecture](https://learn.microsoft.com/azure/aks/pci-ra-code-assets):
 
 - **Premium SKU** (required for regulated workloads)
+- **Private cluster** with API server VNet integration (Entra ID only, local accounts disabled)
+- **Application Gateway WAF** for inbound, **Azure Firewall** (hub) for egress
 - **Azure network policy** (PCI network segmentation)
-- **Istio service mesh** with mTLS for data-in-transit encryption
-- **FIPS 140-2** compliant node OS
-- **Local accounts disabled** (Entra ID only)
+- **Istio service mesh** with mTLS for data-in-transit encryption between pods
+- **FIPS 140-2** compliant node OS on system and user node pools
+- **Microsoft Defender for Containers** + **Azure Policy** guardrails
+- **Azure Monitor + Log Analytics** (90-day retention) and Managed Prometheus
 - **Azure Backup** for data protection
+- **Key Vault** and **Container Registry** reachable over **Private Link**
+
+<p align="center"><img src="../../assets/arch-regulated.png" alt="Single-region regulated PCI-DSS 4.0.1 architecture as deployed: a hub virtual network with an Azure Firewall subnet (outbound egress) peered via VNet peering to on-premises and other spokes, and to a spoke virtual network. The spoke contains an API server VNet integration subnet (Entra ID only), an internal load balancer subnet, an Application Gateway with WAF subnet receiving internet traffic, a private endpoints subnet, and a private cluster nodes subnet with a private AKS cluster running FIPS 140-2 system and user node pools and pods secured by an Istio service mesh with mTLS. Key Vault, Container Registry, and the AKS API server are reachable over Private Link. Platform services include Microsoft Defender for Containers, Azure Policy, Azure Monitor with Log Analytics 90-day retention, and an Azure Backup vault." width="960" style="background:#ffffff;border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)"></p>
+
+!!! info "Reference alignment & deltas"
+    This blueprint maps to the Microsoft Learn regulated reference on the security-critical
+    controls (private cluster, WAF, mTLS, FIPS, Defender, Azure Policy, Entra-ID-only access,
+    90-day logs, backup, dedicated subnets). The reference also describes
+    *defense-in-depth* elements the accelerator does **not** yet deploy — a second user node
+    pool for in-scope/out-of-scope segmentation, host-based encryption, customer-managed keys
+    (BYOK), DDoS Network Protection, and an SRE jump-box / image-build spoke. These are tracked
+    in [GAPS.md](https://github.com/abengtss-max/aksapplz/blob/main/GAPS.md) (section G).
 
 !!! warning "Regulated scenarios are tech preview"
-    The regulated blueprints are not yet in the GA validation matrix. See
-    **[Known issues](../known-issues.md)** before using them in production.
+    The regulated blueprints are not yet in the GA validation matrix, and the Microsoft reference
+    itself is not certified — deploying it does **not** clear a PCI-DSS audit. Always engage a
+    Qualified Security Assessor (QSA). See **[Known issues](../known-issues.md)** before using
+    these in production.
 
 ## Customizing options
 

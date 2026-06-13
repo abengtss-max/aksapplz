@@ -128,8 +128,8 @@ hub-spoke topology with the AKS cluster in a CDE spoke and a second spoke for SR
 
 ### G3. Doc tasks (this section's track)
 - [x] Write up this gap analysis (this section) — 2026-06-13
-- [ ] Update the **Regulated** section of [scenarios.md](docs/get-started/scenarios.md) to state what we actually deliver and honestly flag G2 deltas as roadmap items
-- [ ] Add the regulated **architecture diagram** to scenarios.md once generated (M365) — mirror the MS Learn regulated topology, white card, `../../assets/`
+- [x] Update the **Regulated** section of [scenarios.md](docs/get-started/scenarios.md) to state what we actually deliver and honestly flag G2 deltas as roadmap items — 2026-06-13
+- [x] Add the regulated **architecture diagram** to scenarios.md once generated (M365) — `docs/assets/arch-regulated.png` (as-deployed: Firewall-only hub, no jump-box/Image Builder spoke), white card, `../../assets/` — 2026-06-13
 
 ---
 
