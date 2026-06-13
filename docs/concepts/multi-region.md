@@ -3,22 +3,7 @@
 Setting a `secondary_location` provisions a complete second region — AKS, App Gateway, VNet,
 Key Vault, and monitoring — from a single run, with a global load balancer wired across both.
 
-```mermaid
-flowchart TB
-    U[🌍 Users] --> GLB{Global load balancer<br/>Front Door / Traffic Manager}
-    GLB -->|priority 1| R1
-    GLB -->|priority 2 failover| R2
-    subgraph R1["Primary region"]
-        A1[AKS] --> G1[App Gateway WAF]
-    end
-    subgraph R2["Secondary region"]
-        A2[AKS] --> G2[App Gateway WAF]
-    end
-    ACR[(Geo-replicated ACR)] --- R1
-    ACR --- R2
-    FM[Fleet Manager] --- A1
-    FM --- A2
-```
+<p align="center"><img src="../../assets/multi-region.png" alt="Multi-region topology: Users reach a global load balancer (Front Door or Traffic Manager) that routes to a Primary region (Priority 1) and a Secondary region (Priority 2 failover). Each region contains an AKS cluster fronted by an App Gateway WAF. AKS Fleet Manager joins both clusters and a geo-replicated ACR serves images to both regions." width="900" style="background:#ffffff;border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)"></p>
 
 ## What gets built
 
