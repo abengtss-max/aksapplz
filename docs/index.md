@@ -11,14 +11,9 @@ This accelerator bootstraps a complete AKS Application Landing Zone — identiti
 state, a GitHub workload repo with CI/CD, and a hardened AKS cluster — following the same
 phased pattern as the [Azure Landing Zone Accelerator](https://azure.github.io/Azure-Landing-Zones/).
 
-```mermaid
-flowchart LR
-    A["👤 You<br/><code>Deploy-AKSLandingZone</code>"] --> B["☁️ Azure bootstrap<br/>Identities + Terraform state"]
-    B --> C["🐙 GitHub workload repo<br/>Terraform + Actions (OIDC)"]
-    C --> D["🚀 AKS cluster<br/>Private · Workload Identity · Defender"]
-    classDef step fill:#3949ab,stroke:#283593,color:#fff,stroke-width:1px,rx:8,ry:8;
-    class A,B,C,D step;
-```
+<p align="center">
+  <img src="assets/flow.png" alt="You run Deploy-AKSLandingZone, which provisions the Azure bootstrap (identities + Terraform state), a GitHub workload platform (Terraform + GitHub Actions via OIDC), and finally a hardened AKS platform (private cluster, Workload Identity, Defender)." width="900">
+</p>
 
 ---
 
