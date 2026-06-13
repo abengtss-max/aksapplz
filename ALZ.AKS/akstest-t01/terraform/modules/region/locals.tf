@@ -37,6 +37,7 @@ locals {
   dcr_prometheus_name   = length(local._dcr_full) <= 64 ? local._dcr_full : "dcr-prometheus-${substr(local.name_prefix, 0, 46)}${substr(sha256(local.name_prefix), 0, 3)}"
   route_table_name      = "rt-${local.name_prefix}"
   nsg_appgw_name        = "nsg-agw-${local.name_prefix}"
+  nsg_agc_name          = "nsg-agc-${local.name_prefix}"
   nsg_pe_name           = "nsg-pe-${local.name_prefix}"
   managed_identity_name = "id-${local.name_prefix}"
   nsg_aks_system_name   = "nsg-aks-system-${local.name_prefix}"
@@ -68,6 +69,10 @@ locals {
     app_gateway = {
       name             = "snet-agw-${local.name_prefix}"
       address_prefixes = [var.subnet_address_prefixes.app_gateway]
+    }
+    agc = {
+      name             = "snet-agc-${local.name_prefix}"
+      address_prefixes = [var.subnet_address_prefixes.agc]
     }
     private_endpoints = {
       name             = "snet-pe-${local.name_prefix}"

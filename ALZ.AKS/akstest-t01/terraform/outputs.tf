@@ -90,6 +90,11 @@ output "app_gateway_public_ip" {
   value       = module.region["primary"].app_gateway_public_ip_address
 }
 
+output "agc_subnet_id" {
+  description = "The resource ID of the primary region's Application Gateway for Containers (ALB) delegated subnet. Null unless enable_agc is true. Pass this to the ALB Controller association."
+  value       = module.region["primary"].agc_subnet_id
+}
+
 # --- Global (shared) ---
 output "acr_id" {
   description = "The ID of the (global) Azure Container Registry."
@@ -125,6 +130,11 @@ output "resource_group_names" {
 output "app_gateway_public_ips" {
   description = "Map of region key to Application Gateway public IP address."
   value       = { for k, r in module.region : k => r.app_gateway_public_ip_address }
+}
+
+output "agc_subnet_ids" {
+  description = "Map of region key to Application Gateway for Containers (ALB) delegated subnet ID. Values are null unless enable_agc is true."
+  value       = { for k, r in module.region : k => r.agc_subnet_id }
 }
 
 # --- Global load balancer endpoints ---

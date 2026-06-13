@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`enable_agc` (Application Gateway for Containers)** — a new regional ingress
+  option alongside `enable_app_gateway`. When enabled, Terraform provisions a
+  dedicated delegated subnet (delegated to
+  `Microsoft.ServiceNetworking/trafficControllers`) plus its NSG in every region
+  (`agc` key added to `subnet_address_prefixes` /
+  `secondary_subnet_address_prefixes`, default `10.10.24.0/24` / `10.20.24.0/24`).
+  Follows the "managed by ALB Controller" model: the in-cluster ALB Controller
+  (which you install separately) creates and manages the AGC `trafficControllers`
+  resource and associates it with the subnet — Terraform provisions the network
+  infrastructure only. The delegated subnet ID is surfaced via the new
+  `agc_subnet_id` (primary) and `agc_subnet_ids` (per-region map) outputs. The
+  interactive wizard exposes an `Enable Application Gateway for Containers (ALB)
+  subnet?` toggle (default `false`) and an `agc` subnet prefix prompt.
 - **`-PatFromKeyVault <vaultName>`** on `Deploy-AKSLandingZone` (with
   `-PatSecretName` / `-RunnerPatSecretName`, defaulting to `github-pat` /
   `github-runners-pat`) — resolves GitHub PATs from an Azure Key Vault at

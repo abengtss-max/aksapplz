@@ -146,6 +146,20 @@ resource "azurerm_network_security_group" "private_endpoints" {
   }
 }
 
+# NSG - Application Gateway for Containers (ALB) delegated subnet
+# Required because the ALZ "Deny-Subnet-Without-Nsg" policy denies any subnet
+# without an NSG. The subnet is delegated to trafficControllers and the data
+# plane is managed by the in-cluster ALB Controller; an empty NSG (default
+# rules only) satisfies the policy without affecting AGC traffic.
+resource "azurerm_network_security_group" "agc" {
+  count = var.enable_agc ? 1 : 0
+
+  name                = local.nsg_agc_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+}
+
 # Spoke VNet using Azure Verified Module
 module "spoke_vnet" {
   source  = "Azure/avm-res-network-virtualnetwork/azurerm"
@@ -208,6 +222,24 @@ module "spoke_vnet" {
         network_security_group = {
           id = azurerm_network_security_group.app_gateway[0].id
         }
+      }
+    } : {},
+    # Application Gateway for Containers (ALB) delegated subnet — only if enabled.
+    # Delegated to trafficControllers; the in-cluster ALB Controller creates and
+    # manages the AGC resource and associates it with this subnet.
+    var.enable_agc ? {
+      agc = {
+        name             = local.subnets.agc.name
+        address_prefixes = local.subnets.agc.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.agc[0].id
+        }
+        delegations = [{
+          name = "Microsoft.ServiceNetworking.trafficControllers"
+          service_delegation = {
+            name = "Microsoft.ServiceNetworking/trafficControllers"
+          }
+        }]
       }
     } : {},
     # Private endpoints subnet — Corp only

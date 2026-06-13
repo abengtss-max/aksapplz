@@ -53,6 +53,7 @@ variable "subnet_address_prefixes" {
     app_gateway       = string
     private_endpoints = string
     ingress           = string
+    agc               = optional(string, "10.10.24.0/24")
   })
 }
 
@@ -233,6 +234,12 @@ variable "enable_managed_grafana" {
 variable "enable_app_gateway" {
   type    = bool
   default = true
+}
+
+variable "enable_agc" {
+  description = "Enable the Application Gateway for Containers (ALB) delegated subnet + NSG in this region. The in-cluster ALB Controller manages the trafficControllers resource; Terraform provisions infra only."
+  type        = bool
+  default     = false
 }
 
 variable "enable_diagnostic_settings" {

@@ -62,6 +62,7 @@ module "region" {
   enable_managed_prometheus      = var.enable_managed_prometheus
   enable_managed_grafana         = var.enable_managed_grafana
   enable_app_gateway             = var.enable_app_gateway
+  enable_agc                     = var.enable_agc
   enable_diagnostic_settings     = var.enable_diagnostic_settings
   enable_workload_identity       = var.enable_workload_identity
   enable_azure_rbac              = var.enable_azure_rbac

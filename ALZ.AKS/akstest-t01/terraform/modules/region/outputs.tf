@@ -111,3 +111,9 @@ output "app_gateway_public_ip_fqdn" {
   description = "The fully-qualified domain name of the Application Gateway public IP (used as a Front Door origin host). Null unless a DNS label was assigned."
   value       = var.enable_app_gateway ? azurerm_public_ip.app_gateway[0].fqdn : null
 }
+
+# Application Gateway for Containers (ALB)
+output "agc_subnet_id" {
+  description = "The resource ID of the Application Gateway for Containers (ALB) delegated subnet. Null unless enable_agc is true. Pass this to the in-cluster ALB Controller association."
+  value       = var.enable_agc ? module.spoke_vnet.subnets["agc"].resource_id : null
+}

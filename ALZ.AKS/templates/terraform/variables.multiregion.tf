@@ -47,6 +47,7 @@ variable "secondary_subnet_address_prefixes" {
     app_gateway       = string
     private_endpoints = string
     ingress           = string
+    agc               = optional(string, "10.20.24.0/24")
   })
   default = {
     aks_system_nodes  = "10.20.0.0/24"
@@ -55,6 +56,7 @@ variable "secondary_subnet_address_prefixes" {
     app_gateway       = "10.20.21.0/24"
     private_endpoints = "10.20.22.0/24"
     ingress           = "10.20.23.0/24"
+    agc               = "10.20.24.0/24"
   }
 }
 

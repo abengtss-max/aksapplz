@@ -107,6 +107,7 @@ Options are feature toggles that can be customized within any scenario. Each sce
 | Option | Default | Description |
 |--------|---------|-------------|
 | `enable_app_gateway` | `true` | Application Gateway with WAF v2 |
+| `enable_agc` | `false` | Application Gateway for Containers (AGC). Provisions a dedicated delegated subnet (delegated to `Microsoft.ServiceNetworking/trafficControllers`) + NSG in every region. The in-cluster ALB Controller (which you install) creates and manages the AGC resource and associates it with the subnet — Terraform does not create the `trafficControllers` resource. Coexists with `enable_app_gateway`. Subnet ID is exposed via the `agc_subnet_id` / `agc_subnet_ids` outputs. |
 | `enable_istio_service_mesh` | Scenario | Istio service mesh with mTLS |
 
 ### Storage

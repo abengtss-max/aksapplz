@@ -769,6 +769,12 @@ function Get-InteractiveInputs {
     $v = Read-Host "Enter value (press enter to accept default)"
     $config.subnet_address_prefix_app_gateway = if ([string]::IsNullOrEmpty($v)) { "10.10.21.0/24" } else { $v }
 
+    Write-Log "subnet_address_prefix_agc" -Severity "INPUT REQUIRED"
+    Write-Host "Subnet for Application Gateway for Containers (ALB). Delegated, minimum /24."
+    Write-Host "Default: 10.10.24.0/24"
+    $v = Read-Host "Enter value (press enter to accept default)"
+    $config.subnet_address_prefix_agc = if ([string]::IsNullOrEmpty($v)) { "10.10.24.0/24" } else { $v }
+
     Write-Log "subnet_address_prefix_private_endpoints" -Severity "INPUT REQUIRED"
     Write-Host "Subnet for private endpoints (ACR, Key Vault)."
     Write-Host "Default: 10.10.22.0/24"
@@ -1008,6 +1014,7 @@ function Get-InteractiveInputs {
         @{ Key = "enable_grafana";          Label = "Enable Managed Grafana?";                  Default = "true" }
         # --- Supporting Resources (ACR + Key Vault always deployed — not toggleable) ---
         @{ Key = "enable_app_gateway";      Label = "Enable Application Gateway WAF?";          Default = "true" }
+        @{ Key = "enable_agc";              Label = "Enable Application Gateway for Containers (ALB) subnet?"; Default = "false" }
         # --- Scaling ---
         @{ Key = "enable_keda";             Label = "Enable KEDA autoscaling?";                 Default = "true" }
         @{ Key = "enable_vpa";              Label = "Enable Vertical Pod Autoscaler?";          Default = $(if ($isRegulated -or $isMultiRegion) { "true" } else { "false" }) }
@@ -1118,6 +1125,7 @@ subnet_address_prefix_aks_system_nodes: "$($Config.subnet_address_prefix_aks_sys
 subnet_address_prefix_aks_user_nodes: "$($Config.subnet_address_prefix_aks_user_nodes)"
 subnet_address_prefix_aks_api_server: "$($Config.subnet_address_prefix_aks_api_server)"
 subnet_address_prefix_app_gateway: "$($Config.subnet_address_prefix_app_gateway)"
+subnet_address_prefix_agc: "$($Config.subnet_address_prefix_agc)"
 subnet_address_prefix_private_endpoints: "$($Config.subnet_address_prefix_private_endpoints)"
 subnet_address_prefix_ingress: "$($Config.subnet_address_prefix_ingress)"
 
@@ -1157,6 +1165,7 @@ enable_prometheus: $(& $boolStr $Config.enable_prometheus)
 enable_grafana: $(& $boolStr $Config.enable_grafana)
 # Supporting resources (ACR + Key Vault always deployed)
 enable_app_gateway: $(& $boolStr $Config.enable_app_gateway)
+enable_agc: $(& $boolStr $Config.enable_agc)
 # Scaling
 enable_keda: $(& $boolStr $Config.enable_keda)
 enable_vpa: $(& $boolStr $Config.enable_vpa)
@@ -1196,6 +1205,7 @@ function Write-TfvarsFile {
   app_gateway       = "$($Config.subnet_address_prefix_app_gateway)"
   private_endpoints = "$($Config.subnet_address_prefix_private_endpoints)"
   ingress           = "$($Config.subnet_address_prefix_ingress)"
+  agc               = "$($Config.subnet_address_prefix_agc)"
 "@
 
     $boolTf = { param($v) if ($v -eq $true) { "true" } else { "false" } }
@@ -1385,6 +1395,7 @@ enable_node_auto_provisioning = $(& $boolTf $Config.enable_node_auto_provisionin
 # Networking Features
 # -----------------------------------------------------------------------------
 enable_app_gateway                        = $(& $boolTf $Config.enable_app_gateway)
+enable_agc                                = $(& $boolTf $Config.enable_agc)
 enable_istio_service_mesh                 = $(& $boolTf $Config.enable_istio)
 istio_internal_ingress_gateway            = $(& $boolTf $Config.enable_istio)
 istio_external_ingress_gateway            = false

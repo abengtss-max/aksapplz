@@ -79,6 +79,7 @@ variable "subnet_address_prefixes" {
     app_gateway       = string
     private_endpoints = string
     ingress           = string
+    agc               = optional(string, "10.10.24.0/24")
   })
   default = {
     aks_system_nodes  = "10.10.0.0/24"  # 256 IPs  - System node pool (CriticalAddonsOnly)
@@ -87,6 +88,7 @@ variable "subnet_address_prefixes" {
     app_gateway       = "10.10.21.0/24" # 256 IPs  - App Gateway
     private_endpoints = "10.10.22.0/24" # 256 IPs  - Private endpoints
     ingress           = "10.10.23.0/24" # 256 IPs  - Ingress/load balancer
+    agc               = "10.10.24.0/24" # 256 IPs  - App Gateway for Containers (ALB) delegated subnet
   }
 }
 
@@ -379,6 +381,21 @@ variable "enable_app_gateway" {
   description = "Enable Application Gateway with WAF v2."
   type        = bool
   default     = true
+}
+
+variable "enable_agc" {
+  description = <<-EOT
+    Enable Application Gateway for Containers (AGC). When true, Terraform
+    provisions the dedicated delegated subnet (delegated to
+    Microsoft.ServiceNetworking/trafficControllers) and its NSG in every
+    region, ready for the in-cluster ALB Controller to create and manage the
+    Application Gateway for Containers resource ("managed by ALB Controller"
+    deployment model). Terraform does NOT create the trafficControllers
+    resource and does NOT install the ALB Controller — install it yourself and
+    point it at the agc_subnet_id output. Coexists with enable_app_gateway.
+  EOT
+  type        = bool
+  default     = false
 }
 
 variable "enable_diagnostic_settings" {
