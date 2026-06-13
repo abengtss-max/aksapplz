@@ -1045,6 +1045,15 @@ function Get-InteractiveInputs {
             $config[$feat.Key] = ($v -ne "false")
         }
     }
+
+    # Ingress is either/or: Application Gateway WAF OR App Gateway for Containers,
+    # not both. If the operator enabled both, keep App Gateway WAF (the default
+    # primary ingress) and disable AGC, with a clear notice.
+    if (($config.enable_app_gateway -eq $true) -and ($config.enable_agc -eq $true)) {
+        Write-Host ""
+        Write-Log "Both Application Gateway WAF and App Gateway for Containers were enabled. These are mutually exclusive — keeping Application Gateway WAF and disabling AGC. Re-run and pick only AGC if that's what you want." -Severity "WARNING"
+        $config.enable_agc = $false
+    }
     Write-Host ""
 
     # Basic Inputs (hardcoded)
@@ -3316,6 +3325,14 @@ function Deploy-AKSLandingZone {
         if ([string]::IsNullOrWhiteSpace([string]$config.hub_firewall_sku_tier)) {
             $config.hub_firewall_sku_tier = "Standard"
         }
+    }
+
+    # ── Ingress validation: Application Gateway WAF and App Gateway for Containers
+    #    are mutually exclusive — pick one L7 ingress, not both. ──
+    $isTrue = { param($v) ($v -eq $true) -or ("$v".Trim().ToLower() -eq 'true') }
+    if ((& $isTrue $config.enable_app_gateway) -and (& $isTrue $config.enable_agc)) {
+        Write-Log "enable_app_gateway and enable_agc are both true. Choose ONE L7 ingress: Application Gateway WAF (enable_app_gateway) OR Application Gateway for Containers (enable_agc), not both." -Severity "ERROR"
+        return
     }
 
     # ── Pre-flight: Register required resource providers across all subs ──
