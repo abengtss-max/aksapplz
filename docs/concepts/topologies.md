@@ -4,7 +4,7 @@ The accelerator supports three networking topologies. The wizard asks which one 
 page explains the trade-offs.
 
 <p align="center">
-  <img src="../assets/topologies.png" alt="Three AKS networking topologies. spoke: the AKS spoke VNet peers to your existing ALZ hub. hub_and_spoke: the accelerator creates a new hub VNet with Azure Firewall that routes to the internet or on-prem. standalone: the AKS spoke VNet egresses directly through a NAT gateway to the internet." width="900"
+  <img src="../../assets/topologies.png" alt="Three AKS networking topologies. spoke: the AKS spoke VNet peers to your existing ALZ hub. hub_and_spoke: the accelerator creates a new hub VNet with Azure Firewall that routes to the internet or on-prem. standalone: the AKS spoke VNet egresses directly through a NAT gateway to the internet." width="900"
        style="background:#ffffff;border-radius:16px;padding:16px;box-shadow:0 6px 24px rgba(0,0,0,.15);">
 </p>
 
