@@ -4,7 +4,7 @@ Before you run `Deploy-AKSLandingZone`, fill in the planning workbook with your 
 **every decision the wizard asks** — one yellow cell per prompt — so you can agree on names, network
 ranges, scenario, topology, and add-ons up front instead of mid-deployment.
 
-[:material-microsoft-excel: Download the checklist (.xlsx)](../assets/aks-landing-zone-checklist.xlsx){ .md-button .md-button--primary download="aks-landing-zone-checklist.xlsx" }
+[:material-microsoft-excel: Download the checklist (.xlsx)](../assets/aks-landing-zone-checklist-v2.xlsx){ .md-button .md-button--primary download="aks-landing-zone-checklist.xlsx" }
 
 ## What's inside
 
