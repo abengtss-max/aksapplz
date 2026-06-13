@@ -74,4 +74,4 @@ $env:TF_VAR_github_personal_access_token = 'github_pat_...'
 
 ---
 
-Next: **[Quickstart](quickstart.md)**.
+Next: **[Planning checklist](planning-checklist.md)** — agree on your settings before you deploy, then **[Quickstart](quickstart.md)**.

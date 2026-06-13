@@ -49,6 +49,7 @@ nav:
   - Home: index.md
   - Get started:
       - Prerequisites: get-started/prerequisites.md
+      - Planning checklist: get-started/planning-checklist.md
       - Quickstart: get-started/quickstart.md
       - Choose a scenario: get-started/scenarios.md
   - Concepts:

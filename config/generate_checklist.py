@@ -113,10 +113,17 @@ decisions = [
         "westeurope, northeurope, eastus2 ...",
         ""),
     ("0c", "topology",
-        "How the AKS landing zone connects to the network. 'spoke' peers to an existing ALZ hub and routes egress through the hub firewall; 'standalone' has no hub, no peering, and uses a NAT gateway for egress (Decisions 3 and 4 are ignored).",
-        "spoke      (default; peer to existing ALZ hub)\n"
-        "standalone (no hub, NAT egress only)",
+        "How the AKS landing zone connects to the network. 'spoke' peers to an existing ALZ hub and routes egress through the hub firewall (needs Decisions 3 & 4). 'hub_and_spoke' is greenfield: this run also creates a new hub VNet (+ optional Azure Firewall) for you. 'standalone' has no hub, no peering, and uses a NAT gateway for egress (Decisions 3 and 4 are ignored).",
+        "spoke         (peer to existing ALZ hub)\n"
+        "hub_and_spoke (create a new hub this run)\n"
+        "standalone    (no hub, NAT egress only)",
         "spoke"),
+    ("0d", "global_lb_type",
+        "Global load balancer for multi-region scenarios only. Spreads traffic across both regions and fails over automatically. Ignored for single-region.",
+        "front_door      (Azure Front Door Premium; anycast HTTP/S, WAF)\n"
+        "traffic_manager (DNS-based, priority failover)\n"
+        "none            (single region)",
+        "front_door (multi-region) / none (single)"),
 
     ("", "WHERE TO DEPLOY", "", "", ""),
     ("1", "bootstrap_location",
@@ -128,19 +135,37 @@ decisions = [
         "Subscription ID (GUID).\nLeave blank to use whatever `az` is logged into.",
         "(current az subscription)"),
     ("3", "connectivity_subscription_id",
-        "Subscription that holds your existing hub network (firewall, VPN). Only required when topology = spoke; leave blank for standalone.",
+        "Subscription that holds the hub network (existing for 'spoke', or new for 'hub_and_spoke'). Required for spoke and hub_and_spoke; leave blank for standalone.",
         "Subscription ID (GUID).",
         ""),
 
-    ("", "HUB NETWORK (only when topology = spoke)", "", "", ""),
+    ("", "HUB NETWORK — EXISTING HUB (only when topology = spoke)", "", "", ""),
     ("4a", "hub_vnet_resource_id",
-        "Full ID of your hub VNet. The wizard lists hubs found in Decision 3 and fills this in. Leave blank when topology = standalone.",
+        "Full ID of your hub VNet. The wizard lists hubs found in Decision 3 and fills this in. Leave blank when topology = standalone or hub_and_spoke.",
         "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<name>",
         ""),
     ("4b", "hub_firewall_private_ip",
-        "Private IP of your hub firewall. Traffic leaving the cluster routes through this. Leave blank when topology = standalone.",
+        "Private IP of your hub firewall. Traffic leaving the cluster routes through this. Leave blank when topology = standalone or hub_and_spoke.",
         "10.0.0.4",
         "10.0.0.4"),
+
+    ("", "HUB NETWORK — NEW HUB (only when topology = hub_and_spoke)", "", "", ""),
+    ("4c", "hub_vnet_address_space",
+        "Address space for the NEW hub VNet this run creates. Must not overlap with the spoke or anything you peer to.",
+        "10.0.0.0/16",
+        "10.0.0.0/16"),
+    ("4d", "hub_firewall_subnet_address_prefix",
+        "AzureFirewallSubnet prefix (must be /26 or larger, inside the hub address space).",
+        "10.0.0.0/26",
+        "10.0.0.0/26"),
+    ("4e", "hub_deploy_firewall",
+        "Deploy an Azure Firewall in the new hub? If no, you get the hub VNet + AzureFirewallSubnet only and can attach a firewall later.",
+        "true | false",
+        "true"),
+    ("4f", "hub_firewall_sku_tier",
+        "Azure Firewall tier (only when 4e is true). Premium adds TLS inspection, IDPS, and URL filtering.",
+        "Standard | Premium",
+        "Standard"),
 
     ("", "SPOKE NETWORK (the new VNet for AKS)", "", "", ""),
     ("5a", "spoke_vnet_address_space",
@@ -171,6 +196,10 @@ decisions = [
         "Subnet for the internal load balancer that fronts your apps.",
         "10.10.23.0/24",
         "10.10.23.0/24"),
+    ("5h", "subnet_address_prefix_agc",
+        "Subnet for Application Gateway for Containers (ALB). Only used when enable_agc (11p) is true. Delegated, minimum /24.",
+        "10.10.24.0/24",
+        "10.10.24.0/24"),
 
     ("", "CLUSTER SETTINGS", "", "", ""),
     ("6a", "kubernetes_version",
@@ -263,6 +292,10 @@ decisions = [
         "Application Gateway with a Web Application Firewall in front of the cluster.",
         "true | false",
         "true"),
+    ("11p", "enable_agc",
+        "Application Gateway for Containers (ALB). Provisions a delegated subnet (5h) + NSG; the in-cluster ALB Controller manages the gateway. Coexists with enable_app_gateway.",
+        "true | false",
+        "false"),
     ("11g", "enable_keda",
         "Auto-scales pods based on events (queue length, HTTP requests, etc.).",
         "true | false",
@@ -325,7 +358,7 @@ bool_settings = {
     "enable_prometheus", "enable_grafana", "enable_app_gateway", "enable_keda",
     "enable_vpa", "enable_node_auto_provisioning", "enable_istio",
     "enable_flux", "enable_dapr", "enable_fips", "enable_backup",
-    "enable_cost_analysis",
+    "enable_cost_analysis", "enable_agc", "hub_deploy_firewall",
 }
 for r in range(5, row):
     s = ws1.cell(row=r, column=2).value
@@ -333,7 +366,11 @@ for r in range(5, row):
         dropdown(ws1, r, 6, ["single_region_baseline", "multi_region_baseline",
                               "single_region_regulated", "multi_region_regulated"])
     elif s == "topology":
-        dropdown(ws1, r, 6, ["spoke", "standalone"])
+        dropdown(ws1, r, 6, ["spoke", "hub_and_spoke", "standalone"])
+    elif s == "global_lb_type":
+        dropdown(ws1, r, 6, ["front_door", "traffic_manager", "none"])
+    elif s == "hub_firewall_sku_tier":
+        dropdown(ws1, r, 6, ["Standard", "Premium"])
     elif s == "aks_sku_tier":
         dropdown(ws1, r, 6, ["Free", "Standard", "Premium"])
     elif s in bool_settings:
@@ -494,7 +531,7 @@ intro = [
     ("", normal_font),
     ("1. Open the 'Bootstrap Decisions' tab and fill in every yellow cell.", normal_font),
     ("   - Pick a scenario first (row 0a) — it sets sensible defaults for the rest.", normal_font),
-    ("   - Pick a topology (row 0c) — 'spoke' if you already have an ALZ hub, 'standalone' for an isolated subscription. Standalone skips Decisions 3 and 4.", normal_font),
+    ("   - Pick a topology (row 0c) — 'spoke' if you already have an ALZ hub, 'hub_and_spoke' to create a new hub this run, or 'standalone' for an isolated subscription. Standalone skips Decisions 3 and 4.", normal_font),
     ("   - Don't put GitHub tokens in the workbook. The wizard asks for them with hidden input.", normal_font),
     ("", normal_font),
     ("2. Open 'Advanced Cluster Settings' only if you need to change cluster sizing, networking,", normal_font),
