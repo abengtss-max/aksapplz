@@ -59,12 +59,12 @@ the default when not explicitly set.
 
 | Resource | Value |
 |----------|-------|
-| Tenant ID | `79ee578e-cb66-4cc6-b879-3ff4f6e34a55` |
-| AKS Subscription | `f96403ae-7ef3-4e36-81a7-cb74a12ce667` |
-| Connectivity Sub | `1722f280-2f89-42c1-a80f-9a4773491727` |
-| Bootstrap Sub | `f96403ae-7ef3-4e36-81a7-cb74a12ce667` (same as AKS) |
+| Tenant ID | `11111111-1111-1111-1111-111111111111` |
+| AKS Subscription | `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa` |
+| Connectivity Sub | `bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb` |
+| Bootstrap Sub | `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa` (same as AKS) |
 | GitHub Org | `abengtss-max-org` |
-| User Object ID | `2a151a66-e0ce-455a-bae5-8a21513e3004` |
+| User Object ID | `cccccccc-cccc-cccc-cccc-cccccccccccc` |
 | Primary Location | `swedencentral` |
 | Secondary Location | `westeurope` (multi-region tests) |
 
@@ -221,8 +221,8 @@ Each test generates an `inputs.yaml` with this structure (values vary per test):
 scenario: "single_region_baseline"
 landing_zone_type: "online"          # NEW — required fix
 bootstrap_location: "swedencentral"
-aks_landing_zone_subscription_id: "f96403ae-7ef3-4e36-81a7-cb74a12ce667"
-connectivity_subscription_id: "1722f280-2f89-42c1-a80f-9a4773491727"
+aks_landing_zone_subscription_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+connectivity_subscription_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 hub_vnet_resource_id: ""
 hub_vnet_name: ""
 hub_vnet_resource_group_name: ""
@@ -238,8 +238,8 @@ kubernetes_version: "1.31"
 aks_sku_tier: "Standard"
 aks_private_cluster: false           # false for online mode
 aks_admin_group_object_ids:
-  - "2a151a66-e0ce-455a-bae5-8a21513e3004"
-bootstrap_subscription_id: "f96403ae-7ef3-4e36-81a7-cb74a12ce667"
+  - "cccccccc-cccc-cccc-cccc-cccccccccccc"
+bootstrap_subscription_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 service_name: "akstest"
 environment_name: "t01"              # varies per test
 postfix_number: 1

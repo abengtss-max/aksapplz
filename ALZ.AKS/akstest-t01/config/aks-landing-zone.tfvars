@@ -17,9 +17,9 @@ secondary_location = ""
 # -----------------------------------------------------------------------------
 # Core Settings
 # -----------------------------------------------------------------------------
-subscription_id              = "f96403ae-7ef3-4e36-81a7-cb74a12ce667"
-connectivity_subscription_id = "1722f280-2f89-42c1-a80f-9a4773491727"
-tenant_id                    = "79ee578e-cb66-4cc6-b879-3ff4f6e34a55"
+subscription_id              = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+connectivity_subscription_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+tenant_id                    = "11111111-1111-1111-1111-111111111111"
 location                     = "swedencentral"
 workload_name                = "akstest"
 environment                  = "t01"
@@ -79,7 +79,7 @@ enable_api_server_vnet_integration = true
 api_server_authorized_ip_ranges    = []
 
 # Entra ID admin groups
-aks_admin_group_object_ids = ["2a151a66-e0ce-455a-bae5-8a21513e3004"]
+aks_admin_group_object_ids = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]
 
 # Auto-upgrade
 automatic_upgrade_channel = "patch"
@@ -204,4 +204,4 @@ log_retention_days    = 90
 grafana_sku           = "Standard"
 grafana_zone_redundancy = true
 grafana_public_access   = true
-grafana_admin_group_object_id = "2a151a66-e0ce-455a-bae5-8a21513e3004"
+grafana_admin_group_object_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"

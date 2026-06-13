@@ -17,9 +17,9 @@ secondary_location = ""
 # -----------------------------------------------------------------------------
 # Core Settings
 # -----------------------------------------------------------------------------
-subscription_id              = "029039e3-76a6-4c2e-b3c0-1473059b0193"
-connectivity_subscription_id = "1722f280-2f89-42c1-a80f-9a4773491727"
-tenant_id                    = "79ee578e-cb66-4cc6-b879-3ff4f6e34a55"
+subscription_id              = "00000000-0000-0000-0000-000000000000"
+connectivity_subscription_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+tenant_id                    = "11111111-1111-1111-1111-111111111111"
 location                     = "swedencentral"
 workload_name                = "aksapplz"
 environment                  = "prod"
@@ -46,7 +46,7 @@ subnet_address_prefixes = {
 }
 
 # Hub VNet peering (from your ALZ deployment)
-hub_vnet_resource_id         = "/subscriptions/1722f280-2f89-42c1-a80f-9a4773491727/resourceGroups/rg-hub-swedencentral/providers/Microsoft.Network/virtualNetworks/vnet-hub-swedencentral"
+hub_vnet_resource_id         = "/subscriptions/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/resourceGroups/rg-hub-swedencentral/providers/Microsoft.Network/virtualNetworks/vnet-hub-swedencentral"
 hub_vnet_name                = "vnet-hub-swedencentral"
 hub_vnet_resource_group_name = "rg-hub-swedencentral"
 hub_firewall_private_ip      = "10.0.0.4"
@@ -79,7 +79,7 @@ enable_api_server_vnet_integration = true
 api_server_authorized_ip_ranges    = []
 
 # Entra ID admin groups
-aks_admin_group_object_ids = ["3998b1b6-9c1a-43f0-a2d8-79166b30ee4b"]
+aks_admin_group_object_ids = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
 
 # Auto-upgrade
 automatic_upgrade_channel = "patch"

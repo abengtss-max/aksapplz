@@ -4,7 +4,7 @@ scenario: "single_region_baseline"
 secondary_location: ""
 topology: "standalone"
 bootstrap_location: "swedencentral"
-aks_landing_zone_subscription_id: "029039e3-76a6-4c2e-b3c0-1473059b0193"
+aks_landing_zone_subscription_id: "00000000-0000-0000-0000-000000000000"
 connectivity_subscription_id: ""
 hub_vnet_resource_id: ""
 hub_vnet_name: ""
@@ -20,8 +20,8 @@ subnet_address_prefix_ingress: "10.10.23.0/24"
 kubernetes_version: "1.34.7"
 aks_sku_tier: "Standard"
 aks_private_cluster: false
-aks_admin_group_object_ids: ["3998b1b6-9c1a-43f0-a2d8-79166b30ee4b"]
-bootstrap_subscription_id: "029039e3-76a6-4c2e-b3c0-1473059b0193"
+aks_admin_group_object_ids: ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
+bootstrap_subscription_id: "00000000-0000-0000-0000-000000000000"
 service_name: "aksapplz"
 environment_name: "stdaln01"
 postfix_number: 1

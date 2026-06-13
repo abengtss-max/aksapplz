@@ -6,8 +6,8 @@ Step-by-step live e2e validation. Run **together** with operator (Ali) confirmin
 
 - Date started: 2026-05-24
 - Module version under test: `1.4.0` (GA)
-- Azure sub: `029039e3-76a6-4c2e-b3c0-1473059b0193`
-- Tenant: `79ee578e-cb66-4cc6-b879-3ff4f6e34a55`
+- Azure sub: `00000000-0000-0000-0000-000000000000`
+- Tenant: `11111111-1111-1111-1111-111111111111`
 - GitHub org: `abengtss-max-org`
 - Default region: `swedencentral` (secondary: `westeurope`)
 
@@ -144,7 +144,7 @@ enable_vpa: true
 
 ### S2.5 Result (2026-05-24) — 8/8 ✅
 
-env `mrstd01`, sub `029039e3-76a6-4c2e-b3c0-1473059b0193`, primary `swedencentral`, secondary `westeurope`, repo `abengtss-max-org/aksapplz-mrstd01`, backend `staksamrstsc001iqth/tfstate`.
+env `mrstd01`, sub `00000000-0000-0000-0000-000000000000`, primary `swedencentral`, secondary `westeurope`, repo `abengtss-max-org/aksapplz-mrstd01`, backend `staksamrstsc001iqth/tfstate`.
 
 | # | Gate | Result | Evidence |
 |---|------|--------|----------|

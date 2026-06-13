@@ -5,7 +5,7 @@ Last reviewed: 2026-06-12 — applies to `1.4.0` GA.
 ## Live multi-region failover — VALIDATED (2026-06-12)
 
 The end-to-end multi-region failover drill has now been **executed live** in subscription `applz-5`
-(`08436ef1-79fc-4f99-a8c3-1ea611f64196`) across `swedencentral` (primary) + `westeurope` (secondary),
+(`eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee`) across `swedencentral` (primary) + `westeurope` (secondary),
 after a temporary, scoped MCAPS policy exclusion was applied to the test subscription and **restored
 afterwards**. Result: both AKS clusters (K8s 1.33.12) healthy, fleet members joined, ACR geo-replicated,
 both App Gateways serving region-distinct content, and **Azure Front Door priority routing failed over
