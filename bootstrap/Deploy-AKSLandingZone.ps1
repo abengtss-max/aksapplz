@@ -243,6 +243,9 @@ function Get-AzureContext {
 # Numbered Selection Lists  [Gap #8, #9, #10]
 # =============================================================================
 function Show-NumberedList {
+    # InjectionHunter false positive: $item.$LabelProperty / $item.$ValueProperty use
+    # property names supplied by callers as hard-coded literals, never user input.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Property name is a hard-coded literal passed by callers, never user input.')]
     param(
         [Parameter(Mandatory)][array]$Items,
         [string]$LabelProperty,
@@ -265,6 +268,9 @@ function Show-NumberedList {
 }
 
 function Read-NumberedSelection {
+    # InjectionHunter false positive: $sel.$ValueProperty uses a property name supplied
+    # by callers as a hard-coded literal, never user-controlled input.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Property name is a hard-coded literal passed by callers, never user input.')]
     param(
         [Parameter(Mandatory)][array]$Items,
         [string]$ValueProperty,

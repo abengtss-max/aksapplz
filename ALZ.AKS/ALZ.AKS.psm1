@@ -224,6 +224,10 @@ function Get-AzureContext {
 }
 
 function Show-NumberedList {
+    # InjectionHunter false positive: $item.$LabelProperty / $item.$ValueProperty use
+    # property names supplied by callers as hard-coded literals (e.g. -LabelProperty
+    # "label"), never user-controlled input. See SECURITY.md "Security scanning".
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Property name is a hard-coded literal passed by callers, never user input.')]
     param(
         [Parameter(Mandatory)][array]$Items,
         [string]$LabelProperty,
@@ -246,6 +250,9 @@ function Show-NumberedList {
 }
 
 function Read-NumberedSelection {
+    # InjectionHunter false positive: $sel.$ValueProperty uses a property name supplied
+    # by callers as a hard-coded literal, never user-controlled input.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Property name is a hard-coded literal passed by callers, never user input.')]
     param(
         [Parameter(Mandatory)][array]$Items,
         [string]$ValueProperty,
@@ -1925,6 +1932,10 @@ function New-GitHubBootstrap {
 # Step 4: Deploy Self-Hosted Runner (ACI) — matches ALZ Accelerator pattern
 # =============================================================================
 function New-SelfHostedRunner {
+    # InjectionHunter false positive: the only -replace here strips dashes from an
+    # internally derived ACR name (literal regex on a constant); no command/expression
+    # is built from untrusted input.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.UnsafeEscaping', '', Justification = 'Literal regex replace for resource-name cleanup on internal values; no untrusted input.')]
     param([hashtable]$Config, [hashtable]$Names, [hashtable]$Backend)
 
     if ($Config.use_self_hosted_runners -ne $true) {
@@ -2690,6 +2701,9 @@ function Get-WorkloadRepoFileContent {
     # Fetch the current content of a file in the generated workload repo via the
     # GitHub API. Returns $null if the file doesn't exist (404) or the request
     # fails. Requires GH_TOKEN / GITHUB_TOKEN to be set (caller's responsibility).
+    # InjectionHunter false positive: the -replace calls strip base64 whitespace from
+    # the API response (literal regex on data); no command/expression is constructed.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.UnsafeEscaping', '', Justification = 'Literal regex replace to clean base64 whitespace; no command construction.')]
     param(
         [Parameter(Mandatory)][string]$Owner,
         [Parameter(Mandatory)][string]$Repo,
@@ -2980,6 +2994,11 @@ function Test-AlzAksUpdate {
 
 function Deploy-AKSLandingZone {
     [CmdletBinding()]
+    # InjectionHunter false positives: $config.$_ / $config.$f iterate hard-coded
+    # field-name arrays (e.g. $reqSpoke, $hubFields), and the -replace calls are
+    # literal string cleanup of terraform output. None use untrusted input.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Property names iterate hard-coded internal field-name arrays, never user input.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.UnsafeEscaping', '', Justification = 'Literal regex replace for string cleanup on internal values; no untrusted input.')]
     param(
         [Parameter()][string]$InputConfigPath,
         [Parameter()][string]$BootstrapRoot,
@@ -4649,6 +4668,9 @@ terraform {
 #>
 function Deploy-AKSLandingZoneLegacy {
     [CmdletBinding()]
+    # InjectionHunter false positive: $config.$_ iterates hard-coded field-name
+    # arrays, never user-controlled input.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Property names iterate hard-coded internal field-name arrays, never user input.')]
     param(
         [Parameter()]
         [string]$InputConfigPath,

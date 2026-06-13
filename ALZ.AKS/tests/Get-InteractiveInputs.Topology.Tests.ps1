@@ -15,6 +15,12 @@
 #   Invoke-Pester -Path .\ALZ.AKS\tests\Get-InteractiveInputs.Topology.Tests.ps1
 # =============================================================================
 
+# InjectionHunter false positive: the mock drivers below read $_.$ValueProperty to
+# mirror the production prompt helpers. The property name is a hard-coded literal,
+# never user input. Suppress at script scope. See SECURITY.md "Security scanning".
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('InjectionRisk.StaticPropertyInjection', '', Justification = 'Test mock reads a hard-coded literal property name, never user input.')]
+param()
+
 BeforeAll {
     $modulePath = Join-Path $PSScriptRoot '..\ALZ.AKS.psd1'
     Import-Module $modulePath -Force
