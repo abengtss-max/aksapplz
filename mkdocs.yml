@@ -21,7 +21,6 @@ theme:
     - navigation.footer
     - content.code.copy
     - content.code.annotate
-    - content.action.edit
     - search.suggest
     - search.highlight
     - toc.follow
