@@ -1020,8 +1020,9 @@ function Get-InteractiveInputs {
         @{ Key = "enable_prometheus";       Label = "Enable Managed Prometheus?";               Default = "true" }
         @{ Key = "enable_grafana";          Label = "Enable Managed Grafana?";                  Default = "true" }
         # --- Supporting Resources (ACR + Key Vault always deployed — not toggleable) ---
-        @{ Key = "enable_app_gateway";      Label = "Enable Application Gateway WAF?";          Default = "true" }
-        @{ Key = "enable_agc";              Label = "Enable Application Gateway for Containers (ALB) subnet?"; Default = "false" }
+        # Ingress: pick EITHER Application Gateway WAF OR App Gateway for Containers, not both.
+        @{ Key = "enable_app_gateway";      Label = "Enable Application Gateway WAF? (ingress option A — not with AGC)"; Default = "true" }
+        @{ Key = "enable_agc";              Label = "Enable Application Gateway for Containers (ALB)? (ingress option B — not with App Gateway WAF)"; Default = "false" }
         # --- Scaling ---
         @{ Key = "enable_keda";             Label = "Enable KEDA autoscaling?";                 Default = "true" }
         @{ Key = "enable_vpa";              Label = "Enable Vertical Pod Autoscaler?";          Default = $(if ($isRegulated -or $isMultiRegion) { "true" } else { "false" }) }
