@@ -1,3 +1,7 @@
+<p align="center" markdown>
+  ![AKS Landing Zone Accelerator](assets/logo-full.svg){ width="320" }
+</p>
+
 # AKS Landing Zone Accelerator
 
 > Deploy a production-ready **AKS cluster on Azure** in under an hour with a single PowerShell command.

@@ -1,4 +1,4 @@
-<svg viewBox="50 50 380 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AKS Landing Zone Accelerator">
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AKS Landing Zone Accelerator">
   <defs>
     <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#2B7FFF"/>
@@ -6,25 +6,14 @@
     </linearGradient>
   </defs>
 
-  <!-- Favicon / app-icon: colored mark, no wordmark -->
-  <circle cx="256" cy="220" r="150"
+  <!-- Favicon: bold, simple mark that survives at 32px -->
+  <!-- Motion ring -->
+  <circle cx="256" cy="256" r="190"
           fill="none"
           stroke="url(#grad)"
-          stroke-width="12"/>
+          stroke-width="34"/>
 
-  <g stroke="url(#grad)" stroke-width="10" stroke-linecap="round">
-    <line x1="90" y1="230" x2="160" y2="230"/>
-    <line x1="80" y1="255" x2="170" y2="255"/>
-    <line x1="70" y1="280" x2="180" y2="280"/>
-  </g>
-
-  <g fill="url(#grad)">
-    <rect x="241" y="205" width="30" height="30" rx="4"/>
-    <rect x="241" y="155" width="30" height="30" rx="4"/>
-    <rect x="300" y="185" width="30" height="30" rx="4"/>
-    <rect x="300" y="255" width="30" height="30" rx="4"/>
-    <rect x="241" y="285" width="30" height="30" rx="4"/>
-    <rect x="180" y="255" width="30" height="30" rx="4"/>
-    <rect x="180" y="185" width="30" height="30" rx="4"/>
-  </g>
+  <!-- Single hexagon container silhouette -->
+  <path d="M256 138 L358 197 L358 315 L256 374 L154 315 L154 197 Z"
+        fill="url(#grad)"/>
 </svg>
