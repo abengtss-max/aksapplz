@@ -1,5 +1,6 @@
-<p align="center" markdown>
-  ![AKS Landing Zone Accelerator](assets/logo-full.svg){ width="320" }
+<p align="center">
+  <img src="assets/logo-full-trans.png" alt="AKS Landing Zone Accelerator" width="360"
+       style="background:#ffffff;border-radius:16px;padding:24px 32px;box-shadow:0 6px 24px rgba(0,0,0,.15);">
 </p>
 
 # AKS Landing Zone Accelerator

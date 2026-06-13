@@ -11,8 +11,8 @@ copyright: Copyright &copy; 2026 abengtss-max — MIT License
 theme:
   name: material
   language: en
-  logo: assets/logo.svg
-  favicon: assets/favicon.svg
+  logo: assets/logo-mark.png
+  favicon: assets/favicon.png
   features:
     - navigation.instant
     - navigation.tracking
