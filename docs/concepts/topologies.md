@@ -3,19 +3,10 @@
 The accelerator supports three networking topologies. The wizard asks which one you want — this
 page explains the trade-offs.
 
-```mermaid
-flowchart TB
-    subgraph standalone["standalone"]
-        A1[AKS spoke VNet] --> A2[NAT Gateway → Internet]
-    end
-    subgraph hubspoke["hub_and_spoke"]
-        B1[AKS spoke VNet] --> B2[NEW hub VNet + Azure Firewall]
-        B2 --> B3[Internet / on-prem]
-    end
-    subgraph spoke["spoke"]
-        C1[AKS spoke VNet] --> C2[Your EXISTING ALZ hub]
-    end
-```
+<p align="center">
+  <img src="../assets/topologies.png" alt="Three AKS networking topologies. spoke: the AKS spoke VNet peers to your existing ALZ hub. hub_and_spoke: the accelerator creates a new hub VNet with Azure Firewall that routes to the internet or on-prem. standalone: the AKS spoke VNet egresses directly through a NAT gateway to the internet." width="900"
+       style="background:#ffffff;border-radius:16px;padding:16px;box-shadow:0 6px 24px rgba(0,0,0,.15);">
+</p>
 
 | Topology | What it creates | Best for | Status |
 |---|---|---|---|
