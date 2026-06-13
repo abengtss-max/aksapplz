@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.4.0'
+    ModuleVersion     = '1.5.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,13 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.5.0
+- Application Gateway for Containers (enable_agc): delegated subnet + NSG per region (ALB Controller managed)
+- Customer documentation site (MkDocs Material) published to GitHub Pages
+- Versioned GitHub Releases with install.ps1 entrypoint and -Release pinning (default latest)
+- Non-blocking newer-release check in Deploy-AKSLandingZone (-SkipUpdateCheck)
+- Multi-region GA: Front Door / Traffic Manager, Fleet Manager, geo-replicated ACR
+
 ## 1.0.0
 - Initial release
 - Interactive wizard matching ALZ Deploy-Accelerator pattern
@@ -61,8 +68,8 @@
 - Self-hosted runner support
 '@
 
-            # Prerelease string of this module — RC for the 1.4.0 GA series
-            Prerelease = 'rc5'
+            # Prerelease string — empty for a GA release.
+            Prerelease = ''
         }
     }
 }

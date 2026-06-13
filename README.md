@@ -1,6 +1,6 @@
 # AKS Application Landing Zone Accelerator
 
-[![version](https://img.shields.io/badge/version-1.4.0-brightgreen)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.5.0-brightgreen)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 Deploy a production-ready **AKS cluster on Azure** in under an hour using a single PowerShell command.
