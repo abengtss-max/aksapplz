@@ -2940,6 +2940,35 @@ function Show-DriftReport {
     # Recover from an external state backup
     Deploy-AKSLandingZone -InputConfigPath .\config\inputs.dev.yaml -Action import -StateBackup .\backup.tfstate -AutoApprove
 #>
+
+# Non-blocking check for a newer published release. Never throws and never blocks
+# a deploy — on any network/parse failure it silently returns. Suppress entirely
+# with -SkipUpdateCheck or by setting $env:ALZAKS_SKIP_UPDATE_CHECK.
+function Test-AlzAksUpdate {
+    [CmdletBinding()]
+    param(
+        [string]$Repository = 'abengtss-max/aksapplz'
+    )
+    if ($env:ALZAKS_SKIP_UPDATE_CHECK) { return }
+    try {
+        $current = (Get-Module ALZ.AKS | Select-Object -First 1).Version
+        if (-not $current) { return }
+        $headers = @{ 'User-Agent' = 'alz-aks'; 'Accept' = 'application/vnd.github+json' }
+        if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
+        $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases/latest" -Headers $headers -TimeoutSec 4
+        $latestRaw = ($rel.tag_name).TrimStart('v')
+        # Drop any prerelease suffix so we only compare the numeric core.
+        $latestCore = ($latestRaw -split '-')[0]
+        [version]$latest = $latestCore
+        if ($latest -gt $current) {
+            Write-Log "A newer release is available: v$latest (you have v$current). Update with the install one-liner, or pin a version. See https://abengtss-max.github.io/aksapplz/releases/" -Severity "WARNING"
+        }
+    }
+    catch {
+        # Offline, rate-limited, or unexpected payload — stay silent.
+    }
+}
+
 function Deploy-AKSLandingZone {
     [CmdletBinding()]
     param(
@@ -2973,8 +3002,14 @@ function Deploy-AKSLandingZone {
         # require the Terraform `github` provider to authenticate via a GitHub
         # App installation token (GITHUB_APP_*) or an externally-provided
         # GH_TOKEN/GITHUB_TOKEN (e.g. from OIDC/Workload Identity Federation).
-        [Parameter()][switch]$OidcOnly
+        [Parameter()][switch]$OidcOnly,
+        # Suppress the non-blocking "a newer release is available" check at startup.
+        # Equivalent to setting $env:ALZAKS_SKIP_UPDATE_CHECK. Useful for unattended runs.
+        [Parameter()][switch]$SkipUpdateCheck
     )
+
+    # Non-blocking notice if a newer release exists (never blocks the deploy).
+    if (-not $SkipUpdateCheck) { Test-AlzAksUpdate }
 
     # Backward compatibility: -PlanOnly is equivalent to -Action plan.
     if ($PlanOnly -and $Action -eq 'apply') { $Action = 'plan' }

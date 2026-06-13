@@ -1,0 +1,67 @@
+name: Release
+
+# Cut a versioned GitHub Release when a vX.Y.Z tag is pushed.
+# The release asset is the ALZ.AKS PowerShell module (with its embedded
+# Terraform/workflow templates), which install.ps1 downloads at deploy time.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate module version matches the tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"            # e.g. v1.4.0 or v1.4.0-rc5
+          $tagVersion = $tag.TrimStart('v')
+          $manifest = Import-PowerShellDataFile -Path ./ALZ.AKS/ALZ.AKS.psd1
+          $moduleVersion = $manifest.ModuleVersion
+          $prerelease = $manifest.PrivateData.PSData.Prerelease
+          $fullVersion = if ([string]::IsNullOrWhiteSpace($prerelease)) {
+            $moduleVersion
+          } else {
+            "$moduleVersion-$prerelease"
+          }
+          Write-Host "Tag version    : $tagVersion"
+          Write-Host "Module version : $fullVersion"
+          if ($tagVersion -ne $fullVersion) {
+            Write-Error "Tag '$tag' does not match module version '$fullVersion'. Bump ModuleVersion/Prerelease in ALZ.AKS.psd1 before tagging."
+            exit 1
+          }
+          "is_prerelease=$([bool]$prerelease ? 'true' : 'false')" >> $env:GITHUB_OUTPUT
+        id: validate
+
+      - name: Package module
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $asset = "ALZ.AKS-$tag.zip"
+          # Zip the module folder so the archive root contains ALZ.AKS/...
+          Compress-Archive -Path ./ALZ.AKS -DestinationPath $asset -Force
+          Write-Host "Created $asset"
+          "asset=$asset" >> $env:GITHUB_OUTPUT
+        id: package
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE_FLAG=""
+          if [ "${{ steps.validate.outputs.is_prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "${{ github.ref_name }}" \
+            "${{ steps.package.outputs.asset }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            $PRERELEASE_FLAG

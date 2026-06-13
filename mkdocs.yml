@@ -1,0 +1,90 @@
+site_name: AKS Landing Zone Accelerator
+site_description: >-
+  Deploy a production-ready AKS Application Landing Zone on Azure in under an
+  hour with a single PowerShell command.
+site_url: https://abengtss-max.github.io/aksapplz/
+repo_url: https://github.com/abengtss-max/aksapplz
+repo_name: abengtss-max/aksapplz
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 abengtss-max — MIT License
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Prerequisites: get-started/prerequisites.md
+      - Quickstart: get-started/quickstart.md
+      - Choose a scenario: get-started/scenarios.md
+  - Concepts:
+      - Topologies: concepts/topologies.md
+      - Multi-region: concepts/multi-region.md
+  - Configuration reference: reference/configuration.md
+  - Advanced: advanced.md
+  - Releases & versions: releases.md
+  - Known issues: known-issues.md
+  - FAQ: faq.md
+  - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/abengtss-max/aksapplz

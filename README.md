@@ -5,6 +5,11 @@
 
 Deploy a production-ready **AKS cluster on Azure** in under an hour using a single PowerShell command.
 
+> [!IMPORTANT]
+> **Using the accelerator?** Go to the documentation site — everything you need to deploy is there:
+> ### 👉 https://abengtss-max.github.io/aksapplz/
+> This repository is the **developer / source** home. The sections below are for contributors.
+
 ```mermaid
 flowchart LR
     A["👤 You<br/><code>Deploy-AKSLandingZone</code>"] --> B["☁️ Azure bootstrap<br/>Identities + Terraform state"]
@@ -17,14 +22,57 @@ flowchart LR
 
 ---
 
-## Start here
+## Try it (latest release)
 
-| I want to... | Go to |
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/abengtss-max/aksapplz/main/install.ps1)))
+Deploy-AKSLandingZone
+```
+
+Pin a version with `-Release v1.4.0`. Full guidance on the
+[docs site](https://abengtss-max.github.io/aksapplz/).
+
+---
+
+## Documentation
+
+The customer-facing docs live on the **[documentation site](https://abengtss-max.github.io/aksapplz/)**
+(built from [`docs/`](docs/) with MkDocs Material and deployed to GitHub Pages).
+
+| Topic | User docs (site) | Source in repo |
+|---|---|---|
+| Get started | [Quickstart](https://abengtss-max.github.io/aksapplz/get-started/quickstart/) | [docs/get-started/](docs/get-started/) |
+| Scenarios & options | [Scenarios](https://abengtss-max.github.io/aksapplz/get-started/scenarios/) | [docs/get-started/scenarios.md](docs/get-started/scenarios.md) |
+| Releases & versions | [Releases](https://abengtss-max.github.io/aksapplz/releases/) | [docs/releases.md](docs/releases.md) |
+| Known issues | [Known issues](https://abengtss-max.github.io/aksapplz/known-issues/) | [KNOWN-ISSUES.md](KNOWN-ISSUES.md) |
+
+---
+
+## Repository layout
+
+| Path | Purpose |
 |---|---|
-| Deploy AKS for the first time | **[QUICKSTART.md](QUICKSTART.md)** |
-| Configure scenarios, drift, multi-env, troubleshoot | [ADVANCED.md](ADVANCED.md) |
-| See what's GA and what's tech preview | [KNOWN-ISSUES.md](KNOWN-ISSUES.md) |
-| Read release notes | [CHANGELOG.md](CHANGELOG.md) |
+| `ALZ.AKS/` | The published PowerShell module (`Deploy-AKSLandingZone`) + embedded Terraform/workflow templates |
+| `terraform/` | Canonical Terraform composition (root + region module) |
+| `bootstrap/` | Legacy standalone bootstrap script (superseded by the module) |
+| `docs/` + `mkdocs.yml` | Documentation site (MkDocs Material → GitHub Pages) |
+| `install.ps1` | Customer entrypoint: resolves latest/pinned release and imports the module |
+| `config/` | Example `inputs.*.yaml` / `*.tfvars` per scenario |
+| `.github/workflows/` | CI, scenario tests, `docs.yml` (Pages), `release.yml` (tag → GitHub Release) |
+
+---
+
+## Contributing
+
+```powershell
+git clone https://github.com/abengtss-max/aksapplz.git
+cd aksapplz
+Import-Module .\ALZ.AKS\ALZ.AKS.psd1 -Force
+```
+
+- Preview the docs locally: `pip install -r requirements-docs.txt` then `mkdocs serve`.
+- Tests and validation: see [TEST.md](TEST.md).
+- Cutting a release: bump `ModuleVersion` in [ALZ.AKS/ALZ.AKS.psd1](ALZ.AKS/ALZ.AKS.psd1), then push a `vX.Y.Z` tag — `release.yml` does the rest.
 
 ---
 
