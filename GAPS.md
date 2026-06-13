@@ -89,6 +89,50 @@ Owner: @abengtss-max
 
 ---
 
+## G. NEW (2026-06-13) — Regulated (PCI-DSS 4.0.1) alignment with MS Learn reference
+
+Verified our `single_region_regulated` / `multi_region_regulated` scenarios against the Microsoft
+Learn reference: [pci-intro](https://learn.microsoft.com/azure/aks/pci-intro) →
+[pci-ra-code-assets](https://learn.microsoft.com/azure/aks/pci-ra-code-assets). The reference is a
+hub-spoke topology with the AKS cluster in a CDE spoke and a second spoke for SRE image-build / jump-box access.
+
+> **Caveat (from the doc):** the MS reference itself is *not* certified — *"deploying the code assets,
+> you don't clear audit for PCI DSS 4.0.1. Acquire compliance attestations from a third-party QSA."*
+> Our **tech-preview / not-GA-validated** warning on the scenarios page is the correct posture and must stay.
+
+### G1. Controls we already match ✅ (verified in code)
+- [x] Hub-spoke with **Azure Firewall** egress + Bastion + on-prem gateway in hub — `hub_and_spoke` topology
+- [x] **Private** AKS cluster (API server not public) — `private_cluster_enabled = true` + VNet integration ([aks.tf](terraform/modules/region/aks.tf))
+- [x] **App Gateway + WAF v2** with public frontend — `enable_app_gateway = true`
+- [x] **Network policy** segmentation — `network_policy = "azure"`
+- [x] **mTLS pod-to-pod via service mesh** — Istio, internal ingress gateway (MS uses OSM/Nginx; ingress+mesh are explicitly swappable per the doc)
+- [x] **FIPS 140-2** nodes on both pools — `enable_fips = true`
+- [x] **Entra ID only**, local accounts disabled — `enable_azure_rbac` + `disable_local_accounts = true`
+- [x] **Defender for Containers** — `enable_defender = true`
+- [x] **Azure Policy** add-on — `enable_azure_policy = true`
+- [x] **Log Analytics 90-day retention** — `log_retention_days` default = 90 ([variables.tf](terraform/variables.tf))
+- [x] Managed Prometheus + Grafana + diagnostic settings
+- [x] **Azure Backup** for PVCs — `enable_backup = true` (backup extension)
+- [x] **Key Vault** + CSI secret rotation (2m)
+- [x] System + user node pools on **dedicated subnets**
+- [x] **Image cleaner** — `enable_image_cleaner = true`
+
+### G2. Genuine gaps ⚠️ (where we drift from the reference — TODO)
+- [ ] **Two user node pools** segmenting in-scope vs out-of-scope workloads via taints/labels. We deploy **one** user pool today. *Medium — this is the core PCI in-scope/out-of-scope segmentation pattern.* Needs: 2nd `agent_pools` entry + taints + `subnet_address_prefixes` for a 2nd user subnet + scenario tfvars.
+- [ ] **Encryption-at-host** (host-based encryption). No `enable_host_encryption` variable exists; AVM `default_agent_pool`/`agent_pools` need the flag wired. *Medium — MS recommends + enforce via Policy.*
+- [ ] **Customer-managed keys (BYOK)** for OS/data disks (`disk_encryption_set`) **and ACR CMK encryption**. Currently service-managed keys only. *Medium.*
+- [ ] **DDoS Network Protection** on the App Gateway public-IP VNet. Not deployed. *Low/Medium — the doc flags the public-IP subnet as in-scope.*
+- [ ] **SRE access spoke**: Azure Image Builder + jump-box VMSS in a second spoke for governed `kubectl`/Flux access. Not deployed. *Low — operational, often customer-specific; document as out-of-scope-by-design with guidance.*
+- [ ] **Key Vault hybrid Private Link** model (private endpoint + public access for App Gateway TLS-cert integration). `private_endpoints` subnet exists; verify the KV access model end-to-end for the regulated path. *Verify.*
+- [ ] **Build agents out-of-scope**: doc requires build/release agents to have no direct cluster API access (push to ACR only, deploy via GitOps). Confirm our CI/CD identity scope matches this. *Verify — likely already true via OIDC + Flux.*
+
+### G3. Doc tasks (this section's track)
+- [x] Write up this gap analysis (this section) — 2026-06-13
+- [ ] Update the **Regulated** section of [scenarios.md](docs/get-started/scenarios.md) to state what we actually deliver and honestly flag G2 deltas as roadmap items
+- [ ] Add the regulated **architecture diagram** to scenarios.md once generated (M365) — mirror the MS Learn regulated topology, white card, `../../assets/`
+
+---
+
 ## Suggested execution order
 
 1. **D — Validation** (cheap, prevents foot-guns)
