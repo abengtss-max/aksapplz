@@ -88,6 +88,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cycle. `terraform plan` failed with *"Moved object still exists."* The block
   now re-keys the existing instance into `azurerm_role_assignment.aks_acr_pull["primary"]`
   — the correct state migration after adding `for_each` (no destroy/recreate).
+- **Bootstrap preflight — now registers the required subscription *feature*.**
+  The preflight registered resource *providers* (`az provider register`) but not
+  subscription *features* (`az feature register`), which is a separate mechanism.
+  A fresh bootstrap subscription without
+  `Microsoft.Network/AllowBringYourOwnPublicIpAddress` failed late in apply with
+  `SubscriptionNotRegisteredForFeature` when creating the NAT-gateway public IP.
+  The preflight now registers that feature idempotently per target subscription,
+  waits for propagation, and re-registers `Microsoft.Network` so it takes effect.
 
 ## [1.5.2] - 2026-06-14
 

@@ -1606,6 +1606,46 @@ function Register-RequiredProviders {
             Write-Log "Some providers still registering — Terraform will handle them" -Severity "WARNING"
         }
     }
+
+    # ── Subscription feature flags ──
+    # Some resources need subscription FEATURES registered (az feature register),
+    # which is separate from provider registration (az provider register) and is
+    # NOT handled by the loop above. The NAT-gateway public IP created during the
+    # bootstrap requires Microsoft.Network/AllowBringYourOwnPublicIpAddress;
+    # without it, apply fails late with:
+    #   SubscriptionNotRegisteredForFeature: ...AllowBringYourOwnPublicIpAddress
+    # Register it idempotently, wait for propagation, then re-register the
+    # Microsoft.Network provider so the newly-enabled feature takes effect.
+    $requiredFeatures = @(
+        @{ Namespace = "Microsoft.Network"; Name = "AllowBringYourOwnPublicIpAddress" }
+    )
+    foreach ($feat in $requiredFeatures) {
+        $state = az feature show --namespace $feat.Namespace --name $feat.Name --subscription $aksSubId --query properties.state -o tsv 2>$null
+        if ($state -eq "Registered") {
+            Write-Log "Feature already registered: $($feat.Namespace)/$($feat.Name)" -Severity "SUCCESS"
+            continue
+        }
+
+        Write-Log "Registering subscription feature $($feat.Namespace)/$($feat.Name) (this can take a few minutes)..." -Severity "INFO"
+        az feature register --namespace $feat.Namespace --name $feat.Name --subscription $aksSubId --output none 2>$null
+
+        # Features register asynchronously — poll until Registered (up to 5 min).
+        $maxWait = 300
+        $waited = 0
+        while ($state -ne "Registered" -and $waited -lt $maxWait) {
+            Start-Sleep -Seconds 15
+            $waited += 15
+            $state = az feature show --namespace $feat.Namespace --name $feat.Name --subscription $aksSubId --query properties.state -o tsv 2>$null
+        }
+
+        if ($state -eq "Registered") {
+            # The provider must be re-registered for the feature to take effect.
+            az provider register --namespace $feat.Namespace --subscription $aksSubId --output none 2>$null
+            Write-Log "Feature registered: $($feat.Namespace)/$($feat.Name)" -Severity "SUCCESS"
+        } else {
+            Write-Log "Feature $($feat.Namespace)/$($feat.Name) still '$state' after ${maxWait}s. If apply fails with SubscriptionNotRegisteredForFeature, wait for it to finish registering and re-run." -Severity "WARNING"
+        }
+    }
 }
 
 # =============================================================================
