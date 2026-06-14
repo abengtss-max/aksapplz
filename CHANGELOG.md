@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-14
+
 ### Added
 - **`enable_agc` (Application Gateway for Containers)** — a new regional ingress
   option alongside `enable_app_gateway`. When enabled, Terraform provisions a
@@ -69,10 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   3 min, then a final synchronous `az group delete --yes`) and reports an
   ERROR only if an RG is still present (e.g. a resource lock), instead of
   leaving the fire-and-forget `--no-wait` deletions unverified.
-
-## [1.5.3] - 2026-06-14
-
-### Fixed
 - **Wizard — stopped prompting for the unused L7 ingress subnet.** The
   interactive wizard asked for both `subnet_address_prefix_app_gateway` and
   `subnet_address_prefix_agc` during networking (Decision 5), before the ingress
