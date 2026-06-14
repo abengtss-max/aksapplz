@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Azure Backup for AKS — complete managed solution.** `enable_backup` now
+  provisions the Microsoft-recommended topology instead of a non-functional
+  bare extension: a hardened blob datastore storage account + container, a
+  dedicated snapshot resource group, a Backup Vault (system-assigned identity),
+  the native `azurerm_kubernetes_cluster_extension` backup extension (AAD-based,
+  shared keys disabled), an AKS Trusted Access role binding
+  (`Microsoft.DataProtection/backupVaults/backup-operator`), all required vault /
+  extension / cluster identity role assignments, a default **daily backup policy
+  (30-day operational retention)**, and a backup instance protecting the cluster.
+  New variables: `backup_retention_days` (30), `backup_storage_replication_type`
+  (`ZRS`), `backup_vault_redundancy` (`LocallyRedundant`),
+  `backup_vault_soft_delete` (`Off`). The AKS node subnets gain a
+  `Microsoft.Storage` service endpoint when backup is enabled so the extension
+  can reach the default-deny datastore. Requires the deploying identity to be
+  able to create role assignments (Owner/User Access Administrator) when enabled.
+
+### Fixed
+- **Grafana provisioning failed on apply** — Azure Managed Grafana Standard SKU
+  retired major version 11, so the previous `grafana_major_version` default of
+  `"11"` caused `azurerm_dashboard_grafana` to fail. Default bumped to `"12"`.
+- **AKS backup extension never installed** — the previous AzAPI extension was
+  configured with only `credentials.tenantId` and no `backupStorageLocation`,
+  so every apply with `enable_backup = true` failed with a missing
+  `configuration.backupStorageLocation.bucket` error. Replaced by the complete
+  managed solution above.
+
 ## [1.6.0] - 2026-06-14
 
 ### Added

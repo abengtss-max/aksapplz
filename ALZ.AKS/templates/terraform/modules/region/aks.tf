@@ -294,25 +294,6 @@ module "aks" {
   ]
 }
 
-# =============================================================================
-# AKS Backup Extension (via AzAPI)
-# =============================================================================
-resource "azapi_resource" "aks_backup_extension" {
-  count = var.enable_backup ? 1 : 0
-
-  type      = "Microsoft.KubernetesConfiguration/extensions@2023-05-01"
-  name      = "azure-aks-backup"
-  parent_id = module.aks.resource_id
-
-  body = {
-    properties = {
-      extensionType           = "Microsoft.DataProtection.Kubernetes"
-      autoUpgradeMinorVersion = true
-      releaseTrain            = "Stable"
-      # Required for the velero secret rendered by the extension's Helm chart
-      configurationSettings = {
-        "credentials.tenantId" = var.tenant_id
-      }
-    }
-  }
-}
+# NOTE: Azure Backup for AKS (storage, vault, extension, Trusted Access, policy
+# and backup instance) is implemented as the complete managed solution in
+# backup.tf, opt-in via var.enable_backup.

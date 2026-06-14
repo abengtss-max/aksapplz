@@ -79,11 +79,6 @@ moved {
   to   = module.region["primary"].module.aks
 }
 
-moved {
-  from = azapi_resource.aks_backup_extension
-  to   = module.region["primary"].azapi_resource.aks_backup_extension
-}
-
 # --- Application Gateway ---
 moved {
   from = azurerm_public_ip.app_gateway

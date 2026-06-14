@@ -44,6 +44,9 @@ locals {
   nsg_aks_user_name     = "nsg-aks-user-${local.name_prefix}"
   nsg_apiserver_name    = "nsg-aks-apiserver-${local.name_prefix}"
 
+  # Backup datastore storage account — globally unique, <=24 lowercase alnum.
+  backup_storage_account_name = "stbkp${substr(md5(local.name_prefix), 0, 18)}"
+
   # Subnet configurations — system and user node pools on separate subnets
   subnets = {
     aks_system_nodes = {

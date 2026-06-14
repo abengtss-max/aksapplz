@@ -81,6 +81,10 @@ module "region" {
   enable_file_csi_driver         = var.enable_file_csi_driver
   enable_snapshot_controller     = var.enable_snapshot_controller
   enable_backup                  = var.enable_backup
+  backup_retention_days           = var.backup_retention_days
+  backup_storage_replication_type = var.backup_storage_replication_type
+  backup_vault_redundancy         = var.backup_vault_redundancy
+  backup_vault_soft_delete        = var.backup_vault_soft_delete
 
   # App Gateway
   waf_mode                 = var.waf_mode

@@ -525,9 +525,33 @@ variable "enable_snapshot_controller" {
 # --- Business Continuity Options ---
 
 variable "enable_backup" {
-  description = "Enable Azure Backup for AKS (via Backup extension)."
+  description = "Enable the managed Azure Backup for AKS solution (vault, extension, Trusted Access, policy and backup instance)."
   type        = bool
   default     = false
+}
+
+variable "backup_retention_days" {
+  description = "Retention (days) for the default AKS backup policy operational datastore."
+  type        = number
+  default     = 30
+}
+
+variable "backup_storage_replication_type" {
+  description = "Replication for the backup datastore storage account. ZRS/GZRS recommended; LRS only for non-critical."
+  type        = string
+  default     = "ZRS"
+}
+
+variable "backup_vault_redundancy" {
+  description = "Backup Vault storage redundancy. LocallyRedundant or GeoRedundant (GeoRedundant cannot be changed later)."
+  type        = string
+  default     = "LocallyRedundant"
+}
+
+variable "backup_vault_soft_delete" {
+  description = "Backup Vault soft delete. 'Off' allows reproducible teardown; set 'On' for production immutability."
+  type        = string
+  default     = "Off"
 }
 
 # --- Compliance & Governance Options ---
@@ -605,9 +629,9 @@ variable "grafana_sku" {
 }
 
 variable "grafana_major_version" {
-  description = "Grafana major version. Valid values: 11, 12."
+  description = "Grafana major version. Azure Managed Grafana Standard SKU requires 12 (v11 was retired); valid value: 12."
   type        = string
-  default     = "11"
+  default     = "12"
 }
 
 variable "grafana_zone_redundancy" {
