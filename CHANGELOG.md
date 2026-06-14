@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Containers); the unused key keeps its default so the rendered tfvars stays
   valid. Matches the Terraform behaviour, which only creates the subnet whose
   `enable_*` flag is set.
+- **Terraform — fixed invalid `moved` block for `aks_acr_pull`.** `moved.tf`
+  tried to relocate `azurerm_role_assignment.aks_acr_pull` into
+  `module.region["primary"]`, but that role assignment is intentionally kept at
+  the root module (`for_each = module.region`) to avoid a region↔ACR dependency
+  cycle. `terraform plan` failed with *"Moved object still exists."* The block
+  now re-keys the existing instance into `azurerm_role_assignment.aks_acr_pull["primary"]`
+  — the correct state migration after adding `for_each` (no destroy/recreate).
 
 ## [1.5.2] - 2026-06-14
 

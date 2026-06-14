@@ -65,9 +65,13 @@ moved {
   to   = module.region["primary"].azurerm_role_assignment.aks_network_contributor
 }
 
+# aks_acr_pull stays at the ROOT module (see main.acr.tf) to avoid a
+# region<->acr dependency cycle; the refactor only added for_each = module.region.
+# Re-key the existing single-region instance into the "primary" key rather than
+# moving it into module.region (which would conflict with the root declaration).
 moved {
   from = azurerm_role_assignment.aks_acr_pull
-  to   = module.region["primary"].azurerm_role_assignment.aks_acr_pull
+  to   = azurerm_role_assignment.aks_acr_pull["primary"]
 }
 
 moved {
