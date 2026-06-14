@@ -770,17 +770,9 @@ function Get-InteractiveInputs {
     $v = Read-Host "Enter value (press enter to accept default)"
     $config.subnet_address_prefix_aks_api_server = if ([string]::IsNullOrEmpty($v)) { "10.10.20.0/28" } else { $v }
 
-    Write-Log "subnet_address_prefix_app_gateway" -Severity "INPUT REQUIRED"
-    Write-Host "Subnet for Application Gateway WAF v2."
-    Write-Host "Default: 10.10.21.0/24"
-    $v = Read-Host "Enter value (press enter to accept default)"
-    $config.subnet_address_prefix_app_gateway = if ([string]::IsNullOrEmpty($v)) { "10.10.21.0/24" } else { $v }
-
-    Write-Log "subnet_address_prefix_agc" -Severity "INPUT REQUIRED"
-    Write-Host "Subnet for Application Gateway for Containers (ALB). Delegated, minimum /24."
-    Write-Host "Default: 10.10.24.0/24"
-    $v = Read-Host "Enter value (press enter to accept default)"
-    $config.subnet_address_prefix_agc = if ([string]::IsNullOrEmpty($v)) { "10.10.24.0/24" } else { $v }
+    # NOTE: The L7 ingress subnets (app_gateway / agc) are prompted later, after
+    # the ingress option is chosen in Decision 11, so we only ask for the one
+    # that's actually being deployed.
 
     Write-Log "subnet_address_prefix_private_endpoints" -Severity "INPUT REQUIRED"
     Write-Host "Subnet for private endpoints (ACR, Key Vault)."
@@ -1053,6 +1045,33 @@ function Get-InteractiveInputs {
         Write-Host ""
         Write-Log "Both Application Gateway WAF and App Gateway for Containers were enabled. These are mutually exclusive — keeping Application Gateway WAF and disabling AGC. Re-run and pick only AGC if that's what you want." -Severity "WARNING"
         $config.enable_agc = $false
+    }
+
+    # ── Ingress subnet — prompt only for the L7 ingress actually selected ──
+    # App Gateway WAF and AGC are mutually exclusive. Terraform only creates the
+    # subnet when its enable_* flag is true, so we ask for just the one in use.
+    # The unused key keeps its default to keep the rendered tfvars valid
+    # (subnet_address_prefixes.app_gateway is a required object key).
+    if ($config.enable_app_gateway -eq $true) {
+        Write-Host ""
+        Write-Log "subnet_address_prefix_app_gateway" -Severity "INPUT REQUIRED"
+        Write-Host "Subnet for Application Gateway WAF v2."
+        Write-Host "Default: 10.10.21.0/24"
+        $v = Read-Host "Enter value (press enter to accept default)"
+        $config.subnet_address_prefix_app_gateway = if ([string]::IsNullOrEmpty($v)) { "10.10.21.0/24" } else { $v }
+    } else {
+        $config.subnet_address_prefix_app_gateway = "10.10.21.0/24"
+    }
+
+    if ($config.enable_agc -eq $true) {
+        Write-Host ""
+        Write-Log "subnet_address_prefix_agc" -Severity "INPUT REQUIRED"
+        Write-Host "Subnet for Application Gateway for Containers (ALB). Delegated, minimum /24."
+        Write-Host "Default: 10.10.24.0/24"
+        $v = Read-Host "Enter value (press enter to accept default)"
+        $config.subnet_address_prefix_agc = if ([string]::IsNullOrEmpty($v)) { "10.10.24.0/24" } else { $v }
+    } else {
+        $config.subnet_address_prefix_agc = "10.10.24.0/24"
     }
     Write-Host ""
 

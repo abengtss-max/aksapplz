@@ -70,6 +70,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ERROR only if an RG is still present (e.g. a resource lock), instead of
   leaving the fire-and-forget `--no-wait` deletions unverified.
 
+## [1.5.3] - 2026-06-14
+
+### Fixed
+- **Wizard — stopped prompting for the unused L7 ingress subnet.** The
+  interactive wizard asked for both `subnet_address_prefix_app_gateway` and
+  `subnet_address_prefix_agc` during networking (Decision 5), before the ingress
+  option was even chosen (Decision 11). It now prompts only for the subnet of the
+  ingress actually selected (Application Gateway WAF *or* App Gateway for
+  Containers); the unused key keeps its default so the rendered tfvars stays
+  valid. Matches the Terraform behaviour, which only creates the subnet whose
+  `enable_*` flag is set.
+
 ## [1.5.2] - 2026-06-14
 
 ### Fixed
