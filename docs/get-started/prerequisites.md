@@ -4,10 +4,6 @@ One-time setup, about 15 minutes. Do this once per workstation.
 
 ## 1. Install the tools
 
-```powershell
-winget install Microsoft.PowerShell Microsoft.AzureCLI HashiCorp.Terraform Git.Git GitHub.cli
-```
-
 | Tool | Minimum version |
 |---|---|
 | PowerShell | 7.0 |
@@ -16,8 +12,57 @@ winget install Microsoft.PowerShell Microsoft.AzureCLI HashiCorp.Terraform Git.G
 | Git | any recent |
 | GitHub CLI | any recent |
 
+=== "Windows 10 / 11"
+
+    `winget` ships with these editions, so one line installs everything:
+
+    ```powershell
+    winget install Microsoft.PowerShell Microsoft.AzureCLI HashiCorp.Terraform Git.Git GitHub.cli
+    ```
+
+=== "Windows Server"
+
+    Windows Server **does not include `winget`** (you'll get
+    `'winget' is not recognized`). Run this Windows-PowerShell 5.1 bootstrap **as Administrator**
+    instead — it installs Chocolatey, then every tool through it:
+
+    ```powershell
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+    choco install -y powershell-core azure-cli terraform git gh
+    ```
+
+    Prefer no third-party package manager? Install the official MSIs directly:
+
+    ```powershell
+    [System.Net.ServicePointManager]::SecurityProtocol = 3072
+    $tmp = "$env:TEMP\alz-tools"; New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $downloads = @{
+      'PowerShell-7.msi' = 'https://github.com/PowerShell/PowerShell/releases/latest/download/PowerShell-7.4.6-win-x64.msi'
+      'AzureCLI.msi'     = 'https://aka.ms/installazurecliwindowsx64'
+      'Git.exe'          = 'https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/Git-2.47.1-64-bit.exe'
+      'gh.msi'           = 'https://github.com/cli/cli/releases/download/v2.63.2/gh_2.63.2_windows_amd64.msi'
+    }
+    foreach ($name in $downloads.Keys) {
+      Invoke-WebRequest -Uri $downloads[$name] -OutFile "$tmp\$name"
+      Start-Process -Wait -FilePath "$tmp\$name" -ArgumentList '/quiet /norestart'
+    }
+    ```
+
+    Terraform has no installer — unzip the binary and add it to `PATH`:
+
+    ```powershell
+    Invoke-WebRequest 'https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_windows_amd64.zip' -OutFile "$tmp\terraform.zip"
+    Expand-Archive "$tmp\terraform.zip" -DestinationPath 'C:\terraform' -Force
+    [Environment]::SetEnvironmentVariable('Path', $env:Path + ';C:\terraform', 'Machine')
+    ```
+
 !!! tip
-    Restart your shell after installing so the new tools are on your `PATH`.
+    Restart your shell (or sign out and back in) after installing so the new tools are on your `PATH`.
+    On Windows Server, launch **PowerShell 7** (`pwsh`) for the rest of this guide — not the
+    Windows PowerShell 5.1 console you used to bootstrap.
 
 ## 2. Sign in to Azure (as Owner)
 
