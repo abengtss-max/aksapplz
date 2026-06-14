@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.6.0'
+    ModuleVersion     = '1.6.1'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,13 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.6.1
+- Azure Backup for AKS (enable_backup): complete managed solution (Backup Vault, hardened storage datastore, extension, Trusted Access, daily 30-day policy and backup instance) replacing the non-functional bare extension
+- Fix: Grafana major version default 11 -> 12 (Azure retired v11 for the Standard SKU)
+
+## 1.6.0
+- enable_agc, -PatFromKeyVault, -OidcOnly, azd integration; feature-registration in bootstrap preflight
+
 ## 1.5.0
 - Application Gateway for Containers (enable_agc): delegated subnet + NSG per region (ALB Controller managed)
 - Customer documentation site (MkDocs Material) published to GitHub Pages
