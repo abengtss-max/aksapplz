@@ -70,6 +70,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ERROR only if an RG is still present (e.g. a resource lock), instead of
   leaving the fire-and-forget `--no-wait` deletions unverified.
 
+## [1.5.1] - 2026-06-14
+
+### Fixed
+- **Release packaging — bootstrap composition was missing from the install
+  zip.** The release workflow zipped only `./ALZ.AKS`, so `install.ps1`
+  extracted a version cache (`~/.alz-aks/<version>/`) without the Terraform
+  bootstrap. `Deploy-AKSLandingZone` then failed at apply time with
+  `Bootstrap root not found: …\<version>\bootstrap\alz\github`. The workflow now
+  bundles `./bootstrap` alongside the module, so the composition (and its
+  `modules/azure`, `modules/github`, `modules/resource_names`) ships in the
+  release and resolves automatically — no full-repo clone required. Only
+  git-tracked files are packaged, so no local state, logs, or rendered tfvars
+  leak into the asset.
+
 ## [1.4.0] - 2026-05-24
 
 GA release. Builds on rc5 with three fixes from live E2E validation and

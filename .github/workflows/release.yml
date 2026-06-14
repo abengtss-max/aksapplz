@@ -1,8 +1,9 @@
 name: Release
 
 # Cut a versioned GitHub Release when a vX.Y.Z tag is pushed.
-# The release asset is the ALZ.AKS PowerShell module (with its embedded
-# Terraform/workflow templates), which install.ps1 downloads at deploy time.
+# The release asset bundles the ALZ.AKS PowerShell module (with its embedded
+# Terraform/workflow templates) together with the bootstrap/ composition, which
+# install.ps1 downloads and extracts at deploy time.
 
 on:
   push:
@@ -46,8 +47,13 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $asset = "ALZ.AKS-$tag.zip"
-          # Zip the module folder so the archive root contains ALZ.AKS/...
-          Compress-Archive -Path ./ALZ.AKS -DestinationPath $asset -Force
+          # Zip the module folder plus the bootstrap composition so the archive
+          # root contains both ALZ.AKS/... and bootstrap/... . install.ps1 extracts
+          # these side by side under ~/.alz-aks/<version>/, which is exactly where
+          # Deploy-AKSLandingZone resolves -BootstrapRoot (<version>/bootstrap/alz/github).
+          # Only git-tracked files are present in this clean checkout, so no local
+          # Terraform state, logs, or rendered tfvars leak into the release.
+          Compress-Archive -Path ./ALZ.AKS, ./bootstrap -DestinationPath $asset -Force
           Write-Host "Created $asset"
           "asset=$asset" >> $env:GITHUB_OUTPUT
         id: package
