@@ -85,6 +85,11 @@ resource "azurerm_storage_account" "backup" {
       endpoint_tenant_id   = var.tenant_id
     }
   }
+
+  # The node subnets are an in-place update to add the Microsoft.Storage service
+  # endpoint; that update must complete before this account's network ACL is
+  # validated, otherwise Azure returns SubnetsHaveNoServiceEndpointsConfigured.
+  depends_on = [module.spoke_vnet]
 }
 
 resource "azurerm_storage_container" "backup" {

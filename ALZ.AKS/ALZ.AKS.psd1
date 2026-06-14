@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.6.1'
+    ModuleVersion     = '1.6.2'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.6.2
+- Fix: AKS backup storage account failed with SubnetsHaveNoServiceEndpointsConfigured. The AVM subnet object uses service_endpoints_with_location (not service_endpoints); the node-subnet Microsoft.Storage endpoint is now applied correctly and the storage account waits for the subnet update via depends_on.
+
 ## 1.6.1
 - Azure Backup for AKS (enable_backup): complete managed solution (Backup Vault, hardened storage datastore, extension, Trusted Access, daily 30-day policy and backup instance) replacing the non-functional bare extension
 - Fix: Grafana major version default 11 -> 12 (Azure retired v11 for the Standard SKU)

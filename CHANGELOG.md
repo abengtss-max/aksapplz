@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-06-14
+
+### Fixed
+- **AKS backup storage account failed to create** with
+  `NetworkAclsValidationFailure: SubnetsHaveNoServiceEndpointsConfigured`. The
+  AVM virtual-network module's subnet object exposes
+  `service_endpoints_with_location` (not `service_endpoints`), so the previously
+  added key was silently ignored and the `Microsoft.Storage` service endpoint
+  was never applied to the AKS node subnets. Corrected the attribute and added
+  an explicit `depends_on = [module.spoke_vnet]` on the backup storage account so
+  the in-place subnet update completes before the account's network ACL is
+  validated.
+
 ## [1.6.1] - 2026-06-14
 
 ### Added
