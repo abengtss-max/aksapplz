@@ -1566,6 +1566,26 @@ function Register-RequiredProviders {
         $requiredProviders += "Microsoft.DataProtection"
     }
 
+    # ── Required subscription FEATURE flags ──
+    # Some resources need a subscription FEATURE registered (az feature register),
+    # which is a SEPARATE mechanism from provider registration (az provider
+    # register) and is NOT covered by $requiredProviders above. A subscription
+    # that is missing a required feature fails LATE in `terraform apply` with
+    # `SubscriptionNotRegisteredForFeature` rather than up front.
+    #
+    # To add a new required feature in the future, append one hashtable here:
+    #   @{ Namespace = "Microsoft.Xxx"; Name = "FeatureName" }
+    # Optionally gate it on config the same way conditional providers are gated
+    # (e.g. `if ($Config.enable_foo -eq $true) { $requiredFeatures += ... }`).
+    #
+    # Currently required:
+    #   Microsoft.Network/AllowBringYourOwnPublicIpAddress — the NAT-gateway
+    #   public IP created during the bootstrap needs this; without it apply
+    #   fails with SubscriptionNotRegisteredForFeature on the public IP.
+    $requiredFeatures = @(
+        @{ Namespace = "Microsoft.Network"; Name = "AllowBringYourOwnPublicIpAddress" }
+    )
+
     $registered = az provider list --subscription $aksSubId --query "[?registrationState=='Registered'].namespace" -o tsv 2>$null
     $registeredSet = @{}
     if ($registered) {
@@ -1607,18 +1627,11 @@ function Register-RequiredProviders {
         }
     }
 
-    # ── Subscription feature flags ──
-    # Some resources need subscription FEATURES registered (az feature register),
-    # which is separate from provider registration (az provider register) and is
-    # NOT handled by the loop above. The NAT-gateway public IP created during the
-    # bootstrap requires Microsoft.Network/AllowBringYourOwnPublicIpAddress;
-    # without it, apply fails late with:
-    #   SubscriptionNotRegisteredForFeature: ...AllowBringYourOwnPublicIpAddress
-    # Register it idempotently, wait for propagation, then re-register the
-    # Microsoft.Network provider so the newly-enabled feature takes effect.
-    $requiredFeatures = @(
-        @{ Namespace = "Microsoft.Network"; Name = "AllowBringYourOwnPublicIpAddress" }
-    )
+    # ── Register required subscription feature flags ──
+    # Driven by $requiredFeatures (defined near $requiredProviders above).
+    # Each feature is registered idempotently; on a fresh registration we wait
+    # for propagation and then re-register the owning provider so the newly
+    # enabled feature takes effect.
     foreach ($feat in $requiredFeatures) {
         $state = az feature show --namespace $feat.Namespace --name $feat.Name --subscription $aksSubId --query properties.state -o tsv 2>$null
         if ($state -eq "Registered") {
