@@ -4,20 +4,22 @@ One-time setup, about 15 minutes. Do this once per workstation.
 
 ## 1. Install the tools
 
-| Tool | Minimum version |
-|---|---|
-| PowerShell | 7.0 |
-| Azure CLI | 2.60 |
-| Terraform | 1.9 |
-| Git | any recent |
-| GitHub CLI | any recent |
+| Tool | Minimum version | Notes |
+|---|---|---|
+| PowerShell | 7.0 | required |
+| Azure CLI | 2.60 | required |
+| Terraform | 1.9 | required |
+| Git | any recent | required |
+| GitHub CLI | any recent | required |
+| VS Code | any recent | recommended — the wizard offers to open the generated config in VS Code for review when `code` is on your `PATH` |
 
 === "Windows 10 / 11"
 
-    `winget` ships with these editions, so one line installs everything:
+    `winget` ships with these editions, so one line installs everything (VS Code
+    is optional but recommended):
 
     ```powershell
-    winget install Microsoft.PowerShell Microsoft.AzureCLI HashiCorp.Terraform Git.Git GitHub.cli
+    winget install Microsoft.PowerShell Microsoft.AzureCLI HashiCorp.Terraform Git.Git GitHub.cli Microsoft.VisualStudioCode
     ```
 
 === "Windows Server"
@@ -31,8 +33,11 @@ One-time setup, about 15 minutes. Do this once per workstation.
     [System.Net.ServicePointManager]::SecurityProtocol = 3072
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
-    choco install -y powershell-core azure-cli terraform git gh
+    choco install -y powershell-core azure-cli terraform git gh vscode
     ```
+
+    `vscode` is optional but recommended — with it installed, the wizard offers to
+    open the generated config for review. Drop it from the list to skip.
 
     Prefer no third-party package manager? Install the official MSIs directly:
 
