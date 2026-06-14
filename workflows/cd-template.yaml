@@ -38,7 +38,7 @@ on:
         required: false
         type: string
         default: "aks-landing-zone.tfstate"
-        description: "Object key inside the state container for this workload."
+        description: "Object key inside the state container (must match CI so plan/apply share state)."
 
 jobs:
   plan:

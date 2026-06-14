@@ -27,13 +27,23 @@ on:
       working_directory:
         required: false
         type: string
-        default: "."
-        description: "Working directory for Terraform commands"
+        default: "terraform"
+        description: "Working directory for Terraform commands (workload TF lives under /terraform)."
+      runner_label:
+        required: false
+        type: string
+        default: "self-hosted"
+        description: "Runner label: 'self-hosted' (ACI runner) or 'ubuntu-latest' (GitHub-hosted)"
+      backend_key:
+        required: false
+        type: string
+        default: "aks-landing-zone.tfstate"
+        description: "Object key inside the state container (must match CI so plan/apply share state)."
 
 jobs:
   plan:
     name: "Terraform Plan"
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_label }}
     environment: ${{ inputs.plan_environment }}
 
     defaults:
@@ -41,9 +51,9 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
 
     env:
-      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: true
 
     steps:
@@ -58,10 +68,10 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="resource_group_name=${{ vars.BACKEND_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ vars.BACKEND_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=${{ vars.BACKEND_CONTAINER }}" \
-            -backend-config="key=${{ vars.BACKEND_KEY }}" \
+            -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
+            -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
+            -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
+            -backend-config="key=${{ inputs.backend_key }}" \
             -backend-config="use_oidc=true" \
             -backend-config="use_azuread_auth=true"
 
@@ -90,7 +100,7 @@ jobs:
 
   apply:
     name: "Terraform Apply"
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_label }}
     needs: plan
     environment: ${{ inputs.apply_environment }}
 
@@ -99,9 +109,9 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
 
     env:
-      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: true
 
     steps:
@@ -116,10 +126,10 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="resource_group_name=${{ vars.BACKEND_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ vars.BACKEND_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=${{ vars.BACKEND_CONTAINER }}" \
-            -backend-config="key=${{ vars.BACKEND_KEY }}" \
+            -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
+            -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
+            -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
+            -backend-config="key=${{ inputs.backend_key }}" \
             -backend-config="use_oidc=true" \
             -backend-config="use_azuread_auth=true"
 

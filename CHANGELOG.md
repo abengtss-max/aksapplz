@@ -70,6 +70,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ERROR only if an RG is still present (e.g. a resource lock), instead of
   leaving the fire-and-forget `--no-wait` deletions unverified.
 
+## [1.5.2] - 2026-06-14
+
+### Fixed
+- **CI/CD — generated workload repo is now self-contained; CD no longer fails
+  with "workflow was not found".** The bootstrap creates only the workload repo,
+  but its generated `ci.yaml` / `cd.yaml` referenced reusable workflows in a
+  separate `<service>-templates` repo that the Terraform path never created
+  (and which is restricted on free org plans). The workload repo now ships its
+  own `ci-template.yaml` / `cd-template.yaml` and the caller workflows reference
+  them locally (`uses: ./.github/workflows/<name>-template.yaml`), removing the
+  cross-repo dependency entirely.
+- **CI/CD — `cd-template.yaml` referenced variables the bootstrap never set.**
+  It read `secrets.ARM_CLIENT_ID/TENANT_ID/SUBSCRIPTION_ID` and
+  `vars.BACKEND_RESOURCE_GROUP/STORAGE_ACCOUNT/CONTAINER/KEY`, none of which
+  Terraform provisions. It now uses the same convention as the (working) CI
+  template: `vars.AZURE_CLIENT_ID/TENANT_ID/SUBSCRIPTION_ID` for OIDC auth and
+  `vars.BACKEND_AZURE_RESOURCE_GROUP_NAME/_STORAGE_ACCOUNT_NAME/`
+  `_STORAGE_ACCOUNT_CONTAINER_NAME` for backend init, plus new `runner_label`
+  (default `self-hosted`) and `backend_key` (default `aks-landing-zone.tfstate`)
+  inputs so plan/apply share state and honour the runner choice.
+
 ## [1.5.1] - 2026-06-14
 
 ### Fixed

@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   CI:
-    uses: __ORG_NAME__/__TEMPLATE_REPO_NAME__/.github/workflows/ci-template.yaml@main
+    uses: ./.github/workflows/ci-template.yaml
     with:
       environment: __PLAN_ENVIRONMENT__
+      runner_label: __RUNNER_LABEL__
+      working_directory: terraform
     secrets: inherit

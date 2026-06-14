@@ -2610,50 +2610,39 @@ function Get-RepositoryFilesMap {
         }
     }
 
-    # Workflows (caller copies only — templates stay private to the workload repo)
+    # Workflows -> .github/workflows/ in the workload repo.
+    #
+    # The workload repo is SELF-CONTAINED: the two caller workflows (ci.yaml,
+    # cd.yaml) reference local reusable workflows via `uses: ./.github/workflows/
+    # <name>-template.yaml`, and we ship those reusable templates into the same
+    # repo. This removes the cross-repo dependency on a separate "<svc>-templates"
+    # repo (which the Terraform bootstrap never created) and works on free org
+    # plans where sharing private reusable workflows across repos is restricted.
     $wfSrc = Join-Path $TemplateRoot "workflows"
     if (Test-Path $wfSrc) {
-        # Resolve the template repo (owner/name) that hosts the reusable
-        # cd-template.yaml / ci-template.yaml workflows.
-        # Priority:
-        #   1. explicit config.template_repository ("owner/name")
-        #   2. convention: <github_organization_name>/<service_name>-templates
-        #      (workload repos in the org can consume sibling-org reusable workflows)
-        #   3. local git remote (only works when bootstrap repo is in the same org
-        #      AND is reachable from the workload — typically not the case)
-        $templateRepo = $null
-        if ($Config.ContainsKey('template_repository') -and -not [string]::IsNullOrWhiteSpace($Config.template_repository)) {
-            $templateRepo = [string]$Config.template_repository
-        } elseif (-not [string]::IsNullOrWhiteSpace($Config.github_organization_name) -and -not [string]::IsNullOrWhiteSpace($Config.service_name)) {
-            $templateRepo = "$($Config.github_organization_name)/$($Config.service_name)-templates"
-        } else {
-            try {
-                $remoteUrl = (& git -C (Split-Path $TemplateRoot -Parent) remote get-url origin 2>$null)
-                if ($remoteUrl -match 'github\.com[:/]+([^/]+/[^/.]+)') { $templateRepo = $Matches[1] }
-            } catch { }
-        }
-        if ([string]::IsNullOrWhiteSpace($templateRepo)) {
-            $templateRepo = "$($Config.github_organization_name)/__TEMPLATE_REPO_NAME__"
-            Write-Log "template_repository not set and could not be derived; workload workflows will keep '__TEMPLATE_REPO_NAME__' placeholder." -Severity "WARNING"
-        }
-        $templateOrg  = ($templateRepo -split '/')[0]
-        $templateName = ($templateRepo -split '/')[1]
         # Pick a runner label that matches how the bootstrap provisioned compute.
         # ACI runner is only created when use_self_hosted_runners=true.
         $runnerLabel = if ($Config.use_self_hosted_runners -eq $true) { "self-hosted" } else { "ubuntu-latest" }
+
+        # Caller workflows — substitute the simple placeholders.
         foreach ($wfFile in @("ci.yaml","cd.yaml")) {
             $p = Join-Path $wfSrc $wfFile
             if (Test-Path $p) {
                 $content = Get-Content $p -Raw
-                # Best-effort placeholder substitution — workload workflows are simple.
-                # __ORG_NAME__ + __TEMPLATE_REPO_NAME__ together form the `uses:` ref
-                # pointing at the template repo that owns the reusable workflow.
-                $content = $content -replace '__ORG_NAME__',           $templateOrg
-                $content = $content -replace '__TEMPLATE_REPO_NAME__', $templateName
                 $content = $content -replace '__PLAN_ENVIRONMENT__',  "plan"
                 $content = $content -replace '__APPLY_ENVIRONMENT__', "apply"
                 $content = $content -replace '__RUNNER_LABEL__',      $runnerLabel
                 $files[".github/workflows/$wfFile"] = $content
+            }
+        }
+
+        # Reusable templates — shipped verbatim (they read inputs.runner_label etc.,
+        # so they need no placeholder substitution). Only have `on: workflow_call`,
+        # so they never trigger on their own.
+        foreach ($tplFile in @("ci-template.yaml","cd-template.yaml")) {
+            $p = Join-Path $wfSrc $tplFile
+            if (Test-Path $p) {
+                $files[".github/workflows/$tplFile"] = (Get-Content $p -Raw)
             }
         }
     }
@@ -4442,50 +4431,13 @@ terraform {
         & terraform @applyArgs
         if ($LASTEXITCODE -ne 0) { Write-Log "terraform apply failed." -Severity "ERROR"; return }
 
-        # ── Ensure the reusable-workflows (templates) repo exists & is populated ──
-        # The bootstrap composition only creates the workload repo. Its generated
-        # ci.yaml / cd.yaml reference reusable workflows in
-        # <org>/<service_name>-templates. If that repo is missing (or empty), the
-        # CD run fails with "workflow was not found". Create + populate + grant
-        # org access here so the workload repo can call into it.
-        try {
-            $tplOrg  = [string]$config.github_organization_name
-            $tplName = "$([string]$config.service_name)-templates"
-            $tplSlug = "$tplOrg/$tplName"
-            $wfSrc   = Join-Path $script:TemplateRoot "workflows"
-            if (-not (Test-Path (Join-Path $wfSrc "cd-template.yaml"))) {
-                Write-Log "Templates source not found at $wfSrc — skipping templates repo bootstrap." -Severity "WARNING"
-            } else {
-                # 1. Create the repo if it doesn't exist.
-                $exists = gh repo view $tplSlug --json name 2>$null
-                if (-not $exists) {
-                    Write-Log "Creating reusable-workflows repo $tplSlug..." -Severity "INFO"
-                    gh repo create $tplSlug --private --description "AKS Application Landing Zone - CI/CD reusable workflows" 2>&1 | Out-Null
-                } else {
-                    Write-Log "Reusable-workflows repo $tplSlug already exists — updating contents." -Severity "INFO"
-                }
-
-                # 2. Upsert ci-template.yaml + cd-template.yaml via Contents API
-                #    (avoids git+PAT auth dance; gh CLI carries its own token).
-                foreach ($f in @('ci-template.yaml','cd-template.yaml')) {
-                    $srcFile = Join-Path $wfSrc $f
-                    if (-not (Test-Path $srcFile)) { continue }
-                    $apiPath = ".github/workflows/$f"
-                    $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $srcFile -Raw)))
-                    $existingSha = gh api "/repos/$tplSlug/contents/$apiPath" --jq '.sha' 2>$null
-                    $args = @('api','-X','PUT',"/repos/$tplSlug/contents/$apiPath",'-f',"message=Bootstrap update $f",'-f',"content=$content")
-                    if ($existingSha) { $args += @('-f',"sha=$existingSha") }
-                    gh @args 2>&1 | Out-Null
-                }
-                Write-Log "Pushed ci-template.yaml + cd-template.yaml to $tplSlug" -Severity "SUCCESS"
-
-                # 3. Grant org access so private workload repos can call these workflows.
-                gh api -X PUT "/repos/$tplSlug/actions/permissions/access" -F access_level=organization 2>&1 | Out-Null
-                Write-Log "Actions access on $tplSlug set to 'organization'" -Severity "SUCCESS"
-            }
-        } catch {
-            Write-Log "Templates repo bootstrap encountered an error: $($_.Exception.Message). Workload CD may fail until templates repo exists." -Severity "WARNING"
-        }
+        # ── Workload repo is self-contained (no separate templates repo) ──
+        # The workload repo's ci.yaml / cd.yaml call LOCAL reusable workflows
+        # (`uses: ./.github/workflows/<name>-template.yaml`), and Terraform pushes
+        # those reusable templates into the same repo (see Get-RepositoryFilesMap).
+        # This removes the cross-repo "<service>-templates" dependency that
+        # previously failed with "workflow was not found" and avoids private
+        # reusable-workflow access restrictions on free org plans.
 
         # ── Capture outputs ──
         $outputs = (& terraform output -json) | ConvertFrom-Json

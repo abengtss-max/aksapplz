@@ -34,9 +34,11 @@ concurrency:
 
 jobs:
   CD:
-    uses: __ORG_NAME__/__TEMPLATE_REPO_NAME__/.github/workflows/cd-template.yaml@main
+    uses: ./.github/workflows/cd-template.yaml
     with:
       plan_environment: __PLAN_ENVIRONMENT__
       apply_environment: __APPLY_ENVIRONMENT__
       action: ${{ inputs.action || 'apply' }}
+      runner_label: __RUNNER_LABEL__
+      working_directory: terraform
     secrets: inherit

@@ -25,11 +25,20 @@ permissions:
   id-token: write
   contents: read
 
+# Prevent concurrent CD runs from racing for the Terraform state lock.
+# Runs are serialized per environment; queued runs wait instead of being cancelled
+# so that a fast-follow push does not skip a deployment.
+concurrency:
+  group: cd-__APPLY_ENVIRONMENT__-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   CD:
-    uses: __ORG_NAME__/__TEMPLATE_REPO_NAME__/.github/workflows/cd-template.yaml@main
+    uses: ./.github/workflows/cd-template.yaml
     with:
       plan_environment: __PLAN_ENVIRONMENT__
       apply_environment: __APPLY_ENVIRONMENT__
       action: ${{ inputs.action || 'apply' }}
+      runner_label: __RUNNER_LABEL__
+      working_directory: terraform
     secrets: inherit
