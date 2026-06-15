@@ -266,6 +266,7 @@ variable "system_node_pool" {
     vm_size         = string
     os_disk_size_gb = number
     os_disk_type    = string
+    os_sku          = optional(string, "Ubuntu")
     max_pods        = number
     min_count       = number
     max_count       = number
@@ -290,6 +291,7 @@ variable "user_node_pool" {
     vm_size         = string
     os_disk_size_gb = number
     os_disk_type    = string
+    os_sku          = optional(string, "Ubuntu")
     max_pods        = number
     min_count       = number
     max_count       = number
@@ -359,6 +361,21 @@ variable "enable_defender" {
   default     = true
 }
 
+variable "enable_defender_for_containers_plan" {
+  description = <<-EOT
+    Enable the SUBSCRIPTION-WIDE Microsoft Defender for Containers plan
+    (azurerm_security_center_subscription_pricing, tier Standard) plus its
+    agentless discovery and registry vulnerability-assessment extensions. This
+    is required for full Defender for Cloud coverage (agentless scanning,
+    registry scanning) on top of the in-cluster security_monitoring agent that
+    enable_defender turns on. NOTE: this changes Defender pricing for the WHOLE
+    subscription and incurs cost (~per protected vCPU / per image scanned).
+    Defaults to false so the accelerator never silently enables billing.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "enable_keda" {
   description = "Enable KEDA (Kubernetes Event-Driven Autoscaler)."
   type        = bool
@@ -393,6 +410,19 @@ variable "enable_agc" {
     deployment model). Terraform does NOT create the trafficControllers
     resource and does NOT install the ALB Controller — install it yourself and
     point it at the agc_subnet_id output. Coexists with enable_app_gateway.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_agic" {
+  description = <<-EOT
+    Enable the Application Gateway Ingress Controller (AGIC) AKS add-on. When
+    true (and enable_app_gateway = true), the WAF_v2 Application Gateway is
+    wired to AKS as an in-cluster ingress controller: the add-on is enabled on
+    the cluster and the AGIC managed identity is granted Contributor on the
+    Application Gateway and Reader on the resource group. Distinct from
+    enable_agc (Application Gateway for Containers / ALB).
   EOT
   type        = bool
   default     = false

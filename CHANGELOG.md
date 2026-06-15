@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-16
+
+### Added
+- **Configurable node pool OS SKU.** `system_node_pool.os_sku` and
+  `user_node_pool.os_sku` (default `"Ubuntu"`) let you choose the node OS image
+  (e.g. `AzureLinux`). The default preserves existing clusters unchanged.
+- **Application Gateway Ingress Controller (AGIC).** New `enable_agic` toggle.
+  When `enable_app_gateway` and `enable_agic` are both `true`, the WAF_v2
+  Application Gateway is wired to AKS as an in-cluster ingress via the AGIC
+  add-on, and the AGIC managed identity is granted `Contributor` on the gateway
+  and `Reader` on the resource group. Previously the gateway was deployed but
+  never connected to AKS (empty backend pool, no ingress controller).
+- **Subscription-wide Defender for Containers plan.** New
+  `enable_defender_for_containers_plan` toggle (default `false`). Raises the
+  subscription Defender for Containers plan to `Standard` with agentless
+  discovery and registry vulnerability assessment, clearing Defender for Cloud
+  "partial coverage". **This is subscription-wide and billed** — opt-in only.
+
+### Fixed
+- **Private cluster honored in standalone topologies.** `private_cluster_enabled
+  = true` previously had no effect unless a hub was attached (corp/online), so
+  standalone clusters silently stayed public. The private API server is now
+  provisioned in any topology (paired with API Server VNet Integration).
+- **Backup instance RBAC propagation race.** AKS backup instance creation could
+  fail with `UserErrorExtensionMSIMissingPermissionsOnBackupStorageLocation`
+  because data-plane role assignments are eventually consistent. A `time_sleep`
+  now lets the storage role assignments propagate before the backup instance is
+  created.
+
 ## [1.6.3] - 2026-06-15
 
 ### Fixed

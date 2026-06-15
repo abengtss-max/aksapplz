@@ -73,9 +73,13 @@ module "aks" {
     authorized_ip_ranges    = var.api_server_authorized_ip_ranges
     # Corp: private cluster with system-managed DNS zone
     # Online: public API server
-    enable_private_cluster             = local.is_corp ? var.private_cluster_enabled : false
-    enable_private_cluster_public_fqdn = local.is_corp ? var.private_cluster_public_fqdn_enabled : false
-    private_dns_zone                   = local.is_corp ? var.private_dns_zone_id : null
+    # Private cluster is honored independently of corp/online connectivity so a
+    # standalone deployment can still run a private API server (paired with API
+    # Server VNet Integration). Only the system-managed private DNS zone is
+    # wired when the cluster is actually private.
+    enable_private_cluster             = var.private_cluster_enabled
+    enable_private_cluster_public_fqdn = var.private_cluster_enabled ? var.private_cluster_public_fqdn_enabled : false
+    private_dns_zone                   = var.private_cluster_enabled ? var.private_dns_zone_id : null
   }
 
   # --------------------------------------------------------------------------
@@ -122,6 +126,7 @@ module "aks" {
     vm_size             = var.system_node_pool.vm_size
     os_disk_size_gb     = var.system_node_pool.os_disk_size_gb
     os_disk_type        = var.system_node_pool.os_disk_type # "Ephemeral" for best performance
+    os_sku              = var.system_node_pool.os_sku       # "Ubuntu", "AzureLinux", "Ubuntu2204", ...
     vnet_subnet_id      = module.spoke_vnet.subnets["aks_system_nodes"].resource_id
     max_pods            = var.system_node_pool.max_pods
     availability_zones  = var.availability_zones
@@ -147,6 +152,7 @@ module "aks" {
       vm_size             = var.user_node_pool.vm_size
       os_disk_size_gb     = var.user_node_pool.os_disk_size_gb
       os_disk_type        = var.user_node_pool.os_disk_type
+      os_sku              = var.user_node_pool.os_sku
       vnet_subnet_id      = module.spoke_vnet.subnets["aks_user_nodes"].resource_id
       max_pods            = var.user_node_pool.max_pods
       availability_zones  = var.availability_zones
@@ -217,6 +223,18 @@ module "aks" {
   addon_profile_azure_policy = {
     enabled = var.enable_azure_policy
   }
+
+  # --------------------------------------------------------------------------
+  # Application Gateway Ingress Controller (AGIC) add-on
+  # Wires the WAF_v2 Application Gateway as an in-cluster ingress backed by AKS.
+  # Enabled only when both the App Gateway and AGIC toggles are on.
+  # --------------------------------------------------------------------------
+  addon_profile_ingress_application_gateway = var.enable_app_gateway && var.enable_agic ? {
+    enabled = true
+    config = {
+      application_gateway_id = azurerm_application_gateway.main[0].id
+    }
+  } : null
 
   # --------------------------------------------------------------------------
   # Service Mesh (Istio)
@@ -297,3 +315,35 @@ module "aks" {
 # NOTE: Azure Backup for AKS (storage, vault, extension, Trusted Access, policy
 # and backup instance) is implemented as the complete managed solution in
 # backup.tf, opt-in via var.enable_backup.
+
+# -----------------------------------------------------------------------------
+# AGIC (Application Gateway Ingress Controller) identity role assignments
+# When the AGIC add-on is enabled, AKS provisions a managed identity that the
+# ingress controller uses to program the Application Gateway. That identity
+# needs Contributor on the Application Gateway and Reader on the resource group.
+# The identity is read back from the cluster once the add-on is enabled.
+# -----------------------------------------------------------------------------
+data "azurerm_kubernetes_cluster" "agic" {
+  count = var.enable_app_gateway && var.enable_agic ? 1 : 0
+
+  name                = module.aks.name
+  resource_group_name = azurerm_resource_group.main.name
+
+  depends_on = [module.aks]
+}
+
+resource "azurerm_role_assignment" "agic_appgw_contributor" {
+  count = var.enable_app_gateway && var.enable_agic ? 1 : 0
+
+  scope                = azurerm_application_gateway.main[0].id
+  role_definition_name = "Contributor"
+  principal_id         = data.azurerm_kubernetes_cluster.agic[0].ingress_application_gateway[0].ingress_application_gateway_identity[0].object_id
+}
+
+resource "azurerm_role_assignment" "agic_rg_reader" {
+  count = var.enable_app_gateway && var.enable_agic ? 1 : 0
+
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Reader"
+  principal_id         = data.azurerm_kubernetes_cluster.agic[0].ingress_application_gateway[0].ingress_application_gateway_identity[0].object_id
+}

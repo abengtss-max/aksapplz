@@ -188,6 +188,7 @@ variable "system_node_pool" {
     vm_size         = string
     os_disk_size_gb = number
     os_disk_type    = string
+    os_sku          = optional(string, "Ubuntu")
     max_pods        = number
     min_count       = number
     max_count       = number
@@ -201,6 +202,7 @@ variable "user_node_pool" {
     vm_size         = string
     os_disk_size_gb = number
     os_disk_type    = string
+    os_sku          = optional(string, "Ubuntu")
     max_pods        = number
     min_count       = number
     max_count       = number
@@ -238,6 +240,12 @@ variable "enable_app_gateway" {
 
 variable "enable_agc" {
   description = "Enable the Application Gateway for Containers (ALB) delegated subnet + NSG in this region. The in-cluster ALB Controller manages the trafficControllers resource; Terraform provisions infra only."
+  type        = bool
+  default     = false
+}
+
+variable "enable_agic" {
+  description = "Enable the Application Gateway Ingress Controller (AGIC) AKS add-on, wiring the WAF_v2 Application Gateway as an in-cluster ingress backed by AKS. Requires enable_app_gateway = true. Distinct from enable_agc (Application Gateway for Containers / ALB)."
   type        = bool
   default     = false
 }

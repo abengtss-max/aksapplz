@@ -255,6 +255,23 @@ resource "azurerm_role_assignment" "backup_cluster_snap_contributor" {
   principal_id         = azurerm_user_assigned_identity.aks.principal_id
 }
 
+# Data-plane RBAC (Storage Blob Data Contributor) is eventually consistent and
+# can take a few minutes to propagate to the storage account. Without this wait
+# the backup instance creation races ahead and fails with
+# UserErrorExtensionMSIMissingPermissionsOnBackupStorageLocation. Hold for a few
+# minutes after the storage-scoped role assignments before creating the instance.
+resource "time_sleep" "backup_rbac_propagation" {
+  count = var.enable_backup ? 1 : 0
+
+  create_duration = "180s"
+
+  depends_on = [
+    azurerm_role_assignment.backup_ext_storage_contributor,
+    azurerm_role_assignment.backup_ext_blob_contributor,
+    azurerm_role_assignment.backup_vault_blob_contributor,
+  ]
+}
+
 # --- Backup policy (daily, configurable retention) ----------------------------
 resource "azurerm_data_protection_backup_policy_kubernetes_cluster" "backup" {
   count = var.enable_backup ? 1 : 0
@@ -300,5 +317,6 @@ resource "azurerm_data_protection_backup_instance_kubernetes_cluster" "backup" {
     azurerm_role_assignment.backup_vault_disk_operator,
     azurerm_role_assignment.backup_vault_blob_contributor,
     azurerm_role_assignment.backup_cluster_snap_contributor,
+    time_sleep.backup_rbac_propagation,
   ]
 }
