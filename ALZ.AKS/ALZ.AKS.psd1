@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.7.0'
+    ModuleVersion     = '1.8.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.8.0
+- Feature: Private endpoints for Key Vault and ACR in standalone (no-hub) deployments via enable_private_endpoints (default false). When enabled the module creates the private-endpoints subnet, turns OFF public network access on Key Vault and ACR, and (when no external private DNS zone ids are supplied) creates and links privatelink.vaultcore.azure.net and privatelink.azurecr.io to the spoke VNet so the cluster resolves both to their private IPs. Corp/hub topology is unchanged (zones still come from the hub). NOTE: enabling this makes the ACR public endpoint unreachable - CI image builds/pushes must run on a runner with network line of sight to the registry (self-hosted runner in the VNet); GitHub-hosted runners can no longer push.
+
 ## 1.7.0
 - Feature: Node pool OS SKU is now configurable via system_node_pool.os_sku / user_node_pool.os_sku (default "Ubuntu" - no change to existing clusters). Supports AzureLinux and other AKS-supported SKUs.
 - Feature: Application Gateway Ingress Controller (enable_agic). When enable_app_gateway and enable_agic are both true, the WAF_v2 Application Gateway is wired to AKS as an in-cluster ingress (AGIC add-on) and the AGIC managed identity is granted Contributor on the gateway and Reader on the resource group. Previously the gateway was deployed but never connected to AKS (empty backend pool).

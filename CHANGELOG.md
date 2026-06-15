@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-15
+
+### Added
+- **Private endpoints for Key Vault and ACR in standalone deployments.** New
+  `enable_private_endpoints` toggle (default `false`). When enabled in a
+  standalone (no-hub) deployment, Terraform creates the private-endpoints
+  subnet, disables public network access on Key Vault and ACR, and — when no
+  external `*_private_dns_zone_ids` are supplied — creates and links the
+  `privatelink.vaultcore.azure.net` and `privatelink.azurecr.io` private DNS
+  zones to the spoke VNet so the cluster resolves both services to their private
+  IPs. Corp/hub topology is unchanged (private DNS zones continue to come from
+  the hub). Default `false` preserves the existing standalone behaviour (public
+  endpoints with deny-by-default ACLs and `AcrPull` RBAC).
+
+  > **Operational note:** enabling this makes the **ACR public endpoint
+  > unreachable**. CI jobs that build and push images must run on a runner with
+  > network line of sight to the registry (e.g. the self-hosted runner in the
+  > VNet); a GitHub-hosted runner can no longer push images. Key Vault and ACR
+  > control-plane (Terraform) operations are unaffected.
+
 ## [1.7.0] - 2026-06-16
 
 ### Added

@@ -29,8 +29,8 @@ output "vnet_name" {
 }
 
 output "private_endpoints_subnet_id" {
-  description = "The ID of the private endpoints subnet (null in standalone topology)."
-  value       = local.is_corp ? module.spoke_vnet.subnets["private_endpoints"].resource_id : null
+  description = "The ID of the private endpoints subnet (null when private endpoints are not used)."
+  value       = local.use_private_endpoints ? module.spoke_vnet.subnets["private_endpoints"].resource_id : null
 }
 
 # AKS

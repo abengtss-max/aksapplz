@@ -101,4 +101,13 @@ locals {
   # Topology is derived from inputs: when hub_vnet_resource_id is supplied,
   # this is a spoke landing zone (UDR + VNet peering). When empty, standalone.
   is_corp = var.hub_vnet_resource_id != ""
+
+  # Private endpoints are used in corp (hub) topology, or when explicitly
+  # enabled in standalone via enable_private_endpoints.
+  use_private_endpoints = local.is_corp || var.enable_private_endpoints
+
+  # Standalone self-managed private DNS: create + link the privatelink zones to
+  # the spoke VNet when private endpoints are enabled without a hub. In corp the
+  # zones are supplied from the hub via *_private_dns_zone_ids.
+  manage_private_dns = var.enable_private_endpoints && !local.is_corp
 }

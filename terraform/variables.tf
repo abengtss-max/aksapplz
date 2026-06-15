@@ -642,6 +642,27 @@ variable "keyvault_private_dns_zone_ids" {
   default     = []
 }
 
+variable "enable_private_endpoints" {
+  description = <<-EOT
+    Force private endpoints for Key Vault and ACR in a standalone (no-hub)
+    deployment. In corp/hub topology private endpoints are always used; this
+    toggle additionally enables them when there is no hub, creating the
+    private-endpoints subnet and (when no external *_private_dns_zone_ids are
+    supplied) the privatelink.vaultcore.azure.net and privatelink.azurecr.io
+    private DNS zones linked to the spoke VNet.
+
+    IMPORTANT: turning this on makes ACR's public endpoint UNREACHABLE. Any CI
+    job that builds and pushes images must run on a runner with network line of
+    sight to the registry (e.g. the self-hosted runner in the VNet); a
+    GitHub-hosted runner can no longer push to the registry. Key Vault and ACR
+    control-plane (Terraform) operations are unaffected. Default false preserves
+    the existing standalone behaviour (public endpoints with deny-by-default
+    ACLs and AcrPull RBAC).
+  EOT
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Monitoring
 # =============================================================================

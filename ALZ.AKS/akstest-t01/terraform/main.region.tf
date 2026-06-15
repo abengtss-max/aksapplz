@@ -95,6 +95,9 @@ module "region" {
   # Key Vault
   keyvault_private_dns_zone_ids = var.keyvault_private_dns_zone_ids
 
+  # Private endpoints (standalone hardening)
+  enable_private_endpoints = var.enable_private_endpoints
+
   # Monitoring
   log_retention_days            = var.log_retention_days
   grafana_sku                   = var.grafana_sku

@@ -67,11 +67,17 @@ locals {
   # A global resource group is required for Front Door / Traffic Manager / Fleet.
   need_global_rg = local.use_front_door || local.use_traffic_mgr || local.enable_fleet
 
-  # ACR uses a private endpoint whenever any region exposes a PE subnet (corp).
-  # In a fully-standalone deployment there is no PE subnet, so ACR stays public.
+  # ACR uses a private endpoint whenever any region exposes a PE subnet (corp,
+  # or standalone with enable_private_endpoints).
+  # In a fully-standalone deployment with private endpoints off there is no PE
+  # subnet, so ACR stays public.
   acr_has_private_endpoint = length([
     for k, r in module.region : k if r.private_endpoints_subnet_id != null
   ]) > 0
+
+  # Self-manage the ACR privatelink.azurecr.io zone when private endpoints are
+  # used but no external zone ids are supplied (standalone, no hub).
+  acr_self_managed_dns = local.acr_has_private_endpoint && length(var.acr_private_dns_zone_ids) == 0
 
   # ---------------------------------------------------------------------------
   # Per-region configuration map. The primary region is always present; the

@@ -399,6 +399,13 @@ variable "keyvault_private_dns_zone_ids" {
   default = []
 }
 
+# --- Private endpoints ---
+variable "enable_private_endpoints" {
+  description = "Force private endpoints for Key Vault and ACR in a standalone (no-hub) deployment. In corp/hub topology private endpoints are always used; this toggle additionally enables them when there is no hub. When on and no external private DNS zone ids are supplied, the module creates and links privatelink.vaultcore.azure.net (and the root creates privatelink.azurecr.io) to the spoke VNet. Default false preserves the existing standalone behaviour (public endpoints with deny-by-default ACLs)."
+  type        = bool
+  default     = false
+}
+
 # --- Monitoring ---
 variable "log_retention_days" {
   type    = number

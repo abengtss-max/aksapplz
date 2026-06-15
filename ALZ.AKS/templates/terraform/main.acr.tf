@@ -29,14 +29,19 @@ module "acr" {
   # Network rule set
   network_rule_bypass_option = "AzureServices"
 
-  # Private endpoint per region that has a private-endpoints subnet (corp).
+  # Private endpoint per region that has a private-endpoints subnet (corp, or
+  # standalone with enable_private_endpoints).
   # The "primary" key + name are preserved so existing deployments are stable.
+  # The private DNS zone is supplied from the hub (corp) or self-managed for
+  # standalone deployments (privatelink.azurecr.io created below).
   private_endpoints = {
     for k, r in module.region : k => {
-      name                          = k == "primary" ? "pe-${local.acr_name}" : "pe-${local.acr_name}-${k}"
-      subnet_resource_id            = r.private_endpoints_subnet_id
-      private_dns_zone_resource_ids = var.acr_private_dns_zone_ids
-      tags                          = local.default_tags
+      name               = k == "primary" ? "pe-${local.acr_name}" : "pe-${local.acr_name}-${k}"
+      subnet_resource_id = r.private_endpoints_subnet_id
+      private_dns_zone_resource_ids = local.acr_self_managed_dns ? (
+        [azurerm_private_dns_zone.acr[0].id]
+      ) : var.acr_private_dns_zone_ids
+      tags = local.default_tags
     } if r.private_endpoints_subnet_id != null
   }
 
@@ -66,4 +71,31 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   scope                = module.acr.resource_id
   role_definition_name = "AcrPull"
   principal_id         = each.value.aks_kubelet_identity.objectId
+}
+
+# -----------------------------------------------------------------------------
+# Self-managed ACR private DNS (standalone + enable_private_endpoints).
+# ACR is global, so the privatelink.azurecr.io zone is created once (in the
+# primary region's resource group) and linked to every region's spoke VNet so
+# each cluster resolves the registry (and its regional data endpoints) to the
+# private endpoint. In corp topology the zone lives in the hub and is supplied
+# via var.acr_private_dns_zone_ids instead.
+# -----------------------------------------------------------------------------
+resource "azurerm_private_dns_zone" "acr" {
+  count = local.acr_self_managed_dns ? 1 : 0
+
+  name                = "privatelink.azurecr.io"
+  resource_group_name = module.region["primary"].resource_group_name
+  tags                = local.default_tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "acr" {
+  for_each = local.acr_self_managed_dns ? module.region : {}
+
+  name                  = "pdnslink-acr-${each.key}"
+  resource_group_name   = module.region["primary"].resource_group_name
+  private_dns_zone_name = azurerm_private_dns_zone.acr[0].name
+  virtual_network_id    = each.value.vnet_id
+  registration_enabled  = false
+  tags                  = local.default_tags
 }

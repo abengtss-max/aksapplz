@@ -112,9 +112,9 @@ resource "azurerm_network_security_group" "app_gateway" {
   }
 }
 
-# NSG - Private Endpoints Subnet (Corp only — Online uses public endpoints)
+# NSG - Private Endpoints Subnet (Corp, or standalone with private endpoints)
 resource "azurerm_network_security_group" "private_endpoints" {
-  count = local.is_corp ? 1 : 0
+  count = local.use_private_endpoints ? 1 : 0
 
   name                = local.nsg_pe_name
   location            = azurerm_resource_group.main.location
@@ -246,8 +246,8 @@ module "spoke_vnet" {
         }]
       }
     } : {},
-    # Private endpoints subnet — Corp only
-    local.is_corp ? {
+    # Private endpoints subnet — Corp, or standalone with private endpoints
+    local.use_private_endpoints ? {
       private_endpoints = {
         name             = local.subnets.private_endpoints.name
         address_prefixes = local.subnets.private_endpoints.address_prefixes
