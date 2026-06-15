@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-06-15
+
+### Fixed
+- **AKS backup storage account failed to create** with
+  `403 Key based authentication is not permitted on this storage account`
+  (`KeyBasedAuthenticationNotPermitted`). The backup storage account is AAD-only
+  (`shared_access_key_enabled = false`), but the `azurerm` provider defaulted to
+  key-based authentication when polling the blob service data plane. Set
+  `storage_use_azuread = true` on the provider so all storage data-plane
+  operations use Azure AD, and added a deployer `Storage Blob Data Contributor`
+  role assignment that the backup container now depends on so it can be created
+  over the AAD data plane.
+
 ## [1.6.2] - 2026-06-14
 
 ### Fixed

@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.6.2'
+    ModuleVersion     = '1.6.3'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.6.3
+- Fix: AKS backup storage account creation failed with "Key based authentication is not permitted on this storage account" (403). The storage account is AAD-only (shared_access_key_enabled = false), so the azurerm provider now uses Azure AD for storage data-plane operations (storage_use_azuread = true) and the backup container waits on a deployer Storage Blob Data Contributor role assignment.
+
 ## 1.6.2
 - Fix: AKS backup storage account failed with SubnetsHaveNoServiceEndpointsConfigured. The AVM subnet object uses service_endpoints_with_location (not service_endpoints); the node-subnet Microsoft.Storage endpoint is now applied correctly and the storage account waits for the subnet update via depends_on.
 

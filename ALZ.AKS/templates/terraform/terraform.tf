@@ -26,6 +26,7 @@ terraform {
 provider "azurerm" {
   resource_provider_registrations = "core"
   subscription_id                 = var.subscription_id
+  storage_use_azuread             = true
 
   features {
     resource_group {
@@ -47,6 +48,7 @@ provider "azurerm" {
   alias                           = "connectivity"
   subscription_id                 = var.connectivity_subscription_id != "" ? var.connectivity_subscription_id : var.subscription_id
   resource_provider_registrations = "core"
+  storage_use_azuread             = true
   features {}
 }
 

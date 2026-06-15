@@ -92,12 +92,26 @@ resource "azurerm_storage_account" "backup" {
   depends_on = [module.spoke_vnet]
 }
 
+# The deploying identity creates the container over the AAD data plane (shared
+# keys are disabled), so it needs a blob data role on the account first.
+resource "azurerm_role_assignment" "backup_deployer_blob_contributor" {
+  count = var.enable_backup ? 1 : 0
+
+  scope                = azurerm_storage_account.backup[0].id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
 resource "azurerm_storage_container" "backup" {
   count = var.enable_backup ? 1 : 0
 
   name                  = "aks-cluster-backup"
   storage_account_id    = azurerm_storage_account.backup[0].id
   container_access_type = "private"
+
+  # Wait for the deployer's blob data role + the network ACL to settle; data
+  # plane auth is AAD-only and RBAC propagation must precede container create.
+  depends_on = [azurerm_role_assignment.backup_deployer_blob_contributor]
 }
 
 # Blob service diagnostic logging (read/write/delete) to Log Analytics.
