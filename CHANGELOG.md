@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-07-11
+
+### Fixed
+- **Key Vault name no longer blocks destroy-then-redeploy under MCAPS.** The
+  3-character KV suffix was previously a deterministic
+  `md5(subscription_id + name_prefix)` hash. In MCAPS-governed subscriptions
+  the `keyvault purge` operation is denied by policy, so a soft-deleted vault
+  would collide with a fresh apply for up to 90 days (until the scheduled
+  purge date), producing `VaultAlreadyExists`. The suffix is now a
+  `random_string` (length 3, lowercase alphanumeric) keyed on the region
+  `name_prefix`: it is generated once on first apply, preserved in Terraform
+  state across re-plans, and regenerates on a fresh apply after
+  `terraform destroy` — sidestepping the soft-delete window entirely.
+  Cross-tenant and cross-subscription uniqueness is preserved (each fresh
+  deployment gets an independent random). Adds `hashicorp/random ~> 3.6` to
+  the region module's required providers.
+
 ## [1.9.0] - 2026-07-11
 
 ### Changed

@@ -22,12 +22,16 @@ locals {
   resource_group_name = "rg-${local.name_prefix}"
   vnet_name           = "vnet-${local.name_prefix}"
   aks_name            = "aks-${local.name_prefix}"
-  # Key Vault names are globally unique across Azure. Always append a 3-char
-  # subscription-scoped hash so that redeploys / other tenants cannot collide
-  # (and so soft-deleted vaults elsewhere don't block name reuse). Max length = 24.
-  _kv_suffix             = substr(md5("${data.azurerm_client_config.current.subscription_id}-${local.name_prefix}"), 0, 3)
-  _kv_full               = "kv-${local.name_prefix}-${local._kv_suffix}"
-  key_vault_name         = length(local._kv_full) <= 24 ? local._kv_full : "kv-${substr(local.name_prefix, 0, 17)}-${local._kv_suffix}"
+  # Key Vault names are globally unique across Azure. A 3-char random suffix
+  # (see random_string.kv_suffix below) is generated on the first apply and
+  # preserved in state, so re-plans yield the same name. On a fresh apply
+  # after `terraform destroy` (or state loss) a NEW suffix is generated,
+  # which is required in MCAPS-governed subscriptions where soft-deleted
+  # vaults cannot be purged manually and would otherwise block reuse of a
+  # deterministic name for up to 90 days. Cap prefix at 17 chars so
+  # `kv-{<=17}-{3}` always fits the 24-char KV name limit.
+  _kv_prefix             = length(local.name_prefix) <= 17 ? local.name_prefix : substr(local.name_prefix, 0, 17)
+  key_vault_name         = "kv-${local._kv_prefix}-${random_string.kv_suffix.result}"
   app_gateway_name       = "agw-${local.name_prefix}"
   waf_policy_name        = "waf-${local.name_prefix}"
   log_analytics_name     = "log-${local.name_prefix}"
