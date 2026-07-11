@@ -2340,13 +2340,35 @@ function New-SelfHostedRunner {
     # Environment variables (match ALZ runner image: Azure/avm-container-images-cicd-agents-and-runners)
     $aciArgs += @(
         "--environment-variables",
-        "GH_RUNNER_URL=https://github.com/$org/$($Names.RepoName)",
+        "GH_RUNNER_URL=https://github.com/$org",
         "GH_RUNNER_NAME=$aciName",
         "GH_RUNNER_MODE=persistent"
     )
 
-    # Secure environment variables (PAT)
-    $aciArgs += @("--secure-environment-variables", "GH_RUNNER_TOKEN=$runnerPat")
+    # BUGFIX v1.8.1: The ALZ ACI runner image expects a short-lived REGISTRATION
+    # TOKEN (from POST /orgs/{org}/actions/runners/registration-token), NOT a PAT.
+    # Passing a PAT causes the runner to fail with HTTP 404 during registration.
+    Write-Log "Requesting GitHub runner registration token for org '$org'..." -Severity "INFO"
+    $regTokenJson = gh api -X POST "/orgs/$org/actions/runners/registration-token" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "Failed to obtain runner registration token. Ensure the GitHub PAT has 'admin:org' scope. Output:" -Severity "ERROR"
+        Write-Log "  $regTokenJson" -Severity "ERROR"
+        return
+    }
+    try {
+        $regToken = ($regTokenJson | ConvertFrom-Json).token
+    } catch {
+        Write-Log "Failed to parse runner registration token response: $_" -Severity "ERROR"
+        return
+    }
+    if (-not $regToken) {
+        Write-Log "Runner registration token was empty. Response: $regTokenJson" -Severity "ERROR"
+        return
+    }
+    Write-Log "Runner registration token obtained (expires in ~1 hour)." -Severity "SUCCESS"
+
+    # Secure environment variables (registration token — short-lived)
+    $aciArgs += @("--secure-environment-variables", "GH_RUNNER_TOKEN=$regToken")
 
     # Execute (capture stderr so failures aren't silent)
     $aciOutput = az @aciArgs 2>&1
@@ -2651,10 +2673,82 @@ function New-TerraformTfvarsJson {
     }
 
     $outPath = Join-Path $BootstrapRoot "terraform.tfvars.json"
-    $json    = $tfvars | ConvertTo-Json -Depth 12
+    # ConvertTo-Json overflows on very large hashtables (e.g. repository_files
+    # with hundreds of template file bodies). Use System.Text.Json instead which
+    # handles large object graphs cleanly.
+    $json    = ConvertTo-SafeJson -InputObject $tfvars
     Set-Content -Path $outPath -Value $json -Encoding UTF8
     Write-Log "Wrote $outPath" -Severity "SUCCESS"
     return $outPath
+}
+
+function ConvertTo-SafeJson {
+    <#
+    .SYNOPSIS
+        Serialize a large/deep PowerShell object graph to JSON without
+        triggering the OverflowException that PowerShell's built-in
+        ConvertTo-Json throws on very large hashtables. Uses Utf8JsonWriter
+        directly (side-effect writes only), which avoids PowerShell's
+        pipeline auto-unrolling of IEnumerable return values.
+    #>
+    param([Parameter(Mandatory)]$InputObject)
+
+    $ms = [System.IO.MemoryStream]::new()
+    $wopts = [System.Text.Json.JsonWriterOptions]::new()
+    $wopts.Indented = $true
+    $wopts.Encoder = [System.Text.Encodings.Web.JavaScriptEncoder]::UnsafeRelaxedJsonEscaping
+    $writer = [System.Text.Json.Utf8JsonWriter]::new($ms, $wopts)
+
+    # Iterative writer using a work-stack — no recursion means no chance
+    # of PowerShell unrolling function output on IEnumerable returns.
+    $stack = [System.Collections.Generic.Stack[object]]::new()
+    $stack.Push(@{ kind = 'value'; value = $InputObject })
+
+    while ($stack.Count -gt 0) {
+        $frame = $stack.Pop()
+        switch ($frame.kind) {
+            'value' {
+                $v = $frame.value
+                if ($null -eq $v) { $writer.WriteNullValue(); break }
+                if ($v -is [string]) { $writer.WriteStringValue($v); break }
+                if ($v -is [bool])   { $writer.WriteBooleanValue($v); break }
+                if ($v -is [int] -or $v -is [long] -or $v -is [byte] -or $v -is [short]) { $writer.WriteNumberValue([long]$v); break }
+                if ($v -is [double] -or $v -is [float] -or $v -is [decimal]) { $writer.WriteNumberValue([double]$v); break }
+                if ($v -is [System.Collections.IDictionary]) {
+                    $writer.WriteStartObject()
+                    # Push end-object marker first (LIFO), then all key/value pairs in reverse.
+                    $stack.Push(@{ kind = 'endobj' })
+                    $keys = @($v.Keys)
+                    for ($i = $keys.Count - 1; $i -ge 0; $i--) {
+                        $k = $keys[$i]
+                        $stack.Push(@{ kind = 'value'; value = $v[$k] })
+                        $stack.Push(@{ kind = 'propname'; name = [string]$k })
+                    }
+                    break
+                }
+                if ($v -is [System.Collections.IList]) {
+                    $writer.WriteStartArray()
+                    $stack.Push(@{ kind = 'endarr' })
+                    for ($i = $v.Count - 1; $i -ge 0; $i--) {
+                        $stack.Push(@{ kind = 'value'; value = $v[$i] })
+                    }
+                    break
+                }
+                # Fallback: stringify anything else defensively.
+                $writer.WriteStringValue([string]$v)
+            }
+            'propname' { $writer.WritePropertyName($frame.name) }
+            'endobj'   { $writer.WriteEndObject() }
+            'endarr'   { $writer.WriteEndArray() }
+        }
+    }
+
+    $writer.Flush()
+    $ms.Position = 0
+    $reader = [System.IO.StreamReader]::new($ms, [System.Text.Encoding]::UTF8)
+    $result = $reader.ReadToEnd()
+    $reader.Dispose(); $writer.Dispose(); $ms.Dispose()
+    return $result
 }
 
 function Get-RepositoryFilesMap {
@@ -2677,6 +2771,12 @@ function Get-RepositoryFilesMap {
         foreach ($f in Get-ChildItem -Path $tfSrc -Recurse -File) {
             $relPath = $f.FullName.Substring($tfSrcFull.Length).TrimStart('\', '/')
             $relPath = $relPath -replace '\\', '/'
+            # Skip local Terraform artefacts and other non-source noise that
+            # can bloat the repository_files map to hundreds of MB.
+            if ($relPath -match '(^|/)\.terraform(/|$)') { continue }
+            if ($relPath -match '(^|/)\.terraform\.lock\.hcl$') { continue }
+            if ($relPath -match '(^|/)terraform\.tfstate(\.backup)?$') { continue }
+            if ($relPath -match '(^|/)\.git(/|$)') { continue }
             $rel = "terraform/$relPath"
             $files[$rel] = (Get-Content $f.FullName -Raw)
         }
@@ -4587,7 +4687,17 @@ terraform {
         try {
             $saOrigPublic  = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query publicNetworkAccess -o tsv 2>$null)
             $saOrigDefault = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query networkRuleSet.defaultAction -o tsv 2>$null)
-            $isRegulatedSa = ($saOrigPublic -and $saOrigPublic -ieq 'Disabled') -or ($saOrigDefault -and $saOrigDefault -ieq 'Deny')
+            # BUGFIX v1.8.1: Base "regulated" detection on the CONFIG, not the current SA state.
+            # Defender for Storage / policy remediation can transiently flip publicNetworkAccess
+            # between apply and this query, causing standalone deployments to be
+            # mis-detected as "regulated" and mistakenly re-locked at the end of bootstrap,
+            # which then breaks GitHub-hosted CI/CD runners with 403 AuthorizationFailure.
+            $configWantsPrivate = ($config.use_private_networking -eq $true) -or `
+                                  ($config.topology -and $config.topology -notmatch '^(standalone|)$')
+            $isRegulatedSa = $configWantsPrivate -and (
+                ($saOrigPublic -and $saOrigPublic -ieq 'Disabled') -or
+                ($saOrigDefault -and $saOrigDefault -ieq 'Deny')
+            )
             if ($isRegulatedSa) {
                 Write-Log "State SA '$sa' is locked down (publicNetworkAccess=$saOrigPublic, defaultAction=$saOrigDefault). Opening a temporary firewall window for state migration; original posture will be restored." -Severity "WARNING"
                 az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
@@ -4632,6 +4742,25 @@ terraform {
                     Write-Log "Restored $sa firewall (publicNetworkAccess=$restorePublic, defaultAction=$restoreDefault)." -Severity "SUCCESS"
                 } else {
                     Write-Log "FAILED to restore $sa firewall to its locked-down posture — restore it manually: az storage account update -n $sa -g $rg --public-network-access $restorePublic --default-action $restoreDefault" -Severity "ERROR"
+                }
+            }
+        }
+
+        # BUGFIX v1.8.1: For standalone deployments (GitHub-hosted runners), force
+        # publicNetworkAccess=Enabled at end-of-bootstrap. Defender for Storage can
+        # transiently flip this to Disabled during the bootstrap window; without this
+        # defensive step, GitHub-hosted CI/CD runners fail with 403 AuthorizationFailure
+        # when trying to list tfstate blobs (data plane requires public access + AAD auth).
+        if (-not $configWantsPrivate) {
+            $currentPublic = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query publicNetworkAccess -o tsv 2>$null)
+            if ($currentPublic -and $currentPublic -ine 'Enabled') {
+                Write-Log "State SA '$sa' has publicNetworkAccess=$currentPublic but this is a standalone deployment. Forcing publicNetworkAccess=Enabled so GitHub-hosted CI/CD runners can reach the state backend (data plane still requires AAD auth; shared keys remain disabled)." -Severity "WARNING"
+                az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
+                    --public-network-access Enabled --default-action Allow -o none 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "State SA '$sa' publicNetworkAccess forced to Enabled." -Severity "SUCCESS"
+                } else {
+                    Write-Log "FAILED to force publicNetworkAccess=Enabled on '$sa'. CI/CD runs may fail with 403." -Severity "ERROR"
                 }
             }
         }

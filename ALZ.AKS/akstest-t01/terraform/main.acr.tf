@@ -29,20 +29,20 @@ module "acr" {
   # Network rule set
   network_rule_bypass_option = "AzureServices"
 
-  # Private endpoint per region that has a private-endpoints subnet (corp, or
-  # standalone with enable_private_endpoints).
-  # The "primary" key + name are preserved so existing deployments are stable.
-  # The private DNS zone is supplied from the hub (corp) or self-managed for
-  # standalone deployments (privatelink.azurecr.io created below).
+  # Private endpoint per region that has private endpoints enabled (corp, or
+  # standalone with enable_private_endpoints). Keys and the filter are derived
+  # from CONFIG (local.regions) so the private_endpoints map is fully known at
+  # plan time — the AVM `private_endpoints` for_each requires this. The per-
+  # region subnet_resource_id may itself be unknown-until-apply, which is fine.
   private_endpoints = {
-    for k, r in module.region : k => {
+    for k, r in local.regions : k => {
       name               = k == "primary" ? "pe-${local.acr_name}" : "pe-${local.acr_name}-${k}"
-      subnet_resource_id = r.private_endpoints_subnet_id
+      subnet_resource_id = module.region[k].private_endpoints_subnet_id
       private_dns_zone_resource_ids = local.acr_self_managed_dns ? (
         [azurerm_private_dns_zone.acr[0].id]
       ) : var.acr_private_dns_zone_ids
       tags = local.default_tags
-    } if r.private_endpoints_subnet_id != null
+    } if var.enable_private_endpoints || r.hub_vnet_resource_id != ""
   }
 
   # Content trust (image signing)
@@ -90,12 +90,12 @@ resource "azurerm_private_dns_zone" "acr" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "acr" {
-  for_each = local.acr_self_managed_dns ? module.region : {}
+  for_each = local.acr_self_managed_dns ? local.regions : {}
 
   name                  = "pdnslink-acr-${each.key}"
   resource_group_name   = module.region["primary"].resource_group_name
   private_dns_zone_name = azurerm_private_dns_zone.acr[0].name
-  virtual_network_id    = each.value.vnet_id
+  virtual_network_id    = module.region[each.key].vnet_id
   registration_enabled  = false
   tags                  = local.default_tags
 }

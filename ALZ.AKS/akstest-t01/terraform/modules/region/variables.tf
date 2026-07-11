@@ -401,9 +401,9 @@ variable "keyvault_private_dns_zone_ids" {
 
 # --- Private endpoints ---
 variable "enable_private_endpoints" {
-  description = "Force private endpoints for Key Vault and ACR in a standalone (no-hub) deployment. In corp/hub topology private endpoints are always used; this toggle additionally enables them when there is no hub. When on and no external private DNS zone ids are supplied, the module creates and links privatelink.vaultcore.azure.net (and the root creates privatelink.azurecr.io) to the spoke VNet. Default false preserves the existing standalone behaviour (public endpoints with deny-by-default ACLs)."
+  description = "Provision private endpoints for Key Vault and ACR. Default `true` — aligned with WAF/CAF guidance for AKS landing zones. In corp/hub topology private endpoints are always used and DNS zones come from the hub. In standalone (no-hub) topology this creates the private-endpoints subnet, disables public network access, and (when no external private DNS zone ids are supplied) creates + links `privatelink.vaultcore.azure.net` and `privatelink.azurecr.io` to the spoke VNet. Note: makes ACR public endpoint unreachable — image build/push must run on an in-VNet self-hosted runner. Set to `false` only if you must keep public endpoints (with deny-by-default ACLs) for GitHub-hosted runner image pushes."
   type        = bool
-  default     = false
+  default     = true
 }
 
 # --- Monitoring ---

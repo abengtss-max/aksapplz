@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-07-11
+
+### Changed
+- **Private endpoints for Key Vault and ACR are now ON by default** in
+  standalone deployments. `enable_private_endpoints` default flipped
+  `false` → `true` to align with Microsoft Well-Architected Framework and
+  Cloud Adoption Framework guidance for AKS landing zones. Fresh standalone
+  deployments now automatically provision the private-endpoints subnet,
+  create AVM-managed private endpoints on Key Vault
+  (`Azure/avm-res-keyvault-vault/azurerm`) and ACR
+  (`Azure/avm-res-containerregistry-registry/azurerm`), disable both public
+  endpoints, and create + link the `privatelink.vaultcore.azure.net` and
+  `privatelink.azurecr.io` private DNS zones to the spoke VNet. Corp/hub
+  topology behaviour is unchanged (private DNS zones continue to come from
+  the hub).
+
+  > **Operational note:** with the new default, the ACR public endpoint is
+  > unreachable. Image builds and pushes must run on a runner with network
+  > line of sight to the registry (the built-in self-hosted ACI runner in
+  > the VNet is the intended path). Set `enable_private_endpoints = false`
+  > in your tfvars if you must keep public endpoints so a GitHub-hosted
+  > runner can push images.
+
+  > **Upgrade note:** existing standalone deployments that upgrade will see
+  > Terraform plan the creation of the PE subnet, both private endpoints,
+  > both private DNS zones + VNet links, and an in-place update to disable
+  > the public endpoints. Apply on your in-VNet self-hosted runner.
+
+### Fixed
+- **Globally-unique Key Vault name.** `key_vault_name` now always appends a
+  3-character subscription-scoped MD5 hash
+  (`kv-<name_prefix>-<hash>`, 24-char max), so redeploys and other tenants
+  cannot collide with a previously-taken name (soft-deleted Key Vaults in
+  other subscriptions/tenants are invisible but still block the name
+  globally).
+- **`New-BackendMigration` no longer re-locks the tfstate storage account.**
+  When MCAPS-style governance policies auto-flip a storage account's
+  `publicNetworkAccess` to `Disabled`, the bootstrap composition previously
+  captured that flipped state as the "original" and re-applied it after
+  migration. The captured-state check is now driven by config
+  (`use_private_networking` / `topology`) rather than the current firewall
+  state, and a defensive post-migration restore explicitly re-enables public
+  access when the config says the state SA should be reachable.
+- **ACI self-hosted runner registers reliably.** The runner container now
+  receives a short-lived registration token from
+  `POST /orgs/{org}/actions/runners/registration-token` instead of a raw
+  PAT, and `GH_RUNNER_URL` points at the org (`https://github.com/{org}`)
+  rather than a specific repo. Fixes the runner-registration 404 loop.
+
 ## [1.8.0] - 2026-06-15
 
 ### Added
