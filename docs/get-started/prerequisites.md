@@ -2,6 +2,10 @@
 
 One-time setup, about 15 minutes. Do this once per workstation.
 
+!!! tip "Unfamiliar terms ahead?"
+    Words like **PAT**, **OIDC**, **Owner**, and **organization** are all defined in
+    **[How it works & glossary](../concepts/glossary.md)** if you'd like a refresher.
+
 ## 1. Install the tools
 
 | Tool | Minimum version | Notes |
@@ -90,7 +94,8 @@ org [here](https://github.com/organizations/plan) if you don't have one.
 
 ## 4. Create a fine-grained GitHub PAT
 
-Create the token at
+A [**PAT** (Personal Access Token)](../concepts/glossary.md) is the GitHub credential the
+accelerator uses to create your workload repository. Create the token at
 [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
 (**not** the classic tokens page).
 

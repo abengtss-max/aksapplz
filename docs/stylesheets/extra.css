@@ -1,0 +1,38 @@
+/* Hero call-to-action row on the home page */
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.hero-cta .md-button {
+  margin: 0;
+}
+
+/* Center the tagline blockquote under the title */
+.md-typeset .hero-tagline {
+  text-align: center;
+  font-size: 1.15rem;
+  border: none;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Badge row */
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.badge-row img {
+  height: 1.35rem;
+}
+
+/* Slightly tighten the feature grid cards */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.6rem;
+}

@@ -3,6 +3,10 @@
 > Deploy an AKS landing zone in under an hour, using one command. Make sure you've finished the
 > **[Prerequisites](prerequisites.md)** first.
 
+!!! tip "Not sure what a term means?"
+    See **[How it works & glossary](../concepts/glossary.md)** for plain-language definitions
+    of every term used below (topology, bootstrap, OIDC, and more).
+
 ## 1. Install & run the latest release
 
 ```powershell

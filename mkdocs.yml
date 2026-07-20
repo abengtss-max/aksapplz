@@ -17,6 +17,7 @@ theme:
     - navigation.instant
     - navigation.tracking
     - navigation.sections
+    - navigation.indexes
     - navigation.top
     - navigation.footer
     - content.code.copy
@@ -48,12 +49,15 @@ theme:
 
 nav:
   - Home: index.md
+  - How it works & glossary: concepts/glossary.md
   - Get started:
-      - Prerequisites: get-started/prerequisites.md
+      - get-started/index.md
       - Planning checklist: get-started/planning-checklist.md
-      - Quickstart: get-started/quickstart.md
       - Choose a scenario: get-started/scenarios.md
+      - Prerequisites: get-started/prerequisites.md
+      - Quickstart: get-started/quickstart.md
   - Concepts:
+      - concepts/index.md
       - Topologies: concepts/topologies.md
       - Multi-region: concepts/multi-region.md
   - Configuration reference: reference/configuration.md
@@ -88,6 +92,9 @@ markdown_extensions:
 
 plugins:
   - search
+
+extra_css:
+  - stylesheets/extra.css
 
 extra:
   social:
