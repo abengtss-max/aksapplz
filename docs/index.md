@@ -181,7 +181,7 @@ The deploy command is an **interactive wizard** — it asks a short series of qu
 you the config it will use, and only builds anything after you confirm.
 
 <p align="center">
-  <img src="assets/wizard-screenshot.png" alt="The Deploy-AKSLandingZone interactive wizard running in a PowerShell terminal. A banner reads 'AKS Landing Zone Accelerator'. Beneath it a numbered summary lists the chosen answers: 1) Scenario single_region_baseline, 2) Bootstrap region swedencentral, 3) Bootstrap subscription Contoso-Dev, 4) Topology standalone, 6) AKS subscription Contoso-Dev, 7) service_name aksapplz, 8) environment_name dev01, 9) GitHub org my-org. Two confirmation prompts follow: 'Review config/inputs.dev01.yaml? [Y/n]' and 'Proceed with deployment? [y/N]'." width="820" style="border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18)">
+  <img src="assets/wizard-screenshot.png" alt="The Deploy-AKSLandingZone interactive wizard running in a PowerShell terminal. A banner reads 'AKS Landing Zone Accelerator'. Beneath it a numbered summary lists the chosen answers: 1) Scenario single_region_baseline, 2) Bootstrap region swedencentral, 3) Bootstrap subscription Contoso-Dev, 4) Topology standalone, 5) AKS subscription Contoso-Dev, 6) service_name aksapplz, 7) environment_name dev01, 8) GitHub org my-org. Two confirmation prompts follow: 'Review config/inputs.dev01.yaml? [Y/n]' and 'Proceed with deployment? [y/N]'." width="820" style="border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18)">
 </p>
 
 ??? example "Prefer text? Here's the same flow"
@@ -192,10 +192,10 @@ you the config it will use, and only builds anything after you confirm.
       2) Bootstrap region ................. swedencentral
       3) Bootstrap subscription ........... [1] Contoso-Dev  (a1b2...)
       4) Topology ......................... standalone
-      6) AKS subscription ................. [1] Contoso-Dev  (a1b2...)
-      7) service_name ..................... aksapplz
-      8) environment_name ................. dev01
-      9) GitHub org ....................... my-org
+      5) AKS subscription ................. [1] Contoso-Dev  (a1b2...)
+      6) service_name ..................... aksapplz
+      7) environment_name ................. dev01
+      8) GitHub org ....................... my-org
 
       Review config/inputs.dev01.yaml? [Y/n]
       Proceed with deployment? [y/N]
@@ -206,12 +206,8 @@ non-interactive. See the **[Quickstart](get-started/quickstart.md)** for the ful
 
 ---
 
-## New here?
+## Ready to start?
 
-Never seen this before? Read **[How it works & glossary](concepts/glossary.md)** first — it
-explains the big picture and every term in plain language.
+[:material-rocket-launch: Plan your decisions](get-started/planning-checklist.md){ .md-button .md-button--primary }
 
-Ready to go? Start by **[planning your decisions](get-started/planning-checklist.md)**,
-**[choose a scenario](get-started/scenarios.md)**, then run the
-**[Prerequisites](get-started/prerequisites.md)** and the **[Quickstart](get-started/quickstart.md)**.
-Want the architecture first? Read **[Topologies](concepts/topologies.md)**.
+New to the terms? Read **[How it works & glossary](concepts/glossary.md)** first.

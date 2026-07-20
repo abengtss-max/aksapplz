@@ -36,12 +36,15 @@ That's it. The wizard walks you through everything and asks, in order:
 | 2 | Bootstrap region | `swedencentral` |
 | 3 | Bootstrap subscription | *(numbered list of your subs)* |
 | 4 | **Topology** | `standalone` / `hub_and_spoke` / `spoke` |
-| 5 | *(hub_and_spoke)* Hub address space, firewall SKU | `10.0.0.0/16`, `Standard` |
-| 5 | *(spoke)* Existing hub VNet resource ID | *(numbered list)* |
-| 6 | AKS landing-zone subscription | *(numbered list)* |
-| 7 | `service_name` | `aksapplz` (3–10 lowercase chars) |
-| 8 | `environment_name` | `dev01` (≤8 lowercase alphanumeric) |
-| 9 | GitHub org, approvers, AKS admin Entra group | `my-org`, `[me]`, `<group-objectid>` |
+| 5 | AKS landing-zone subscription | *(numbered list)* |
+| 6 | `service_name` | `aksapplz` (3–10 lowercase chars) |
+| 7 | `environment_name` | `dev01` (≤8 lowercase alphanumeric) |
+| 8 | GitHub org, approvers, AKS admin Entra group | `my-org`, `[me]`, `<group-objectid>` |
+
+!!! note "Using a hub?"
+    The table above shows the **`standalone`** path. If you pick `hub_and_spoke`, the wizard
+    also asks for the **hub address space** and **firewall SKU** right after topology. If you
+    pick `spoke`, it asks for your **existing hub VNet resource ID**.
 
 !!! tip "Not sure which topology?"
     Pick **`standalone`** for your first run — no hub, NAT gateway egress, fastest path.
