@@ -35,7 +35,7 @@ pattern as the [Azure Landing Zone Accelerator](https://azure.github.io/Azure-La
     Start with **[How it works & glossary](concepts/glossary.md)**.
 
 <p align="center">
-  <img src="assets/flow.png" alt="You run Deploy-AKSLandingZone, which provisions the Azure bootstrap (identities + Terraform state), a GitHub workload platform (Terraform + GitHub Actions via OIDC), and finally a hardened AKS platform (private cluster, Workload Identity, Defender)." width="900">
+  <img src="assets/platform-journey.png" alt="End-to-end platform journey in four stages. Stage 1, You: run Deploy-AKSLandingZone to deploy the landing zone — outcome, a standardized foundation deployed. Stage 2, Azure bootstrap: a secure foundation of managed identities and Terraform state in Azure Storage — outcome, identity and state foundation ready. Stage 3, GitHub workload platform: CI/CD automation with GitHub Actions and OIDC federation — outcome, an automated, secure delivery pipeline. Stage 4, AKS platform: a production platform with a private AKS cluster, Workload Identity, and Microsoft Defender for Cloud — outcome, a secure, compliant runtime platform. Themes across every stage: Security, Automation, Governance, and Operations — built on best practices, secure by design, and scalable for growth." width="960" style="border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18)">
 </p>
 
 <div class="hero-cta" markdown>
@@ -46,9 +46,9 @@ pattern as the [Azure Landing Zone Accelerator](https://azure.github.io/Azure-La
 
 ---
 
-## The journey — four steps
+## Your path — four steps
 
-Decisions first, then setup, then deploy.
+The diagram above shows what gets *built*; here's what *you* do. Decisions first, then setup, then deploy.
 
 <div class="grid cards" markdown>
 
