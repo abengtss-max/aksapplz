@@ -13,7 +13,7 @@ secondary_location: ""
 ## Topology: standalone | spoke
 # - standalone : no hub, no VNet peering, NAT gateway egress only (Decisions 3 & 4 are ignored)
 # - spoke      : peer to an existing ALZ hub VNet, UDR egress via hub firewall (Decisions 3 & 4 required)
-topology: "spoke"
+topology: "standalone"
 
 ## Decision 1: Bootstrap Resource Azure Region
 bootstrap_location: "swedencentral"
@@ -24,14 +24,14 @@ aks_landing_zone_subscription_id: "00000000-0000-0000-0000-000000000000"
 
 ## Decision 3: Connectivity Subscription (only used when topology = spoke)
 # The subscription containing the hub VNet and firewall (deployed by ALZ)
-connectivity_subscription_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+connectivity_subscription_id: ""
 
 ## Decision 4: Hub Networking (only used when topology = spoke)
 # Required for VNet peering and UDR to route egress through the hub firewall
-hub_vnet_resource_id: "/subscriptions/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/resourceGroups/rg-hub-swedencentral/providers/Microsoft.Network/virtualNetworks/vnet-hub-swedencentral"
-hub_vnet_name: "vnet-hub-swedencentral"
-hub_vnet_resource_group_name: "rg-hub-swedencentral"
-hub_firewall_private_ip: "10.0.0.4"
+hub_vnet_resource_id: ""
+hub_vnet_name: ""
+hub_vnet_resource_group_name: ""
+hub_firewall_private_ip: ""
 
 ## Decision 5: Spoke Networking
 # System and user node pools use separate subnets (AKS baseline best practice)
@@ -60,13 +60,34 @@ environment_name: "prod"
 postfix_number: 1
 
 ## Decision 9: Bootstrap Networking and Agents
+# Some tenant governance policies enforce publicNetworkAccess=Disabled on
+# storage accounts. When that is the case, GitHub-hosted runners cannot reach
+# the state storage account data plane, so self-hosted runners inside the VNet
+# (with a private endpoint to the state SA) are required. Set both to false if
+# your subscription allows public network access to the state storage account.
 use_self_hosted_runners: true
 use_private_networking: true
+
+## Decision 9a: Bootstrap/Foundation Terraform State Location
+# The development team decides where the bootstrap Terraform state lives.
+#   local  : (default) state stays on the machine that runs the bootstrap and
+#            is NOT pushed to a storage account. You are responsible for
+#            safeguarding the local terraform.tfstate file.
+#   remote : migrate the bootstrap state into an Azure Storage account after
+#            apply. When set, the accelerator uses the state account it creates
+#            unless you override the three optional keys below to point at a
+#            pre-existing account.
+bootstrap_state_backend: "local"
+# Optional overrides — only used when bootstrap_state_backend = remote.
+# Leave empty to use the storage account the bootstrap creates.
+bootstrap_state_resource_group: ""
+bootstrap_state_storage_account: ""
+bootstrap_state_container: ""
 
 ## Decision 10: Version Control System Settings
 github_personal_access_token: "Set via environment variable TF_VAR_github_personal_access_token"
 github_runners_personal_access_token: "Set via environment variable TF_VAR_github_runners_personal_access_token"
-github_organization_name: "abengtss-max-org"
+github_organization_name: "abengtss-max-orgs"
 apply_approvers: ["abengtss-max"]
 
 ## Decision 11: Features & Options

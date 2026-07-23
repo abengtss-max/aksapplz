@@ -3546,6 +3546,26 @@ function Deploy-AKSLandingZone {
           # GitHub repo + state RG cleanup, which the user expects to run even
           # when the backend storage account is already gone from a prior run.
           do {
+            # Respect the team's chosen state backend. When the bootstrap state
+            # was kept LOCAL (the default), there is no remote backend to
+            # discover or reconfigure — destroy operates on the local state and
+            # the belt-and-suspenders cleanup below still guarantees full teardown.
+            $stateBackend = if ($config.bootstrap_state_backend) { [string]$config.bootstrap_state_backend } else { 'local' }
+            if ($stateBackend -ieq 'local') {
+                Write-Log "bootstrap_state_backend=local — destroying against local terraform state (no remote backend discovery)." -Severity "INFO"
+                # Wipe only the provider/module cache and any stale backend.tf;
+                # PRESERVE the local terraform.tfstate so 'terraform destroy' can
+                # operate on it.
+                foreach ($p in @(".terraform", ".terraform.lock.hcl", "backend.tf")) {
+                    $full = Join-Path $BootstrapRoot $p
+                    if (Test-Path $full) { Remove-Item -Path $full -Recurse -Force -ErrorAction SilentlyContinue }
+                }
+                Write-Log "Initialising bootstrap composition (local backend)..." -Severity "INFO"
+                & terraform init -input=false 2>&1 | Out-Host
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "terraform init (local) failed — falling through to direct cleanup." -Severity "WARNING"; break
+                }
+            } else {
             # Self-heal stale backend.tf: if the on-disk backend.tf references a
             # different env's storage account (or no backend.tf exists), rebuild
             # it from the actual state RG + storage account in Azure for the
@@ -3697,6 +3717,7 @@ terraform {
                     Write-Log "bootstrap terraform init failed (backend may already be gone) — falling through to direct cleanup." -Severity "WARNING"; break
                 }
             }
+            } # end remote-backend branch
 
             # terraform destroy still evaluates all required variables (PATs, repository_files),
             # so we must render terraform.tfvars.json before destroying. This also keeps the
@@ -4620,13 +4641,32 @@ terraform {
         Write-Log "Backend: rg=$rg sa=$sa container=$ct" -Severity "SUCCESS"
         Write-Log "Workload repo: $repoUrl" -Severity "SUCCESS"
 
-        # ── Migrate state to the storage account just created ──
-        $backendTf = @"
+        # ── Bootstrap Terraform state backend (the team decides where state lives) ──
+        # By default the bootstrap/foundation Terraform state is kept LOCAL and is
+        # NOT pushed to any storage account. This avoids the script silently
+        # migrating state into a backend the team did not choose (and the
+        # associated network/RBAC surprises when that backend is locked down).
+        #
+        # Teams that want a shared remote backend opt in via inputs.yaml:
+        #   bootstrap_state_backend: remote
+        # and may point it at their own location with:
+        #   bootstrap_state_resource_group / bootstrap_state_storage_account /
+        #   bootstrap_state_container
+        # (defaults fall back to the storage account provisioned above). When
+        # 'remote', the team owns network + RBAC access to that backend.
+        $stateBackend = if ($config.bootstrap_state_backend) { [string]$config.bootstrap_state_backend } else { 'local' }
+
+        if ($stateBackend -ieq 'remote') {
+            $stRg = if ($config.bootstrap_state_resource_group)  { [string]$config.bootstrap_state_resource_group }  else { $rg }
+            $stSa = if ($config.bootstrap_state_storage_account) { [string]$config.bootstrap_state_storage_account } else { $sa }
+            $stCt = if ($config.bootstrap_state_container)       { [string]$config.bootstrap_state_container }       else { $ct }
+
+            $backendTf = @"
 terraform {
   backend "azurerm" {
-    resource_group_name  = "$rg"
-    storage_account_name = "$sa"
-    container_name       = "$ct"
+    resource_group_name  = "$stRg"
+    storage_account_name = "$stSa"
+    container_name       = "$stCt"
     key                  = "bootstrap.tfstate"
     use_azuread_auth     = true
     subscription_id      = "$($config.bootstrap_subscription_id)"
@@ -4634,135 +4674,22 @@ terraform {
   }
 }
 "@
-        $backendPath = Join-Path $BootstrapRoot "backend.tf"
-        Set-Content -Path $backendPath -Value $backendTf -Encoding UTF8
-        Write-Log "Wrote $backendPath" -Severity "SUCCESS"
+            $backendPath = Join-Path $BootstrapRoot "backend.tf"
+            Set-Content -Path $backendPath -Value $backendTf -Encoding UTF8
+            Write-Log "Wrote $backendPath (bootstrap_state_backend=remote)" -Severity "SUCCESS"
 
-        # ── Grant the local operator data-plane access on the SA before migrating ──
-        # The bootstrap composition only assigns Storage Blob Data Contributor to the
-        # 'apply' / 'plan' managed identities. The local user running this cmdlet owns
-        # the SA at the control plane but has no data-plane RBAC, so
-        # `terraform init -migrate-state` (which uses use_azuread_auth=true) returns
-        # 403 AuthorizationPermissionMismatch. Grant the role idempotently and wait
-        # briefly for propagation.
-        $saResourceId = "/subscriptions/$($config.bootstrap_subscription_id)/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$sa"
-        $signedInId   = (az ad signed-in-user show --query id -o tsv 2>$null)
-        if ([string]::IsNullOrWhiteSpace($signedInId)) {
-            $signedInId = (az account show --query user.name -o tsv 2>$null)
-            Write-Log "Could not resolve signed-in user objectId; falling back to UPN '$signedInId' for role assignment." -Severity "WARNING"
-        }
-        if (-not [string]::IsNullOrWhiteSpace($signedInId)) {
-            Write-Log "Granting Storage Blob Data Contributor on $sa to current operator ($signedInId)..." -Severity "INFO"
-            $raOutput = az role assignment create `
-                --assignee-object-id $signedInId `
-                --assignee-principal-type User `
-                --role "Storage Blob Data Contributor" `
-                --scope $saResourceId `
-                --subscription $config.bootstrap_subscription_id 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log "Role assignment created. Waiting 30s for RBAC propagation..." -Severity "SUCCESS"
-                Start-Sleep -Seconds 30
-            } elseif ($raOutput -match 'already exists|RoleAssignmentExists') {
-                Write-Log "Role assignment already exists; continuing." -Severity "INFO"
-            } else {
-                Write-Log "Could not create role assignment: $raOutput" -Severity "WARNING"
-                Write-Log "Migration may still fail with 403; fall back to: az role assignment create --assignee <you> --role 'Storage Blob Data Contributor' --scope $saResourceId" -Severity "WARNING"
-            }
-        }
-
-        # ── BUG-D: open a reversible firewall window for regulated state SAs ──
-        # Regulated topologies create the bootstrap state SA with
-        # publicNetworkAccess=Disabled and/or networkRuleSet.defaultAction=Deny,
-        # exposing only a private endpoint in the workload spoke VNet. The
-        # operator running this cmdlet from their workstation has no network
-        # path to the SA data plane, so `terraform init -migrate-state` (which
-        # uses use_azuread_auth=true and lists blobs over the data plane) fails
-        # with 403 AuthorizationFailure even though RBAC is correct. Unlike the
-        # destroy path (where the SA is deleted seconds later), the SA must
-        # SURVIVE here, so we record the original posture, open it for the
-        # migration window, then restore it in a finally block.
-        $saNetOpened   = $false
-        $saOrigPublic  = $null
-        $saOrigDefault = $null
-        try {
-            $saOrigPublic  = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query publicNetworkAccess -o tsv 2>$null)
-            $saOrigDefault = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query networkRuleSet.defaultAction -o tsv 2>$null)
-            # BUGFIX v1.8.1: Base "regulated" detection on the CONFIG, not the current SA state.
-            # Defender for Storage / policy remediation can transiently flip publicNetworkAccess
-            # between apply and this query, causing standalone deployments to be
-            # mis-detected as "regulated" and mistakenly re-locked at the end of bootstrap,
-            # which then breaks GitHub-hosted CI/CD runners with 403 AuthorizationFailure.
-            $configWantsPrivate = ($config.use_private_networking -eq $true) -or `
-                                  ($config.topology -and $config.topology -notmatch '^(standalone|)$')
-            $isRegulatedSa = $configWantsPrivate -and (
-                ($saOrigPublic -and $saOrigPublic -ieq 'Disabled') -or
-                ($saOrigDefault -and $saOrigDefault -ieq 'Deny')
-            )
-            if ($isRegulatedSa) {
-                Write-Log "State SA '$sa' is locked down (publicNetworkAccess=$saOrigPublic, defaultAction=$saOrigDefault). Opening a temporary firewall window for state migration; original posture will be restored." -Severity "WARNING"
-                az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
-                    --public-network-access Enabled --default-action Allow `
-                    --bypass AzureServices Logging Metrics -o none 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    $saNetOpened = $true
-                    Write-Log "Opened $sa for migration. Waiting 60s for storage firewall propagation..." -Severity "INFO"
-                    Start-Sleep -Seconds 60
-                } else {
-                    Write-Log "Could not open state SA firewall; migration may fail with 403. Manual workaround: az storage account network-rule add -g $rg -n $sa --ip-address <your-ip>." -Severity "WARNING"
-                }
-            }
-
-            Write-Log "Migrating state to azurerm backend..." -Severity "INFO"
+            Write-Log "Migrating bootstrap state to azurerm backend ($stSa/$stCt/bootstrap.tfstate)..." -Severity "INFO"
             $migrateArgs = @('init','-migrate-state','-force-copy','-input=false')
-            & terraform @migrateArgs 2>&1 | Tee-Object -Variable migrateTee | Out-Host
+            & terraform @migrateArgs 2>&1 | Out-Host
             if ($LASTEXITCODE -ne 0) {
-                # One-shot retry for the storage-firewall propagation race.
-                $joinedMigrate = ($migrateTee | Out-String)
-                if ($saNetOpened -and ($joinedMigrate -match '403' -or $joinedMigrate -match 'AuthorizationFailure')) {
-                    Write-Log "Migration failed with 403 — waiting an extra 90s for firewall propagation, then retrying once..." -Severity "WARNING"
-                    Start-Sleep -Seconds 90
-                    & terraform @migrateArgs
-                }
-            }
-            if ($LASTEXITCODE -ne 0) {
-                Write-Log "State migration failed. Local state is still authoritative; you can re-run with -SkipPreflight after RBAC/firewall propagates." -Severity "WARNING"
+                Write-Log "Bootstrap state migration failed. Local state is still authoritative. Ensure the caller has network + RBAC access to '$stSa', then re-run 'terraform init -migrate-state' from $BootstrapRoot." -Severity "WARNING"
             } else {
-                Write-Log "State migrated to $sa/$ct/bootstrap.tfstate" -Severity "SUCCESS"
+                Write-Log "Bootstrap state migrated to $stSa/$stCt/bootstrap.tfstate" -Severity "SUCCESS"
             }
-        }
-        finally {
-            # Always restore the original network posture so the regulated SA
-            # is never left publicly reachable after the migration window.
-            if ($saNetOpened) {
-                $restorePublic  = if ($saOrigPublic)  { $saOrigPublic }  else { 'Disabled' }
-                $restoreDefault = if ($saOrigDefault) { $saOrigDefault } else { 'Deny' }
-                az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
-                    --public-network-access $restorePublic --default-action $restoreDefault -o none 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Log "Restored $sa firewall (publicNetworkAccess=$restorePublic, defaultAction=$restoreDefault)." -Severity "SUCCESS"
-                } else {
-                    Write-Log "FAILED to restore $sa firewall to its locked-down posture — restore it manually: az storage account update -n $sa -g $rg --public-network-access $restorePublic --default-action $restoreDefault" -Severity "ERROR"
-                }
-            }
-        }
-
-        # BUGFIX v1.8.1: For standalone deployments (GitHub-hosted runners), force
-        # publicNetworkAccess=Enabled at end-of-bootstrap. Defender for Storage can
-        # transiently flip this to Disabled during the bootstrap window; without this
-        # defensive step, GitHub-hosted CI/CD runners fail with 403 AuthorizationFailure
-        # when trying to list tfstate blobs (data plane requires public access + AAD auth).
-        if (-not $configWantsPrivate) {
-            $currentPublic = (az storage account show -n $sa -g $rg --subscription $config.bootstrap_subscription_id --query publicNetworkAccess -o tsv 2>$null)
-            if ($currentPublic -and $currentPublic -ine 'Enabled') {
-                Write-Log "State SA '$sa' has publicNetworkAccess=$currentPublic but this is a standalone deployment. Forcing publicNetworkAccess=Enabled so GitHub-hosted CI/CD runners can reach the state backend (data plane still requires AAD auth; shared keys remain disabled)." -Severity "WARNING"
-                az storage account update -n $sa -g $rg --subscription $config.bootstrap_subscription_id `
-                    --public-network-access Enabled --default-action Allow -o none 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Log "State SA '$sa' publicNetworkAccess forced to Enabled." -Severity "SUCCESS"
-                } else {
-                    Write-Log "FAILED to force publicNetworkAccess=Enabled on '$sa'. CI/CD runs may fail with 403." -Severity "ERROR"
-                }
-            }
+        } else {
+            $localStatePath = Join-Path $BootstrapRoot "terraform.tfstate"
+            Write-Log "Bootstrap state kept LOCAL at $localStatePath (bootstrap_state_backend=local); it was NOT pushed to any storage account." -Severity "INFO"
+            Write-Log "To use a shared remote backend instead, set 'bootstrap_state_backend: remote' in inputs.yaml (optionally with bootstrap_state_resource_group / bootstrap_state_storage_account / bootstrap_state_container) and ensure the caller has access to it." -Severity "INFO"
         }
 
         Write-Host ""

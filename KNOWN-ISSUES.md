@@ -4,13 +4,13 @@ Last reviewed: 2026-06-12 — applies to `1.4.0` GA.
 
 ## Live multi-region failover — VALIDATED (2026-06-12)
 
-The end-to-end multi-region failover drill has now been **executed live** in subscription `applz-5`
-(`eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee`) across `swedencentral` (primary) + `westeurope` (secondary),
-after a temporary, scoped MCAPS policy exclusion was applied to the test subscription and **restored
+The end-to-end multi-region failover drill has now been **executed live** in a test subscription
+across `swedencentral` (primary) + `westeurope` (secondary),
+after a temporary, scoped governance-policy exclusion was applied to the test subscription and **restored
 afterwards**. Result: both AKS clusters (K8s 1.33.12) healthy, fleet members joined, ACR geo-replicated,
 both App Gateways serving region-distinct content, and **Azure Front Door priority routing failed over
 from primary → secondary when the primary app was taken down, then failed back to primary on restore.**
-All ephemeral test resources were destroyed and the MCAPS policy posture was restored.
+All ephemeral test resources were destroyed and the governance-policy posture was restored.
 
 | ID | Area | Resolution |
 |---|---|---|
@@ -40,7 +40,7 @@ All ephemeral test resources were destroyed and the MCAPS policy posture was res
 
 | ID | Area | Severity | Description |
 |---|---|---|---|
-| BUG-D | Apply path — state migration on private storage | **Fixed in code (v1.4.1) — regulated cloud verification pending** | The post-apply `terraform init -migrate-state` to the new azurerm backend failed with `403 AuthorizationFailure` because the bootstrap state storage account is created with `publicNetworkAccess: Disabled` and `defaultAction: Deny`, exposing only a **private endpoint** in the workload spoke VNet. The operator running the cmdlet from their workstation could not reach the SA data plane (RBAC granted, no network path). **Fix:** the apply path now records the SA's original `publicNetworkAccess` / `networkRuleSet.defaultAction`, and for regulated state accounts temporarily opens a firewall window (`--public-network-access Enabled --default-action Allow`, 60s settle, one-shot 90s retry on 403) for the migration, then **restores the original posture in a `finally` block** (guarded by `$saNetOpened`). Baseline scenarios (S1, S2, S2.5) are unaffected. **Manual fallback if needed:** `az storage account network-rule add --subscription <sub> -g <state-rg> -n <state-sa> --ip-address <operator-ip>`, rerun `Deploy-AKSLandingZone -Action apply -SkipPreflight`, then remove the rule. |
+| BUG-D | Apply path — bootstrap state on private storage | **Resolved (v1.4.1) — state backend is now team-owned** | Earlier releases always tried to migrate the bootstrap/foundation state into the azurerm backend right after apply. When the bootstrap state storage account is created with `publicNetworkAccess: Disabled` and `defaultAction: Deny` (private endpoint only), an operator running the cmdlet from their workstation could not reach the SA data plane and the migration failed with `403 AuthorizationFailure`. **Fix:** the bootstrap state location is now a team decision via `bootstrap_state_backend` in `inputs.yaml`. The default (`local`) keeps state on the machine running the bootstrap and never pushes it to a storage account, so there is no network/RBAC surprise. Teams that want a shared remote backend set `bootstrap_state_backend: remote` (optionally overriding `bootstrap_state_resource_group` / `bootstrap_state_storage_account` / `bootstrap_state_container`) and own the network + RBAC path to that backend. |
 
 
 
@@ -59,7 +59,7 @@ Treat the current release as **preview / release-candidate** if you need any of 
 | Area | Limitation | Origin |
 |---|---|---|
 | Log Analytics AVM | `log_analytics` AVM module emits a deprecated `local_authentication_disabled` warning during `terraform plan` | Upstream AVM module — waiting for fix |
-| Live multi-region **failover test** in the current dev tenant | **Resolved 2026-06-12.** Previously blocked by `MCAPSGovDenyPolicies → VMSS_LimitNodesCount_Deny (v1.0.0)` (tenant-root scope) which denied all AKS node-pool VMSS creation. With a temporary, scoped policy exclusion on the test subscription (since restored), the full live failover drill was executed successfully — see the **Live multi-region failover — VALIDATED** section at the top of this document. In tenants where the MCAPS policy cannot be excluded, deploying AKS node pools still requires an MCAPS policy exemption for the target subscription/RG or a different tenant. | Microsoft MCAPS governance policy (tenant-root scope) |
+| Live multi-region **failover test** in the current dev tenant | **Resolved 2026-06-12.** Previously blocked by a tenant-root governance policy that denied AKS node-pool VMSS creation (a node-count deny policy). With a temporary, scoped policy exclusion on the test subscription (since restored), the full live failover drill was executed successfully — see the **Live multi-region failover — VALIDATED** section at the top of this document. In tenants where such a policy cannot be excluded, deploying AKS node pools still requires a policy exemption for the target subscription/RG or a different tenant. | Tenant governance policy (tenant-root scope) |
 
 ## Operational caveats
 

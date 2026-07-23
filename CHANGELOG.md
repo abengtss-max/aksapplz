@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.9.1] - 2026-07-11
 
 ### Fixed
-- **Key Vault name no longer blocks destroy-then-redeploy under MCAPS.** The
+- **Key Vault name no longer blocks destroy-then-redeploy under restrictive governance.** The
   3-character KV suffix was previously a deterministic
-  `md5(subscription_id + name_prefix)` hash. In MCAPS-governed subscriptions
+  `md5(subscription_id + name_prefix)` hash. In policy-governed subscriptions
   the `keyvault purge` operation is denied by policy, so a soft-deleted vault
   would collide with a fresh apply for up to 90 days (until the scheduled
   purge date), producing `VaultAlreadyExists`. The suffix is now a
@@ -60,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other subscriptions/tenants are invisible but still block the name
   globally).
 - **`New-BackendMigration` no longer re-locks the tfstate storage account.**
-  When MCAPS-style governance policies auto-flip a storage account's
+  When governance policies auto-flip a storage account's
   `publicNetworkAccess` to `Disabled`, the bootstrap composition previously
   captured that flipped state as the "original" and re-applied it after
   migration. The captured-state check is now driven by config

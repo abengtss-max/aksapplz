@@ -291,7 +291,7 @@ If a scenario fails partway through, **do not proceed to next**. Triage → fix 
 | Gate | Expected | Actual | Pass | Notes |
 |---|---|---|---|---|
 | Pre-flight | clean | clean | ✅ | |
-| 1. Greenfield apply | 45 added | 45 added | ✅ | 08:00:25→08:03:19 (~4 min). **BLOCKER**: UPN-not-GUID bug in role-assignment grant → had to manually grant Storage Blob Data Contributor with operator objectId `2a151a66-…`, then `terraform init -migrate-state -force-copy -input=false`. Must fix in psm1 before tagging v1.4.0. |
+| 1. Greenfield apply | 45 added | 45 added | ✅ | 08:00:25→08:03:19 (~4 min). **BLOCKER**: UPN-not-GUID bug in role-assignment grant → had to manually grant Storage Blob Data Contributor with the operator objectId, then `terraform init -migrate-state -force-copy -input=false`. Must fix in psm1 before tagging v1.4.0. |
 | 2. DryRun #1 | 13 unchanged | 13 unchanged | ✅ | |
 | 3. Hand-edit | sha changed | `a92291…`→`772799…` | ✅ | `.gitignore` via `gh api -X PUT` |
 | 4. DryRun #2 | 1 hand-edited | hand-edited=1, unchanged=12 | ✅ | |

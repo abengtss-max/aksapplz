@@ -209,8 +209,12 @@ Your GitHub org plan determines whether the `apply` environment can require revi
 ### Azure Firewall Basic SKU not supported
 Use `hub_firewall_sku_tier: Standard` or `Premium`. Basic SKU is intentionally not supported — it lacks the routing features the spoke UDR relies on.
 
-### `terraform init -migrate-state` fails with 403 on regulated scenarios
-This is [BUG-D](KNOWN-ISSUES.md) — the state SA in regulated topologies is private-only, so the operator workstation can't reach the data plane. Workaround: temporarily add your public IP to the SA firewall, run init, then revoke. Tracked for v1.4.1.
+### Where does the bootstrap Terraform state live?
+The development team decides, via `bootstrap_state_backend` in `inputs.yaml`:
+- `local` (default) — the bootstrap/foundation state stays on the machine that runs the bootstrap and is **not** pushed to any storage account. You safeguard the local `terraform.tfstate`.
+- `remote` — after apply, the state is migrated into an Azure Storage account (the one the bootstrap creates, or your own via `bootstrap_state_resource_group` / `bootstrap_state_storage_account` / `bootstrap_state_container`). Your team owns the network + RBAC path to that backend.
+
+If you choose `remote` and the target storage account is private-only (private endpoint, public access disabled), make sure the machine running the migration has both a network path and `Storage Blob Data Contributor` on the account before migrating. See [BUG-D](KNOWN-ISSUES.md).
 
 ### Self-hosted runners — ACI container never starts
 Check `TF_VAR_github_runners_personal_access_token` is set and has `admin:org` Full. The runner registration runs in the ACI container — `az container logs -g <state-rg> -n <runner-name>` shows the registration output.
