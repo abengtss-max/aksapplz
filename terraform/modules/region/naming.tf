@@ -9,7 +9,7 @@
 # - First apply: fresh random value.
 # - Subsequent re-plans in the same workspace: value preserved via TF state.
 # - `terraform destroy` -> next fresh apply: value regenerates, sidestepping
-#   the 90-day soft-delete window that MCAPS-governed subscriptions cannot
+#   the 90-day soft-delete window that policy-governed subscriptions cannot
 #   shorten with a manual purge (Microsoft best-practice compliant).
 resource "random_string" "kv_suffix" {
   length  = 3

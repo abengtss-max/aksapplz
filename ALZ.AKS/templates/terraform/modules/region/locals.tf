@@ -26,7 +26,7 @@ locals {
   # (see random_string.kv_suffix below) is generated on the first apply and
   # preserved in state, so re-plans yield the same name. On a fresh apply
   # after `terraform destroy` (or state loss) a NEW suffix is generated,
-  # which is required in MCAPS-governed subscriptions where soft-deleted
+  # which is required in policy-governed subscriptions where soft-deleted
   # vaults cannot be purged manually and would otherwise block reuse of a
   # deterministic name for up to 90 days. Cap prefix at 17 chars so
   # `kv-{<=17}-{3}` always fits the 24-char KV name limit.
