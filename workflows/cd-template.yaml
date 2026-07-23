@@ -55,6 +55,9 @@ jobs:
       ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: true
+      # Force Go's HTTP/1.1 client for provider downloads to avoid transient
+      # HTTP/2 "connection error: PROTOCOL_ERROR" from release-assets.githubusercontent.com.
+      GODEBUG: http2client=0
 
     steps:
       - name: Checkout code
@@ -67,25 +70,40 @@ jobs:
 
       - name: Terraform Init
         run: |
-          terraform init \
-            -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
-            -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
-            -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
-            -backend-config="key=${{ inputs.backend_key }}" \
-            -backend-config="use_oidc=true" \
-            -backend-config="use_azuread_auth=true"
+          init() {
+            terraform init \
+              -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
+              -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
+              -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
+              -backend-config="key=${{ inputs.backend_key }}" \
+              -backend-config="use_oidc=true" \
+              -backend-config="use_azuread_auth=true"
+          }
+          for attempt in 1 2 3; do
+            init && exit 0
+            echo "terraform init failed (attempt $attempt/3), retrying in 15s..."
+            sleep 15
+          done
+          echo "terraform init failed after 3 attempts" >&2
+          exit 1
 
       - name: Terraform Plan
         run: |
           if [ "${{ inputs.action }}" = "destroy" ]; then
+            echo "::warning::DESTROY selected — generating a plan to TEAR DOWN all managed infrastructure."
             terraform plan -destroy -out=tfplan -input=false
           else
+            echo "::notice::APPLY selected — generating a plan to create/update infrastructure."
             terraform plan -out=tfplan -input=false
           fi
 
       - name: Plan Summary
         run: |
-          echo "## Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.action }}" = "destroy" ]; then
+            echo "## Terraform DESTROY Plan :warning:" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Terraform Apply Plan" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           terraform show tfplan -no-color | tail -30 >> $GITHUB_STEP_SUMMARY
@@ -113,6 +131,9 @@ jobs:
       ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: true
+      # Force Go's HTTP/1.1 client for provider downloads to avoid transient
+      # HTTP/2 "connection error: PROTOCOL_ERROR" from release-assets.githubusercontent.com.
+      GODEBUG: http2client=0
 
     steps:
       - name: Checkout code
@@ -125,13 +146,22 @@ jobs:
 
       - name: Terraform Init
         run: |
-          terraform init \
-            -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
-            -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
-            -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
-            -backend-config="key=${{ inputs.backend_key }}" \
-            -backend-config="use_oidc=true" \
-            -backend-config="use_azuread_auth=true"
+          init() {
+            terraform init \
+              -backend-config="resource_group_name=${{ vars.BACKEND_AZURE_RESOURCE_GROUP_NAME }}" \
+              -backend-config="storage_account_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_NAME }}" \
+              -backend-config="container_name=${{ vars.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME }}" \
+              -backend-config="key=${{ inputs.backend_key }}" \
+              -backend-config="use_oidc=true" \
+              -backend-config="use_azuread_auth=true"
+          }
+          for attempt in 1 2 3; do
+            init && exit 0
+            echo "terraform init failed (attempt $attempt/3), retrying in 15s..."
+            sleep 15
+          done
+          echo "terraform init failed after 3 attempts" >&2
+          exit 1
 
       - name: Download Plan
         uses: actions/download-artifact@v4
@@ -139,12 +169,21 @@ jobs:
           name: tfplan-${{ github.run_id }}
           path: ${{ inputs.working_directory }}
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false tfplan
+      - name: ${{ inputs.action == 'destroy' && 'Terraform Destroy' || 'Terraform Apply' }}
+        run: |
+          # Applies the saved plan. For a destroy plan this tears down infrastructure;
+          # Terraform still prints "Apply complete!" because it is applying a saved plan.
+          terraform apply -auto-approve -input=false tfplan
 
       - name: Apply Summary
         if: success()
         run: |
-          echo "## Terraform Apply Complete :white_check_mark:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Infrastructure has been successfully deployed." >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.action }}" = "destroy" ]; then
+            echo "## Terraform Destroy Complete :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Infrastructure has been successfully torn down." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Terraform Apply Complete :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Infrastructure has been successfully deployed." >> $GITHUB_STEP_SUMMARY
+          fi
