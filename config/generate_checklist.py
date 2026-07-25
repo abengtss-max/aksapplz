@@ -117,11 +117,14 @@ REFERENCES = {
     "apply_approvers": "https://docs.github.com/actions/deployment/targeting-different-environments/using-environments-for-deployment",
     # Add-ons
     "enable_defender": "https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction",
+    "enable_defender_for_containers_plan": "https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-enable",
     "enable_workload_identity": "https://learn.microsoft.com/azure/aks/workload-identity-overview",
     "enable_azure_policy": "https://learn.microsoft.com/azure/aks/use-azure-policy",
     "enable_prometheus": "https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-metrics-overview",
     "enable_grafana": "https://learn.microsoft.com/azure/managed-grafana/overview",
     "enable_app_gateway": "https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview",
+    "ingress_controller": "https://learn.microsoft.com/azure/application-gateway/overview",
+    "appgw_tls_key_vault_secret_id": "https://learn.microsoft.com/azure/application-gateway/key-vault-certs",
     "enable_agc": "https://learn.microsoft.com/azure/application-gateway/for-containers/overview",
     "enable_keda": "https://learn.microsoft.com/azure/aks/keda-about",
     "enable_vpa": "https://learn.microsoft.com/azure/aks/vertical-pod-autoscaler",
@@ -367,9 +370,13 @@ decisions = [
 
     ("", "ADD-ONS (turn things on or off)", "", "", ""),
     ("11a", "enable_defender",
-        "Scans the cluster for security threats in real time.",
+        "Deploys the Microsoft Defender for Containers SENSOR on THIS cluster: agent-based runtime threat protection, antimalware, and DNS / binary-drift detection. Per-cluster add-on; needs the subscription plan (11q) enabled for full alerting.",
         "true | false",
         "true"),
+    ("11q", "enable_defender_for_containers_plan",
+        "SUBSCRIPTION-WIDE Microsoft Defender for Containers PLAN (Standard tier) in Microsoft Defender for Cloud. Adds agentless discovery for Kubernetes + agentless vulnerability assessment (ACR image and cluster-node scanning) across the WHOLE subscription. BILLED — leave false unless the subscription owner has approved the cost.",
+        "true | false",
+        "false"),
     ("11b", "enable_workload_identity",
         "Lets pods talk to Azure services without passwords.",
         "true | false",
@@ -390,6 +397,14 @@ decisions = [
         "Application Gateway with a Web Application Firewall in front of the cluster.",
         "true | false",
         "true"),
+    ("11f2", "ingress_controller",
+        "Only used when enable_app_gateway (11f) is true. Application Gateway acts as a reverse proxy in front of an INTERNAL in-cluster ingress controller: istio (managed Istio internal gateway — auto-selected when Istio 11j is on), traefik (deployed internally for you), or manual (you deploy your own). nginx is not offered (ingress-nginx is being retired). The CD pipeline auto-wires the controller's private IP into the gateway backend pool.",
+        "istio | traefik | manual",
+        "traefik  (istio when enable_istio is true)"),
+    ("11f3", "appgw_tls_key_vault_secret_id",
+        "Optional. Key Vault secret ID of the TLS certificate for the Application Gateway HTTPS:443 listener (also adds an HTTP→HTTPS redirect). The gateway reads it with the AKS identity. Leave blank to serve HTTP:80 only; you can add TLS later.",
+        "Key Vault secret URI, or blank",
+        "(blank = HTTP:80 only)"),
     ("11p", "enable_agc",
         "Application Gateway for Containers (ALB). Provisions a delegated subnet (5h) + NSG; the in-cluster ALB Controller manages the gateway. Coexists with enable_app_gateway.",
         "true | false",
@@ -454,7 +469,8 @@ for num, setting, what, opts, default in decisions:
 
 bool_settings = {
     "aks_private_cluster", "use_self_hosted_runners", "use_private_networking",
-    "enable_defender", "enable_workload_identity", "enable_azure_policy",
+    "enable_defender", "enable_defender_for_containers_plan",
+    "enable_workload_identity", "enable_azure_policy",
     "enable_prometheus", "enable_grafana", "enable_app_gateway", "enable_keda",
     "enable_vpa", "enable_node_auto_provisioning", "enable_istio",
     "enable_flux", "enable_dapr", "enable_fips", "enable_backup",
@@ -473,6 +489,8 @@ for r in range(5, row):
         dropdown(ws1, r, 6, ["Standard", "Premium"])
     elif s == "aks_sku_tier":
         dropdown(ws1, r, 6, ["Free", "Standard", "Premium"])
+    elif s == "ingress_controller":
+        dropdown(ws1, r, 6, ["istio", "traefik", "manual"])
     elif s in bool_settings:
         dropdown(ws1, r, 6, ["true", "false"])
 

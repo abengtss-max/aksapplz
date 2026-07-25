@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.13.0'
+    ModuleVersion     = '1.13.1'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,10 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.13.1
+- Docs/UX (Microsoft Defender naming): the two Defender wizard prompts now use Microsoft's terminology and are clearly distinct — `enable_defender` = "Deploy the Microsoft Defender for Containers SENSOR on this cluster (agent-based runtime threat protection)"; `enable_defender_for_containers_plan` = "Enable the SUBSCRIPTION-WIDE Microsoft Defender for Containers PLAN (agentless discovery + vulnerability assessment, billed)".
+- Planning checklist: added the previously-missing `enable_defender_for_containers_plan` row and the App Gateway ingress decisions `ingress_controller` (istio | traefik | manual dropdown) and `appgw_tls_key_vault_secret_id`, each with a clickable Microsoft Learn reference link so customers can decide and document them up front.
+
 ## 1.13.0
 - Feature (Application Gateway as AKS ingress, no AGIC / no AGC): the WAF_v2 Application Gateway can now act as a plain reverse proxy in front of an INTERNAL in-cluster ingress controller. New `ingress_controller` variable selects `istio` (managed Istio internal ingress gateway), `traefik` (deployed internally by the CD pipeline), or `manual` (bring your own internal controller). nginx is intentionally not offered as the ingress-nginx project is being retired. The wizard prompts for this whenever Application Gateway WAF is chosen; Istio is auto-selected when the mesh is enabled.
 - Feature (dynamic backend wiring, no hard-coded IP): for `istio`/`traefik` the CD pipeline discovers the internal load balancer private IP at deploy time (`az aks command invoke`) and sets it on the App Gateway backend pool (`az network application-gateway address-pool update`). Terraform ignores changes to the backend pool addresses so the two never fight. Traefik is installed internally via Helm through command invoke (works on private clusters).

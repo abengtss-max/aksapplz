@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-07-25
+
+### Changed
+- **Microsoft Defender wizard prompts relabeled** to Microsoft's terminology so
+  the two toggles are unmistakably different: `enable_defender` now reads
+  "Deploy the Microsoft Defender for Containers **sensor** on this cluster
+  (agent-based runtime threat protection)", and
+  `enable_defender_for_containers_plan` reads "Enable the **subscription-wide**
+  Microsoft Defender for Containers **plan** (agentless discovery + vulnerability
+  assessment, billed)".
+
+### Added
+- **Planning checklist** now covers `enable_defender_for_containers_plan` (was
+  missing) plus the v1.13.0 App Gateway ingress decisions `ingress_controller`
+  (istio | traefik | manual dropdown) and `appgw_tls_key_vault_secret_id`, each
+  with a clickable Microsoft Learn reference link so the customer can decide and
+  record them before deployment.
+
 ## [1.13.0] - 2026-07-25
 
 ### Added

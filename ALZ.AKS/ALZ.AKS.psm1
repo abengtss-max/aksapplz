@@ -1005,8 +1005,8 @@ function Get-InteractiveInputs {
 
     $featureDefaults = @(
         # --- Core Security ---
-        @{ Key = "enable_defender";         Label = "Enable Defender for Containers?";          Default = "true" }
-        @{ Key = "enable_defender_for_containers_plan"; Label = "Enable SUBSCRIPTION-WIDE Defender for Containers plan (agentless + registry scanning, billed)?"; Default = "false" }
+        @{ Key = "enable_defender";         Label = "Deploy the Microsoft Defender for Containers sensor on THIS cluster (agent-based runtime threat protection)?"; Default = "true" }
+        @{ Key = "enable_defender_for_containers_plan"; Label = "Enable the SUBSCRIPTION-WIDE Microsoft Defender for Containers plan (agentless discovery + vulnerability assessment, billed)?"; Default = "false" }
         @{ Key = "enable_workload_identity"; Label = "Enable Workload Identity?";               Default = "true" }
         @{ Key = "enable_azure_policy";     Label = "Enable Azure Policy add-on?";              Default = "true" }
         # --- Monitoring ---
