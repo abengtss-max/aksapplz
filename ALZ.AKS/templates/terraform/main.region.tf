@@ -92,6 +92,12 @@ module "region" {
   app_gateway_min_capacity = var.app_gateway_min_capacity
   app_gateway_max_capacity = var.app_gateway_max_capacity
 
+  # App Gateway as AKS ingress (no AGIC/AGC)
+  ingress_controller            = var.ingress_controller
+  appgw_tls_key_vault_secret_id = var.appgw_tls_key_vault_secret_id
+  ingress_backend_ip            = var.ingress_backend_ip
+  ingress_health_probe_path     = var.ingress_health_probe_path
+
   # Key Vault
   keyvault_private_dns_zone_ids = var.keyvault_private_dns_zone_ids
 

@@ -30,9 +30,13 @@ locals {
   # vaults cannot be purged manually and would otherwise block reuse of a
   # deterministic name for up to 90 days. Cap prefix at 17 chars so
   # `kv-{<=17}-{3}` always fits the 24-char KV name limit.
-  _kv_prefix             = length(local.name_prefix) <= 17 ? local.name_prefix : substr(local.name_prefix, 0, 17)
-  key_vault_name         = "kv-${local._kv_prefix}-${random_string.kv_suffix.result}"
-  app_gateway_name       = "agw-${local.name_prefix}"
+  _kv_prefix              = length(local.name_prefix) <= 17 ? local.name_prefix : substr(local.name_prefix, 0, 17)
+  key_vault_name          = "kv-${local._kv_prefix}-${random_string.kv_suffix.result}"
+  app_gateway_name        = "agw-${local.name_prefix}"
+  appgw_backend_pool_name = "ingress-backend-pool"
+  # TLS on the Application Gateway HTTPS:443 listener is activated only when a
+  # Key Vault certificate secret ID is supplied.
+  appgw_tls_enabled      = var.enable_app_gateway && var.appgw_tls_key_vault_secret_id != ""
   waf_policy_name        = "waf-${local.name_prefix}"
   log_analytics_name     = "log-${local.name_prefix}"
   monitor_workspace_name = "amon-${local.name_prefix}"

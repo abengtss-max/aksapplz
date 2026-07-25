@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-25
+
+### Added
+- **Application Gateway can now act as the AKS ingress without AGIC or
+  Application Gateway for Containers.** The WAF_v2 Application Gateway is
+  configured as a reverse proxy in front of an **internal** in-cluster ingress
+  controller. A new `ingress_controller` variable selects `istio` (managed
+  Istio internal ingress gateway), `traefik` (deployed internally by the CD
+  pipeline), or `manual` (bring your own internal controller). nginx is
+  intentionally not offered because the ingress-nginx project is being retired.
+  The wizard prompts for this whenever Application Gateway WAF is chosen, and
+  auto-selects `istio` when the service mesh is enabled.
+- **Dynamic backend wiring (no hard-coded IP).** For `istio`/`traefik` the CD
+  pipeline discovers the internal load balancer private IP at deploy time
+  (`az aks command invoke`) and writes it to the App Gateway backend pool
+  (`az network application-gateway address-pool update`). Traefik is installed
+  internally via Helm through command invoke, which works on private clusters.
+- **Optional Key Vault TLS.** Setting `appgw_tls_key_vault_secret_id` activates
+  an HTTPS:443 listener (certificate read from Key Vault via the AKS
+  user-assigned identity) plus an HTTP->HTTPS 301 redirect. Left empty, the
+  gateway serves HTTP:80 only.
+- **`ingress_next_steps` output** summarising DNS, TLS and controller follow-up
+  actions after deployment.
+
+### Changed
+- **App Gateway configuration is now Terraform-authoritative.** The previous
+  placeholder (empty backend pool, AGIC-oriented broad `ignore_changes`) is
+  replaced by a real ingress backend pool, health probe and routing rules.
+  Terraform now owns listeners/routing/TLS/probe and ignores only the backend
+  pool addresses (managed by the CD auto-wire step).
+
 ## [1.12.0] - 2026-07-25
 
 ### Changed

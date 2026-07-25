@@ -157,3 +157,33 @@ output "fleet_manager_id" {
   description = "The Azure Kubernetes Fleet Manager ID (when enabled)."
   value       = local.enable_fleet ? azurerm_kubernetes_fleet_manager.main[0].id : null
 }
+
+# --- App Gateway as AKS ingress (no AGIC/AGC) ---
+output "app_gateway_name" {
+  description = "The name of the primary region's Application Gateway (null when not enabled)."
+  value       = module.region["primary"].app_gateway_name
+}
+
+output "app_gateway_backend_pool_name" {
+  description = "The name of the primary App Gateway backend pool that targets the in-cluster ingress controller. The CD pipeline updates it with the discovered internal LB IP."
+  value       = module.region["primary"].app_gateway_backend_pool_name
+}
+
+output "ingress_controller" {
+  description = "The ingress controller the Application Gateway forwards to (istio, traefik, or manual)."
+  value       = var.ingress_controller
+}
+
+output "ingress_next_steps" {
+  description = "Human-readable next steps to finish wiring the Application Gateway as the AKS ingress."
+  value = var.enable_app_gateway ? join("\n", compact([
+    "Application Gateway ingress (${var.ingress_controller}) - next steps:",
+    "  Public IP:   ${try(module.region["primary"].app_gateway_public_ip_address, "n/a")}",
+    module.region["primary"].app_gateway_public_ip_fqdn != null ? "  Public FQDN: ${module.region["primary"].app_gateway_public_ip_fqdn}" : "",
+    "  1. Point your public DNS A record at the public IP above.",
+    var.appgw_tls_key_vault_secret_id == "" ? "  2. TLS: no Key Vault certificate set - the gateway serves HTTP:80 only. Set appgw_tls_key_vault_secret_id to enable HTTPS:443 + HTTP->HTTPS redirect." : "  2. TLS: HTTPS:443 listener active (Key Vault certificate); HTTP:80 redirects to HTTPS.",
+    var.ingress_controller == "manual" ? "  3. Deploy an INTERNAL ingress controller in AKS (Service type LoadBalancer with the azure-load-balancer-internal annotation) and set backend pool '${module.region["primary"].app_gateway_backend_pool_name}' to its private IP." : "  3. The CD pipeline deploys/uses the ${var.ingress_controller} internal ingress gateway and auto-wires its private IP into backend pool '${module.region["primary"].app_gateway_backend_pool_name}'.",
+    var.ingress_controller == "istio" ? "     Requires enable_istio_service_mesh = true and istio_internal_ingress_gateway = true." : "",
+    "  4. Create your Kubernetes Ingress/Gateway resources; the controller routes by host/path behind the gateway.",
+  ])) : null
+}

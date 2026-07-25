@@ -256,6 +256,34 @@ variable "enable_agic" {
   default     = false
 }
 
+variable "ingress_controller" {
+  description = "Ingress controller that the Application Gateway forwards to when it is used as the AKS ingress (i.e. NOT AGIC and NOT Application Gateway for Containers). One of: 'istio' (managed Istio internal ingress gateway), 'traefik' (deployed internally by the CD pipeline), or 'manual' (bring your own internal controller). Only meaningful when enable_app_gateway = true and enable_agic = false."
+  type        = string
+  default     = "manual"
+  validation {
+    condition     = contains(["istio", "traefik", "manual"], var.ingress_controller)
+    error_message = "ingress_controller must be one of: istio, traefik, manual."
+  }
+}
+
+variable "appgw_tls_key_vault_secret_id" {
+  description = "Unversioned Key Vault secret ID of the TLS certificate for the Application Gateway HTTPS:443 listener. When set, an HTTPS listener and an HTTP->HTTPS redirect are configured and the gateway reads the certificate using the AKS user-assigned identity (already granted Key Vault Secrets User). Leave empty to keep an HTTP-only listener."
+  type        = string
+  default     = ""
+}
+
+variable "ingress_backend_ip" {
+  description = "Optional private IP of the internal ingress controller load balancer used to seed the Application Gateway backend pool. Normally left empty: the CD pipeline discovers the live internal LB IP after the controller is deployed and updates the backend pool out of band (Terraform ignores changes to the backend pool addresses)."
+  type        = string
+  default     = ""
+}
+
+variable "ingress_health_probe_path" {
+  description = "HTTP path the Application Gateway health probe requests against the ingress backend."
+  type        = string
+  default     = "/"
+}
+
 variable "enable_diagnostic_settings" {
   type    = bool
   default = true

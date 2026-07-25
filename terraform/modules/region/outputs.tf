@@ -112,6 +112,16 @@ output "app_gateway_public_ip_fqdn" {
   value       = var.enable_app_gateway ? azurerm_public_ip.app_gateway[0].fqdn : null
 }
 
+output "app_gateway_name" {
+  description = "The name of the Application Gateway (null when not enabled)."
+  value       = var.enable_app_gateway ? local.app_gateway_name : null
+}
+
+output "app_gateway_backend_pool_name" {
+  description = "The name of the Application Gateway backend pool that targets the in-cluster ingress controller. The CD pipeline updates this pool with the discovered internal LB IP."
+  value       = var.enable_app_gateway ? local.appgw_backend_pool_name : null
+}
+
 # Application Gateway for Containers (ALB)
 output "agc_subnet_id" {
   description = "The resource ID of the Application Gateway for Containers (ALB) delegated subnet. Null unless enable_agc is true. Pass this to the in-cluster ALB Controller association."

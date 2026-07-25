@@ -99,28 +99,40 @@ resource "azurerm_application_gateway" "main" {
     port = 80
   }
 
-  # Default backend pool (will be configured by AGIC or manually)
+  # Backend pool for the in-cluster ingress controller (Istio internal gateway
+  # or Traefik), reached over its internal load balancer private IP. Left empty
+  # here: the CD pipeline discovers the internal LB IP after the controller is
+  # deployed and updates this pool out of band, so Terraform ignores changes to
+  # its addresses (see lifecycle below). An optional seed IP can be supplied.
   backend_address_pool {
-    name = "default-backend-pool"
+    name         = local.appgw_backend_pool_name
+    ip_addresses = var.ingress_backend_ip != "" ? [var.ingress_backend_ip] : null
   }
 
   backend_http_settings {
-    name                  = "default-http-settings"
+    name                  = "ingress-http-settings"
     cookie_based_affinity = "Disabled"
     port                  = 80
     protocol              = "Http"
     request_timeout       = 30
-    probe_name            = "default-health-probe"
+    probe_name            = "ingress-health-probe"
   }
 
   probe {
-    name                = "default-health-probe"
-    protocol            = "Http"
-    path                = "/healthz"
-    host                = "127.0.0.1"
-    interval            = 30
-    timeout             = 30
-    unhealthy_threshold = 3
+    name                                      = "ingress-health-probe"
+    protocol                                  = "Http"
+    path                                      = var.ingress_health_probe_path
+    pick_host_name_from_backend_http_settings = false
+    host                                      = "127.0.0.1"
+    interval                                  = 30
+    timeout                                   = 30
+    unhealthy_threshold                       = 3
+    match {
+      # Any HTTP response proves the ingress controller is reachable. The
+      # controller returns 404 for unknown hosts until real Ingress/Gateway
+      # resources exist, which must still be treated as healthy.
+      status_code = ["200-499"]
+    }
   }
 
   http_listener {
@@ -130,27 +142,91 @@ resource "azurerm_application_gateway" "main" {
     protocol                       = "Http"
   }
 
-  request_routing_rule {
-    name                       = "default-routing-rule"
-    priority                   = 100
-    rule_type                  = "Basic"
-    http_listener_name         = "http-listener"
-    backend_address_pool_name  = "default-backend-pool"
-    backend_http_settings_name = "default-http-settings"
+  # --- TLS (optional): activated when a Key Vault certificate secret is set. --
+  # The gateway reads the certificate with the AKS user-assigned identity, which
+  # already holds Key Vault Secrets User on this region's vault.
+  dynamic "identity" {
+    for_each = local.appgw_tls_enabled ? [1] : []
+    content {
+      type         = "UserAssigned"
+      identity_ids = [azurerm_user_assigned_identity.aks.id]
+    }
   }
 
-  # Ignore changes made by AGIC (Application Gateway Ingress Controller)
+  dynamic "ssl_certificate" {
+    for_each = local.appgw_tls_enabled ? [1] : []
+    content {
+      name                = "appgw-tls-cert"
+      key_vault_secret_id = var.appgw_tls_key_vault_secret_id
+    }
+  }
+
+  dynamic "http_listener" {
+    for_each = local.appgw_tls_enabled ? [1] : []
+    content {
+      name                           = "https-listener"
+      frontend_ip_configuration_name = "frontend-ip-public"
+      frontend_port_name             = "https"
+      protocol                       = "Https"
+      ssl_certificate_name           = "appgw-tls-cert"
+    }
+  }
+
+  dynamic "redirect_configuration" {
+    for_each = local.appgw_tls_enabled ? [1] : []
+    content {
+      name                 = "http-to-https"
+      redirect_type        = "Permanent"
+      target_listener_name = "https-listener"
+      include_path         = true
+      include_query_string = true
+    }
+  }
+
+  # TLS on: HTTPS serves the backend; HTTP:80 permanently redirects to HTTPS.
+  dynamic "request_routing_rule" {
+    for_each = local.appgw_tls_enabled ? [1] : []
+    content {
+      name                       = "https-routing-rule"
+      priority                   = 100
+      rule_type                  = "Basic"
+      http_listener_name         = "https-listener"
+      backend_address_pool_name  = local.appgw_backend_pool_name
+      backend_http_settings_name = "ingress-http-settings"
+    }
+  }
+
+  dynamic "request_routing_rule" {
+    for_each = local.appgw_tls_enabled ? [1] : []
+    content {
+      name                        = "http-redirect-rule"
+      priority                    = 110
+      rule_type                   = "Basic"
+      http_listener_name          = "http-listener"
+      redirect_configuration_name = "http-to-https"
+    }
+  }
+
+  # TLS off: HTTP:80 serves the backend directly.
+  dynamic "request_routing_rule" {
+    for_each = local.appgw_tls_enabled ? [] : [1]
+    content {
+      name                       = "http-routing-rule"
+      priority                   = 100
+      rule_type                  = "Basic"
+      http_listener_name         = "http-listener"
+      backend_address_pool_name  = local.appgw_backend_pool_name
+      backend_http_settings_name = "ingress-http-settings"
+    }
+  }
+
   lifecycle {
+    # The backend pool addresses are managed out of band by the CD pipeline,
+    # which discovers the internal ingress LB IP after the controller is
+    # deployed. Everything else (listeners, routing, TLS, probe) is owned by
+    # Terraform.
     ignore_changes = [
       backend_address_pool,
-      backend_http_settings,
-      frontend_port,
-      http_listener,
-      probe,
-      request_routing_rule,
-      redirect_configuration,
-      ssl_certificate,
-      url_path_map,
     ]
   }
 }

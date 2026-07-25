@@ -187,3 +187,82 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Infrastructure has been successfully deployed." >> $GITHUB_STEP_SUMMARY
           fi
+
+      # ---------------------------------------------------------------------
+      # App Gateway -> AKS ingress auto-wire (no AGIC / no AGC).
+      # When ingress_controller is 'istio' or 'traefik', deploy/use the internal
+      # ingress controller, discover its live internal load balancer IP (no
+      # hard-coded IP), and set it on the App Gateway backend pool. Every step
+      # is best-effort: a successful apply is never failed by wiring issues.
+      # ---------------------------------------------------------------------
+      - name: Azure login (ingress wiring)
+        if: success() && inputs.action != 'destroy'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Wire ingress controller into App Gateway
+        if: success() && inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          CONTROLLER="$(terraform output -raw ingress_controller 2>/dev/null || echo manual)"
+          APPGW="$(terraform output -raw app_gateway_name 2>/dev/null || echo '')"
+          if [ "$CONTROLLER" = "manual" ] || [ -z "$CONTROLLER" ]; then
+            echo "::notice::ingress_controller=manual - skipping backend auto-wire."
+            terraform output -raw ingress_next_steps 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
+            exit 0
+          fi
+          if [ -z "$APPGW" ] || [ "$APPGW" = "null" ]; then
+            echo "::notice::App Gateway not enabled - nothing to wire."
+            exit 0
+          fi
+          RG="$(terraform output -raw resource_group_name)"
+          AKS="$(terraform output -raw aks_cluster_name)"
+          POOL="$(terraform output -raw app_gateway_backend_pool_name)"
+
+          if [ "$CONTROLLER" = "traefik" ]; then
+            echo "::notice::Deploying Traefik (internal LoadBalancer) into $AKS ..."
+            az aks command invoke -g "$RG" -n "$AKS" --only-show-errors -o none --command '
+              helm repo add traefik https://traefik.github.io/charts >/dev/null 2>&1 || true
+              helm repo update >/dev/null 2>&1
+              helm upgrade --install traefik traefik/traefik \
+                --namespace traefik --create-namespace \
+                --set service.type=LoadBalancer \
+                --set-string service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=true \
+                --wait --timeout 5m
+            ' || echo "::warning::Traefik install via command invoke reported an error; check the cluster."
+            NS=traefik ; SVC=traefik
+          else
+            NS=aks-istio-ingress ; SVC=aks-istio-ingressgateway-internal
+          fi
+
+          echo "::notice::Discovering internal LB IP for svc/$SVC in namespace $NS ..."
+          IP=""
+          for attempt in $(seq 1 30); do
+            RAW="$(az aks command invoke -g "$RG" -n "$AKS" --only-show-errors -o tsv \
+              --command "kubectl get svc $SVC -n $NS -o jsonpath='{.status.loadBalancer.ingress[0].ip}'" 2>/dev/null || true)"
+            IP="$(echo "$RAW" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1 || true)"
+            [ -n "$IP" ] && break
+            echo "  internal LB IP not ready yet (attempt $attempt/30), waiting 10s..."
+            sleep 10
+          done
+
+          if [ -z "$IP" ]; then
+            echo "::warning::Could not determine the internal ingress LB IP for $CONTROLLER. Apply succeeded; wire backend pool '$POOL' on '$APPGW' manually once the controller has an internal IP."
+            exit 0
+          fi
+
+          echo "::notice::Internal ingress LB IP = $IP - updating backend pool $POOL on $APPGW ..."
+          if az network application-gateway address-pool update \
+               -g "$RG" --gateway-name "$APPGW" -n "$POOL" \
+               --servers "$IP" --only-show-errors -o none; then
+            {
+              echo "## Ingress wired :white_check_mark:"
+              echo ""
+              echo "App Gateway **$APPGW** backend pool **$POOL** now targets **$IP** ($CONTROLLER)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Failed to update the App Gateway backend pool. Set backend pool '$POOL' on '$APPGW' to '$IP' manually."
+          fi

@@ -440,6 +440,46 @@ variable "enable_diagnostic_settings" {
   default     = true
 }
 
+variable "ingress_controller" {
+  description = <<-EOT
+    Ingress controller the Application Gateway forwards to when it is used as the
+    AKS ingress (i.e. NOT AGIC and NOT Application Gateway for Containers). One of:
+      - "istio"   : the managed Istio internal ingress gateway (requires
+                    enable_istio_service_mesh = true and
+                    istio_internal_ingress_gateway = true);
+      - "traefik" : Traefik deployed internally by the CD pipeline;
+      - "manual"  : you deploy your own internal ingress controller.
+    Only meaningful when enable_app_gateway = true and enable_agic = false. For
+    "istio"/"traefik" the CD pipeline discovers the internal load balancer IP
+    after the controller is deployed and wires it into the App Gateway backend
+    pool (no hard-coded IP).
+  EOT
+  type        = string
+  default     = "manual"
+  validation {
+    condition     = contains(["istio", "traefik", "manual"], var.ingress_controller)
+    error_message = "ingress_controller must be one of: istio, traefik, manual."
+  }
+}
+
+variable "appgw_tls_key_vault_secret_id" {
+  description = "Unversioned Key Vault secret ID of the TLS certificate for the Application Gateway HTTPS:443 listener. When set, an HTTPS listener and an HTTP->HTTPS redirect are configured; the gateway reads the certificate using the AKS user-assigned identity (already granted Key Vault Secrets User). Leave empty to keep an HTTP-only listener."
+  type        = string
+  default     = ""
+}
+
+variable "ingress_backend_ip" {
+  description = "Optional private IP used to seed the Application Gateway backend pool. Normally left empty: the CD pipeline discovers the live internal ingress LB IP and updates the backend pool out of band (Terraform ignores changes to the backend pool addresses)."
+  type        = string
+  default     = ""
+}
+
+variable "ingress_health_probe_path" {
+  description = "HTTP path the Application Gateway health probe requests against the ingress backend."
+  type        = string
+  default     = "/"
+}
+
 # --- Identity & Security Options ---
 
 variable "enable_workload_identity" {

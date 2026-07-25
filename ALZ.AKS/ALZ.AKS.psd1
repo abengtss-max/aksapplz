@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.12.0'
+    ModuleVersion     = '1.13.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,12 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.13.0
+- Feature (Application Gateway as AKS ingress, no AGIC / no AGC): the WAF_v2 Application Gateway can now act as a plain reverse proxy in front of an INTERNAL in-cluster ingress controller. New `ingress_controller` variable selects `istio` (managed Istio internal ingress gateway), `traefik` (deployed internally by the CD pipeline), or `manual` (bring your own internal controller). nginx is intentionally not offered as the ingress-nginx project is being retired. The wizard prompts for this whenever Application Gateway WAF is chosen; Istio is auto-selected when the mesh is enabled.
+- Feature (dynamic backend wiring, no hard-coded IP): for `istio`/`traefik` the CD pipeline discovers the internal load balancer private IP at deploy time (`az aks command invoke`) and sets it on the App Gateway backend pool (`az network application-gateway address-pool update`). Terraform ignores changes to the backend pool addresses so the two never fight. Traefik is installed internally via Helm through command invoke (works on private clusters).
+- Feature (optional TLS): set `appgw_tls_key_vault_secret_id` to a Key Vault certificate secret ID to activate an HTTPS:443 listener plus an HTTP->HTTPS 301 redirect. The gateway reads the certificate with the AKS user-assigned identity (already Key Vault Secrets User). Left empty, the gateway serves HTTP:80 only (backward compatible).
+- Change (App Gateway config is now Terraform-authoritative): the placeholder AGIC-oriented config (empty backend, broad `ignore_changes`) is replaced by a real ingress backend pool, health probe and routing; only the backend pool addresses are left to the CD auto-wire step. New `ingress_next_steps` output prints DNS/TLS/controller guidance after deployment.
+
 ## 1.12.0
 - Hardening (system node pool): the system (default) node pool is now tainted with `CriticalAddonsOnly=true:NoSchedule` by default, reserving it for AKS-managed add-ons so application workloads schedule onto the dedicated user pool. Exposed as `system_node_pool.node_taints` (default `["CriticalAddonsOnly=true:NoSchedule"]`); set to `[]` to opt out. NOTE: on an existing cluster the next apply adds the taint, which reschedules any non-tolerating pods currently on the system pool onto the user pool.
 - Feature (Defender): the SUBSCRIPTION-WIDE Microsoft Defender for Containers plan (agentless discovery + registry vulnerability assessment) is now selectable from the wizard and rendered to tfvars via `enable_defender_for_containers_plan`. Defaults to `false` so the accelerator never silently enables subscription-wide billing; the in-cluster `enable_defender` security-monitoring agent is unchanged.

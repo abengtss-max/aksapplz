@@ -1049,6 +1049,43 @@ function Get-InteractiveInputs {
         $config.enable_agc = $false
     }
 
+    # ── Ingress controller behind Application Gateway (no AGIC / no AGC) ──
+    # When Application Gateway WAF is the ingress, it forwards to an INTERNAL
+    # in-cluster ingress controller. Istio's managed internal gateway is used
+    # automatically when the mesh is enabled; otherwise offer Traefik (nginx is
+    # intentionally excluded as the ingress-nginx project is being retired) or a
+    # 'manual' bring-your-own controller. The CD pipeline discovers the internal
+    # load balancer IP at deploy time and wires it into the App Gateway backend
+    # pool (no hard-coded IP).
+    if ($config.enable_app_gateway -eq $true) {
+        Write-Host ""
+        if ($config.enable_istio -eq $true) {
+            $config.ingress_controller = "istio"
+            Write-Log "Application Gateway will forward to the Istio internal ingress gateway (mesh enabled). Its private IP is auto-wired by the CD pipeline." -Severity "INFO"
+        } else {
+            Write-Log "ingress_controller" -Severity "INPUT REQUIRED"
+            Write-Host "Application Gateway needs an INTERNAL ingress controller to forward to."
+            Write-Host "  Deploy Traefik automatically (internal-only), or choose manual to deploy your own."
+            Write-Host "  (nginx is intentionally not offered — the ingress-nginx project is being retired.)"
+            $v = Read-Host "  Deploy Traefik as the internal ingress controller? (true = Traefik, false = manual) [true]"
+            if ($v -eq "false") {
+                $config.ingress_controller = "manual"
+            } else {
+                $config.ingress_controller = "traefik"
+            }
+        }
+
+        Write-Host ""
+        Write-Log "appgw_tls_key_vault_secret_id (optional)" -Severity "INFO"
+        Write-Host "Key Vault secret ID of the TLS certificate for the App Gateway HTTPS:443 listener."
+        Write-Host "  Leave blank to serve HTTP:80 only (you can add TLS later)."
+        $v = Read-Host "  Enter Key Vault secret ID (press enter to skip)"
+        $config.appgw_tls_key_vault_secret_id = if ([string]::IsNullOrEmpty($v)) { "" } else { $v }
+    } else {
+        $config.ingress_controller = "manual"
+        $config.appgw_tls_key_vault_secret_id = ""
+    }
+
     # ── Ingress subnet — prompt only for the L7 ingress actually selected ──
     # App Gateway WAF and AGC are mutually exclusive. Terraform only creates the
     # subnet when its enable_* flag is true, so we ask for just the one in use.
@@ -1206,6 +1243,9 @@ grafana_public_access: $(& $boolStr $Config.grafana_public_access)
 # Supporting resources (ACR + Key Vault always deployed)
 enable_app_gateway: $(& $boolStr $Config.enable_app_gateway)
 enable_agc: $(& $boolStr $Config.enable_agc)
+# App Gateway as AKS ingress (no AGIC/AGC): istio | traefik | manual
+ingress_controller: "$(if ($Config.ingress_controller) { $Config.ingress_controller } else { 'manual' })"
+appgw_tls_key_vault_secret_id: "$($Config.appgw_tls_key_vault_secret_id)"
 # Scaling
 enable_keda: $(& $boolStr $Config.enable_keda)
 enable_vpa: $(& $boolStr $Config.enable_vpa)
@@ -1444,6 +1484,11 @@ enable_agc                                = $(& $boolTf $Config.enable_agc)
 enable_istio_service_mesh                 = $(& $boolTf $Config.enable_istio)
 istio_internal_ingress_gateway            = $(& $boolTf $Config.enable_istio)
 istio_external_ingress_gateway            = false
+
+# App Gateway as AKS ingress (no AGIC/AGC): istio | traefik | manual.
+# The CD pipeline discovers the internal ingress LB IP and wires the backend.
+ingress_controller                        = "$(if ($Config.ingress_controller) { $Config.ingress_controller } else { 'manual' })"
+appgw_tls_key_vault_secret_id             = "$($Config.appgw_tls_key_vault_secret_id)"
 
 # -----------------------------------------------------------------------------
 # Storage
