@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.13.1'
+    ModuleVersion     = '1.13.2'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.13.2
+- Fix (Defender for Containers plan): enabling `enable_defender_for_containers_plan` no longer fails the whole deployment when the subscription-wide Microsoft Defender for Containers plan is ALREADY on the Standard tier (enabled by a prior run, another landing zone, or Azure Policy). The composition now reads the current `Microsoft.Security/pricings/Containers` tier first and only creates/manages the plan when the subscription is still on Free, leaving an existing plan untouched instead of erroring with "a resource with the ID ... already exists". This is safer for shared subscriptions than importing, because the landing zone never adopts or reverts a plan another team owns.
+
 ## 1.13.1
 - Docs/UX (Microsoft Defender naming): the two Defender wizard prompts now use Microsoft's terminology and are clearly distinct — `enable_defender` = "Deploy the Microsoft Defender for Containers SENSOR on this cluster (agent-based runtime threat protection)"; `enable_defender_for_containers_plan` = "Enable the SUBSCRIPTION-WIDE Microsoft Defender for Containers PLAN (agentless discovery + vulnerability assessment, billed)".
 - Planning checklist: added the previously-missing `enable_defender_for_containers_plan` row and the App Gateway ingress decisions `ingress_controller` (istio | traefik | manual dropdown) and `appgw_tls_key_vault_secret_id`, each with a clickable Microsoft Learn reference link so customers can decide and document them up front.

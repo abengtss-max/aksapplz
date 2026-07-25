@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-07-25
+
+### Fixed
+- **Defender for Containers plan no longer fails when already enabled.** When
+  `enable_defender_for_containers_plan` is set but the subscription-wide
+  Microsoft Defender for Containers plan is already on the Standard tier
+  (enabled by a prior run, another landing zone, or Azure Policy), the apply
+  used to fail with `a resource with the ID ".../Microsoft.Security/pricings/Containers" already exists`.
+  The composition now performs a pre-flight read of the current pricing tier via
+  an `azapi_resource` data source and only creates/manages the plan when the
+  subscription is still on Free — gracefully skipping an existing plan instead
+  of erroring. Safer than importing for shared subscriptions: the landing zone
+  never adopts or reverts a plan another team owns.
+
 ## [1.13.1] - 2026-07-25
 
 ### Changed
