@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.13.2'
+    ModuleVersion     = '1.13.3'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.13.3
+- Fix (App Gateway ingress auto-wire): the CD step that deploys the internal Traefik ingress controller now uploads its Helm install script with `az aks command invoke --file` instead of passing a multi-line script inline via `--command`. The inline multi-line form was unreliable (only the first line reliably executed), so Traefik was never actually installed, its internal LoadBalancer never got an IP, and the wire step spun through all 30 "internal LB IP not ready" attempts before giving up with a manual-wiring warning. With the script uploaded as a file it runs verbatim, Traefik installs, the internal LB IP is discovered, and the App Gateway backend pool is wired automatically.
+
 ## 1.13.2
 - Fix (Defender for Containers plan): enabling `enable_defender_for_containers_plan` no longer fails the whole deployment when the subscription-wide Microsoft Defender for Containers plan is ALREADY on the Standard tier (enabled by a prior run, another landing zone, or Azure Policy). The composition now reads the current `Microsoft.Security/pricings/Containers` tier first and only creates/manages the plan when the subscription is still on Free, leaving an existing plan untouched instead of erroring with "a resource with the ID ... already exists". This is safer for shared subscriptions than importing, because the landing zone never adopts or reverts a plan another team owns.
 

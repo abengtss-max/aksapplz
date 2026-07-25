@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-07-25
+
+### Fixed
+- **App Gateway ingress auto-wire now installs Traefik reliably.** The CD
+  "Wire ingress controller into App Gateway" step deployed the internal Traefik
+  controller by passing a multi-line script inline to `az aks command invoke
+  --command`, which only reliably executes its first line. As a result Traefik
+  was never installed, its internal LoadBalancer never received a private IP,
+  and the step exhausted all 30 "internal LB IP not ready" polling attempts
+  before emitting a manual-wiring warning. The script is now written to a file
+  and uploaded with `--file`, so it runs verbatim on the cluster — Traefik
+  installs, the internal LB IP is discovered, and the App Gateway backend pool
+  is wired automatically.
+
 ## [1.13.2] - 2026-07-25
 
 ### Fixed

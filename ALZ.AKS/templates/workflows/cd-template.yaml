@@ -224,15 +224,23 @@ jobs:
 
           if [ "$CONTROLLER" = "traefik" ]; then
             echo "::notice::Deploying Traefik (internal LoadBalancer) into $AKS ..."
-            az aks command invoke -g "$RG" -n "$AKS" --only-show-errors -o none --command '
-              helm repo add traefik https://traefik.github.io/charts >/dev/null 2>&1 || true
-              helm repo update >/dev/null 2>&1
-              helm upgrade --install traefik traefik/traefik \
-                --namespace traefik --create-namespace \
-                --set service.type=LoadBalancer \
-                --set-string service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=true \
-                --wait --timeout 5m
-            ' || echo "::warning::Traefik install via command invoke reported an error; check the cluster."
+            # NOTE: a multi-line script passed inline via 'az aks command invoke
+            # --command' is unreliable - only the first line reliably executes, which
+            # previously left Traefik uninstalled and the App Gateway wiring stuck on
+            # "internal LB IP not ready". Write the script to a file and upload it with
+            # --file so the whole thing runs verbatim on the cluster.
+            cat > traefik-install.sh <<'EOS'
+          helm repo add traefik https://traefik.github.io/charts >/dev/null 2>&1 || true
+          helm repo update >/dev/null 2>&1
+          helm upgrade --install traefik traefik/traefik \
+            --namespace traefik --create-namespace \
+            --set service.type=LoadBalancer \
+            --set-string service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=true \
+            --wait --timeout 5m
+          EOS
+            az aks command invoke -g "$RG" -n "$AKS" --only-show-errors -o none \
+              --command 'bash traefik-install.sh' --file traefik-install.sh \
+              || echo "::warning::Traefik install via command invoke reported an error; check the cluster."
             NS=traefik ; SVC=traefik
           else
             NS=aks-istio-ingress ; SVC=aks-istio-ingressgateway-internal
