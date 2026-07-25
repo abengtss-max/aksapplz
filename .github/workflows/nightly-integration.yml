@@ -166,6 +166,26 @@ jobs:
           name: postdeploy-results-${{ github.run_id }}
           path: ./ALZ.AKS/tests/results/
 
+      - name: Generate report
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path ./ALZ.AKS/tests/results) {
+            ./tools/New-TestReport.ps1 -Path ./ALZ.AKS/tests/results -OutputPath ./nightly-report.md `
+              -Title 'AKS Landing Zone — Nightly Integration Report'
+          } else {
+            Write-Host '::warning::no results directory to report on'
+          }
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-report-${{ github.run_id }}
+          path: ./nightly-report.md
+          if-no-files-found: warn
+
+
       - name: terraform destroy
         if: always()
         working-directory: ${{ env.TF_DIR }}

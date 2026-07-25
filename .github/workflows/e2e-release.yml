@@ -1,11 +1,16 @@
 name: E2E Release
 
-# Manual full-matrix end-to-end across all scenarios.
-# Triggered by maintainers before tagging a release.
+# Full-matrix end-to-end across all scenarios.
+# Triggered manually by maintainers, OR automatically on a MAJOR release (vX.0.0).
 # Each scenario = isolated state file + isolated RG; max-parallel 2 to avoid quota.
+#
+# NOTE: the `e2e` job targets the `apply` environment, so it always waits for a
+# human approval before provisioning — the release trigger does NOT auto-spend.
 
 on:
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   id-token: write
@@ -27,6 +32,10 @@ jobs:
     name: e2e (${{ matrix.scenario }})
     runs-on: ubuntu-latest
     environment: apply
+    # Manual runs always proceed; release-triggered runs only for MAJOR tags (vX.0.0).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && endsWith(github.event.release.tag_name, '.0.0'))
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -152,3 +161,48 @@ jobs:
           terraform destroy -input=false -auto-approve -no-color \
             -var-file="../scenarios/${{ matrix.scenario }}.tfvars" \
           || echo "::warning::terraform destroy failed; janitor will reap this RG by tag."
+
+  # Consolidated post-deploy report across the whole scenario matrix.
+  report:
+    name: E2E report
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all post-deploy results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: postdeploy-*-${{ github.run_id }}
+          path: ./results
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Generate report
+        shell: pwsh
+        env:
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          $header = @"
+          ## E2E Release run
+
+          | Item | Value |
+          | --- | --- |
+          | Trigger | ${{ github.event_name }} |
+          | Ref | ${{ github.ref_name }} |
+          | Matrix result | $env:E2E_RESULT |
+          "@
+          if ($env:GITHUB_STEP_SUMMARY) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $header }
+
+          ./tools/New-TestReport.ps1 -Path ./results -OutputPath ./e2e-report.md `
+            -Title 'AKS Landing Zone — E2E Release Report'
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report-${{ github.run_id }}
+          path: ./e2e-report.md
+          if-no-files-found: warn
+

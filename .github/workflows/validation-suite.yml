@@ -1,0 +1,187 @@
+name: Validation Suite
+
+# Offline, credential-free validation of the AKS Landing Zone wizard, the OIDC
+# dual-subject bootstrap fix, the scenario render logic, and every Terraform
+# composition — plus a single consolidated Markdown report.
+#
+# Runs:
+#   - nightly (03:00 UTC, after the live Nightly Integration at 02:00)
+#   - on every published GitHub release (validates the shipped tag)
+#   - on demand (workflow_dispatch)
+#
+# No Azure or GitHub credentials are required: unit tests exercise the wizard
+# logic in-process and Terraform is validated with `-backend=false`, so this is
+# free to run as often as we like and never provisions anything.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC daily
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.11.4"
+  PESTER_VERSION: "5.7.1"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Offline unit + logic tests (wizard inputs, naming, CIDR, topology, OIDC,
+  # scenario render). Emits one NUnit XML per suite for the report job.
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit & logic tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform (for OIDC composition validate)
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Install Pester ${{ env.PESTER_VERSION }}
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion ${{ env.PESTER_VERSION }} -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Run offline test suites
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $resultsDir = './ALZ.AKS/tests/results'
+          New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+
+          # (suite name -> test path). All are credential-free.
+          $suites = [ordered]@{
+            'naming'   = './ALZ.AKS/tests/Naming.Lengths.Tests.ps1'
+            'cidr'     = './ALZ.AKS/tests/Cidr.Alignment.Tests.ps1'
+            'topology' = './ALZ.AKS/tests/Get-InteractiveInputs.Topology.Tests.ps1'
+            'oidc'     = './ALZ.AKS/tests/Oidc.FederatedCredentials.Tests.ps1'
+            'render'   = './ALZ.AKS/tests/e2e/Scenarios.L1.Tests.ps1'
+          }
+
+          $anyFailed = $false
+          foreach ($name in $suites.Keys) {
+            $path = $suites[$name]
+            if (-not (Test-Path $path)) { Write-Host "::warning::missing suite $path"; continue }
+            Write-Host "::group::Suite: $name"
+            $cfg = New-PesterConfiguration
+            $cfg.Run.Path = $path
+            $cfg.Run.Exit = $false
+            $cfg.Output.Verbosity = 'Detailed'
+            $cfg.TestResult.Enabled = $true
+            $cfg.TestResult.OutputFormat = 'NUnitXml'
+            $cfg.TestResult.OutputPath = "$resultsDir/$name-results.xml"
+            $r = Invoke-Pester -Configuration $cfg
+            if ($r.FailedCount -gt 0) { $anyFailed = $true }
+            Write-Host "::endgroup::"
+          }
+          if ($anyFailed) { Write-Host "::error::one or more unit suites failed"; exit 1 }
+
+      - name: Upload NUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-results
+          path: ./ALZ.AKS/tests/results/*.xml
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Terraform fmt + validate across every composition (backend disabled).
+  # ---------------------------------------------------------------------------
+  terraform-validate:
+    name: Terraform validate (${{ matrix.composition }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        composition:
+          - bootstrap/alz/github
+          - bootstrap/alz/hub
+          - terraform
+          - ALZ.AKS/templates/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: fmt check
+        continue-on-error: true
+        run: terraform -chdir=${{ matrix.composition }} fmt -check -recursive -diff
+
+      - name: init (no backend)
+        run: terraform -chdir=${{ matrix.composition }} init -backend=false -input=false -no-color
+
+      - name: validate
+        run: terraform -chdir=${{ matrix.composition }} validate -no-color
+
+  # ---------------------------------------------------------------------------
+  # Consolidated Markdown report → Actions step summary + downloadable artifact.
+  # ---------------------------------------------------------------------------
+  report:
+    name: Consolidated report
+    runs-on: ubuntu-latest
+    needs: [unit-tests, terraform-validate]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download unit results
+        uses: actions/download-artifact@v4
+        with:
+          name: unit-results
+          path: ./results
+        continue-on-error: true
+
+      - name: Generate report
+        shell: pwsh
+        env:
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
+          TF_RESULT: ${{ needs.terraform-validate.result }}
+        run: |
+          # Prepend a job-level summary so Terraform validate (which has no
+          # NUnit XML) is reflected in the same report.
+          $trigger = "${{ github.event_name }}"
+          $ref     = "${{ github.ref_name }}"
+          $header  = @"
+          ## Trigger
+
+          | Item | Value |
+          | --- | --- |
+          | Event | $trigger |
+          | Ref | $ref |
+          | Unit & logic tests | $env:UNIT_RESULT |
+          | Terraform validate | $env:TF_RESULT |
+          "@
+          if ($env:GITHUB_STEP_SUMMARY) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $header }
+
+          ./tools/New-TestReport.ps1 -Path ./results -OutputPath ./validation-report.md `
+            -Title 'AKS Landing Zone — Validation Suite'
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: ./validation-report.md
+          if-no-files-found: warn
+
+      - name: Gate on upstream results
+        if: needs.unit-tests.result != 'success' || needs.terraform-validate.result != 'success'
+        run: |
+          echo "::error::Validation suite failed (unit=${{ needs.unit-tests.result }}, terraform=${{ needs.terraform-validate.result }})"
+          exit 1
