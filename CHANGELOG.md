@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-07-25
+
+### Changed
+- **System node pool is now reserved for AKS-managed add-ons.** The system
+  (default) node pool is tainted with `CriticalAddonsOnly=true:NoSchedule` by
+  default so application workloads schedule onto the dedicated user pool. This
+  is exposed as a new `system_node_pool.node_taints` field (default
+  `["CriticalAddonsOnly=true:NoSchedule"]`); set it to `[]` to opt out.
+  `CriticalAddonsOnly=true:NoSchedule` is the only taint Azure permits on the
+  default system pool. **Upgrade note:** on an existing cluster the next
+  `terraform apply` adds the taint, which reschedules any non-tolerating pods
+  currently running on the system pool onto the user pool.
+- **Managed Grafana public network access is now configurable.** The rendered
+  tfvars previously hardcoded `grafana_public_access = true`. It is now driven
+  by a `grafana_public_access` wizard prompt / `inputs.yaml` value, defaulting
+  to `true` for backward compatibility. Set it to `false` to require private
+  access — make sure private connectivity to Grafana is in place first.
+
+### Added
+- **Subscription-wide Microsoft Defender for Containers plan toggle.** The
+  wizard now prompts for `enable_defender_for_containers_plan` and renders it to
+  tfvars. When enabled it raises the subscription Defender for Containers plan
+  to Standard and turns on agentless discovery + container-registry
+  vulnerability assessment (full Defender for Cloud coverage). Defaults to
+  `false` so the accelerator never silently enables subscription-wide billing;
+  the per-cluster in-cluster security-monitoring agent (`enable_defender`) is
+  unchanged.
+
 ## [1.11.0] - 2026-07-25
 
 ### Fixed

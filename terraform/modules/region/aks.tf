@@ -136,6 +136,10 @@ module "aks" {
     count_of            = var.system_node_pool.node_count
     enable_fips         = var.enable_fips
 
+    # Reserve the system pool for AKS-managed add-ons (CriticalAddonsOnly by
+    # default); user workloads schedule onto the dedicated user pool.
+    node_taints = var.system_node_pool.node_taints
+
     upgrade_settings = {
       max_surge = var.system_node_pool.max_surge
     }

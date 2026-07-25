@@ -194,6 +194,12 @@ variable "system_node_pool" {
     max_count       = number
     node_count      = number
     max_surge       = string
+    # Taints applied to the system (default) node pool. Defaults to the
+    # CriticalAddonsOnly taint so the system pool is reserved for AKS-managed
+    # add-ons (which tolerate it) and user workloads land on the user pool.
+    # CriticalAddonsOnly=true:NoSchedule is the only taint Azure permits on the
+    # default system pool. Set to [] to opt out.
+    node_taints = optional(list(string), ["CriticalAddonsOnly=true:NoSchedule"])
   })
 }
 

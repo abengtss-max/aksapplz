@@ -1006,11 +1006,13 @@ function Get-InteractiveInputs {
     $featureDefaults = @(
         # --- Core Security ---
         @{ Key = "enable_defender";         Label = "Enable Defender for Containers?";          Default = "true" }
+        @{ Key = "enable_defender_for_containers_plan"; Label = "Enable SUBSCRIPTION-WIDE Defender for Containers plan (agentless + registry scanning, billed)?"; Default = "false" }
         @{ Key = "enable_workload_identity"; Label = "Enable Workload Identity?";               Default = "true" }
         @{ Key = "enable_azure_policy";     Label = "Enable Azure Policy add-on?";              Default = "true" }
         # --- Monitoring ---
         @{ Key = "enable_prometheus";       Label = "Enable Managed Prometheus?";               Default = "true" }
         @{ Key = "enable_grafana";          Label = "Enable Managed Grafana?";                  Default = "true" }
+        @{ Key = "grafana_public_access";   Label = "Allow public network access to Managed Grafana?"; Default = "true" }
         # --- Supporting Resources (ACR + Key Vault always deployed — not toggleable) ---
         # Ingress: pick EITHER Application Gateway WAF OR App Gateway for Containers, not both.
         @{ Key = "enable_app_gateway";      Label = "Enable Application Gateway WAF? (ingress option A — not with AGC)"; Default = "true" }
@@ -1194,11 +1196,13 @@ apply_approvers: $approversList
 ## Decision 11: Features & Options
 # Core security
 enable_defender: $(& $boolStr $Config.enable_defender)
+enable_defender_for_containers_plan: $(& $boolStr $Config.enable_defender_for_containers_plan)
 enable_workload_identity: $(& $boolStr $Config.enable_workload_identity)
 enable_azure_policy: $(& $boolStr $Config.enable_azure_policy)
 # Monitoring
 enable_prometheus: $(& $boolStr $Config.enable_prometheus)
 enable_grafana: $(& $boolStr $Config.enable_grafana)
+grafana_public_access: $(& $boolStr $Config.grafana_public_access)
 # Supporting resources (ACR + Key Vault always deployed)
 enable_app_gateway: $(& $boolStr $Config.enable_app_gateway)
 enable_agc: $(& $boolStr $Config.enable_agc)
@@ -1255,6 +1259,10 @@ function Write-TfvarsFile {
     $nodeOsUpgrade = if ($Config.scenario -match "regulated") { "SecurityPatch" } else { "NodeImage" }
     $isRegulated   = $Config.scenario -match "regulated"
     $nodeMinCount  = if ($isRegulated) { 3 } else { 2 }
+    # Grafana public network access: honor an explicit config value (so an
+    # operator can require private access via inputs.yaml) but default to true
+    # for backward compatibility when the key is absent.
+    $grafanaPublic = if ($null -ne $Config.grafana_public_access) { [bool]$Config.grafana_public_access } else { $true }
     $userNodeLabelsBlock = if ($isRegulated) {
         @"
   node_labels = {
@@ -1412,6 +1420,7 @@ disable_local_accounts   = true
 enable_image_cleaner     = true
 enable_azure_policy      = $(& $boolTf $Config.enable_azure_policy)
 enable_defender          = $(& $boolTf $Config.enable_defender)
+enable_defender_for_containers_plan = $(& $boolTf $Config.enable_defender_for_containers_plan)
 
 # -----------------------------------------------------------------------------
 # Monitoring
@@ -1479,7 +1488,7 @@ keyvault_private_dns_zone_ids  = []
 log_retention_days    = 90
 grafana_sku           = "Standard"
 grafana_zone_redundancy = $(& $boolTf $Config.grafana_zone_redundancy)
-grafana_public_access   = true
+grafana_public_access   = $(& $boolTf $grafanaPublic)
 grafana_admin_group_object_id = "$($Config.grafana_admin_group_object_id)"
 "@
 

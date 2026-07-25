@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.11.0'
+    ModuleVersion     = '1.12.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,11 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.12.0
+- Hardening (system node pool): the system (default) node pool is now tainted with `CriticalAddonsOnly=true:NoSchedule` by default, reserving it for AKS-managed add-ons so application workloads schedule onto the dedicated user pool. Exposed as `system_node_pool.node_taints` (default `["CriticalAddonsOnly=true:NoSchedule"]`); set to `[]` to opt out. NOTE: on an existing cluster the next apply adds the taint, which reschedules any non-tolerating pods currently on the system pool onto the user pool.
+- Feature (Defender): the SUBSCRIPTION-WIDE Microsoft Defender for Containers plan (agentless discovery + registry vulnerability assessment) is now selectable from the wizard and rendered to tfvars via `enable_defender_for_containers_plan`. Defaults to `false` so the accelerator never silently enables subscription-wide billing; the in-cluster `enable_defender` security-monitoring agent is unchanged.
+- Feature (Grafana): Managed Grafana public network access is now a wizard/inputs.yaml choice (`grafana_public_access`) instead of a hardcoded `true` in the rendered tfvars. Defaults to `true` for backward compatibility; set `false` to require private access (ensure private connectivity to Grafana is in place first).
+
 ## 1.11.0
 - Fix (OIDC): the bootstrap now registers BOTH the legacy name-based and the new GitHub immutable OIDC subject for each pipeline environment. GitHub is rolling out immutable subject claims that embed the numeric org/repo database IDs (repo:<org>@<orgId>/<repo>@<repoId>:environment:<env>); repositories enrolled in that rollout no longer match the legacy name-based federated credential, which caused pipeline terraform init to fail with AADSTS700213 "No matching federated identity record found". Federated credential creation moved from module.azure to the composition root so the subject can reference the repository's numeric id; the legacy plan/apply credentials are preserved in place via moved blocks, and immutable variants (fc-github-plan-immutable / fc-github-apply-immutable) are added alongside them. Authentication now succeeds whether or not the organization is enrolled in immutable subjects.
 
