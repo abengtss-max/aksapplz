@@ -335,6 +335,21 @@ variable "enable_snapshot_controller" {
   default = true
 }
 
+variable "enable_flux" {
+  type    = bool
+  default = false
+}
+
+variable "enable_dapr" {
+  type    = bool
+  default = false
+}
+
+variable "enable_cost_analysis" {
+  type    = bool
+  default = false
+}
+
 variable "enable_backup" {
   type    = bool
   default = false

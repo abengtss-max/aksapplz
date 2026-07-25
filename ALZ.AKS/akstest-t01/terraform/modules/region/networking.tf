@@ -191,8 +191,8 @@ module "spoke_vnet" {
     # AKS user node pool subnet — dedicated for workload pods
     {
       aks_user_nodes = {
-        name             = local.subnets.aks_user_nodes.name
-        address_prefixes = local.subnets.aks_user_nodes.address_prefixes
+        name                            = local.subnets.aks_user_nodes.name
+        address_prefixes                = local.subnets.aks_user_nodes.address_prefixes
         service_endpoints_with_location = var.enable_backup ? [{ service = "Microsoft.Storage" }] : null
         network_security_group = {
           id = azurerm_network_security_group.aks_user_nodes.id

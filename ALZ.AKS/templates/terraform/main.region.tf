@@ -81,6 +81,9 @@ module "region" {
   enable_disk_csi_driver          = var.enable_disk_csi_driver
   enable_file_csi_driver          = var.enable_file_csi_driver
   enable_snapshot_controller      = var.enable_snapshot_controller
+  enable_flux                     = var.enable_flux
+  enable_dapr                     = var.enable_dapr
+  enable_cost_analysis            = var.enable_cost_analysis
   enable_backup                   = var.enable_backup
   backup_retention_days           = var.backup_retention_days
   backup_storage_replication_type = var.backup_storage_replication_type

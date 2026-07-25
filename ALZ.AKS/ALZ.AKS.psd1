@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.13.3'
+    ModuleVersion     = '1.14.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.14.0
+- Fix (feature wiring): `enable_flux`, `enable_dapr` and `enable_cost_analysis` were exposed as toggles (wizard prompt + rendered tfvars) but were never consumed by the Terraform - setting them true did nothing. They are now fully wired in the region module: Flux (`microsoft.flux`) and Dapr (`Microsoft.Dapr`) are provisioned as `azurerm_kubernetes_cluster_extension` resources (new `platform-extensions.tf`), and Cost Analysis is wired through the AKS module's `metrics_profile.cost_analysis.enabled` (requires the Standard/Premium SKU, which the accelerator already uses). Passed through `main.region.tf` and declared in the region module. Backward compatible: all three default to false. Discovered during live-cluster validation where the toggles were true in tfvars but Flux/Dapr extensions were absent and cost analysis was off.
+
 ## 1.13.3
 - Fix (App Gateway ingress auto-wire): the CD step that deploys the internal Traefik ingress controller now uploads its Helm install script with `az aks command invoke --file` instead of passing a multi-line script inline via `--command`. The inline multi-line form was unreliable (only the first line reliably executed), so Traefik was never actually installed, its internal LoadBalancer never got an IP, and the wire step spun through all 30 "internal LB IP not ready" attempts before giving up with a manual-wiring warning. With the script uploaded as a file it runs verbatim, Traefik installs, the internal LB IP is discovered, and the App Gateway backend pool is wired automatically.
 

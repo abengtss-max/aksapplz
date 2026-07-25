@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-25
+
+### Fixed
+- **`enable_flux`, `enable_dapr` and `enable_cost_analysis` are now actually
+  implemented.** These toggles were declared as variables, prompted by the
+  wizard, and rendered into tfvars, but nothing consumed them — setting them
+  `true` was a no-op (confirmed on a live cluster: no Flux/Dapr extensions and
+  cost analysis off despite the tfvars). They are now wired end-to-end in the
+  region module: Flux (`microsoft.flux`) and Dapr (`Microsoft.Dapr`) are
+  deployed as `azurerm_kubernetes_cluster_extension` resources (new
+  `modules/region/platform-extensions.tf`), and Cost Analysis flows into the
+  AKS module via `metrics_profile.cost_analysis.enabled` (requires the
+  Standard/Premium SKU the accelerator already provisions). All three remain
+  opt-in (default `false`), so existing deployments are unaffected.
+
 ## [1.13.3] - 2026-07-25
 
 ### Fixed

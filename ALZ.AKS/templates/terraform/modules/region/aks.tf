@@ -213,6 +213,15 @@ module "aks" {
     }
   } : null
 
+  # --------------------------------------------------------------------------
+  # Cost Analysis (requires Standard/Premium SKU)
+  # --------------------------------------------------------------------------
+  metrics_profile = {
+    cost_analysis = {
+      enabled = var.enable_cost_analysis
+    }
+  }
+
   addon_profile_oms_agent = {
     enabled = true
     config = {
