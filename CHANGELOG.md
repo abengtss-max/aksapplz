@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-07-25
+
+### Fixed
+- **OIDC federated credentials now cover GitHub's immutable subject claim.**
+  GitHub is rolling out immutable OIDC subject claims that embed the numeric
+  org/repo database IDs
+  (`repo:<org>@<orgId>/<repo>@<repoId>:environment:<env>`). Repositories
+  enrolled in that rollout no longer match the legacy name-based federated
+  credential, so the workload pipeline's `terraform init` failed to
+  authenticate to the state backend with
+  `AADSTS700213: No matching federated identity record found`. The bootstrap
+  now registers **both** subjects for each pipeline environment — the legacy
+  name-based subject (`repo:<org>/<repo>:environment:<env>`) and the immutable
+  ID-based subject — so authentication succeeds whether or not the organization
+  is enrolled. Federated-credential creation moved from the `azure` module to
+  the composition root (`bootstrap/alz/github/main.tf`) so the subject can
+  reference the repository's numeric id; the existing `fc-github-plan` /
+  `fc-github-apply` credentials are adopted in place via `moved` blocks and the
+  new `fc-github-plan-immutable` / `fc-github-apply-immutable` credentials are
+  added alongside them.
+
 ## [1.10.0] - 2026-07-25
 
 ### Added

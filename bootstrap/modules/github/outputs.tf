@@ -13,6 +13,16 @@ output "repository_node_id" {
   value       = github_repository.this.node_id
 }
 
+output "repository_database_id" {
+  description = "Numeric database ID of the workload repository (used to build GitHub immutable OIDC subject claims)."
+  value       = github_repository.this.repo_id
+}
+
+output "organization_database_id" {
+  description = "Numeric database ID of the GitHub organization (used to build GitHub immutable OIDC subject claims)."
+  value       = data.github_organization.this.id
+}
+
 output "environment_names" {
   description = "Names of GitHub Actions environments created on the workload repo."
   value       = [for e in github_repository_environment.this : e.environment]

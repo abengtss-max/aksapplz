@@ -32,6 +32,18 @@ output "managed_identity_principal_ids" {
   }
 }
 
+output "managed_identity_resource_ids" {
+  description = "Map of logical MI name => resource ID (used as federated credential parent_id)."
+  value = {
+    for k, m in module.managed_identities : k => m.resource_id
+  }
+}
+
+output "identity_resource_group_name" {
+  description = "Resource group hosting the managed identities."
+  value       = azurerm_resource_group.identity.name
+}
+
 output "container_registry_login_server" {
   description = "ACR login server FQDN (empty when self-hosted runners disabled)."
   value       = var.use_self_hosted_runners ? module.container_registry[0].resource.login_server : ""

@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.10.0'
+    ModuleVersion     = '1.11.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.11.0
+- Fix (OIDC): the bootstrap now registers BOTH the legacy name-based and the new GitHub immutable OIDC subject for each pipeline environment. GitHub is rolling out immutable subject claims that embed the numeric org/repo database IDs (repo:<org>@<orgId>/<repo>@<repoId>:environment:<env>); repositories enrolled in that rollout no longer match the legacy name-based federated credential, which caused pipeline terraform init to fail with AADSTS700213 "No matching federated identity record found". Federated credential creation moved from module.azure to the composition root so the subject can reference the repository's numeric id; the legacy plan/apply credentials are preserved in place via moved blocks, and immutable variants (fc-github-plan-immutable / fc-github-apply-immutable) are added alongside them. Authentication now succeeds whether or not the organization is enrolled in immutable subjects.
+
 ## 1.10.0
 - Feature: The bootstrap/foundation Terraform state is now team-owned. By default (bootstrap_state_backend: local) the bootstrap state stays on the machine that runs Deploy-AKSLandingZone and is NEVER migrated to a storage account. Teams that want a shared remote backend opt in with bootstrap_state_backend: remote (optionally overriding bootstrap_state_resource_group / bootstrap_state_storage_account / bootstrap_state_container) and own the network + RBAC path to it.
 - Fix (BUG-D): removes the implicit, often-impossible post-apply state migration to a private state storage account. Under governance policies that force publicNetworkAccess=Disabled, migrating the bootstrap state from an operator workstation would fail with 403 AuthorizationFailure (and a stale backend.tf could later break init with a DNS "no such host" after teardown). Keeping bootstrap state local by default eliminates this entirely; the workload/cluster state continues to use the remote backend via CI/CD as before.
