@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.9.1'
+    ModuleVersion     = '1.10.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,11 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.10.0
+- Feature: The bootstrap/foundation Terraform state is now team-owned. By default (bootstrap_state_backend: local) the bootstrap state stays on the machine that runs Deploy-AKSLandingZone and is NEVER migrated to a storage account. Teams that want a shared remote backend opt in with bootstrap_state_backend: remote (optionally overriding bootstrap_state_resource_group / bootstrap_state_storage_account / bootstrap_state_container) and own the network + RBAC path to it.
+- Fix (BUG-D): removes the implicit, often-impossible post-apply state migration to a private state storage account. Under governance policies that force publicNetworkAccess=Disabled, migrating the bootstrap state from an operator workstation would fail with 403 AuthorizationFailure (and a stale backend.tf could later break init with a DNS "no such host" after teardown). Keeping bootstrap state local by default eliminates this entirely; the workload/cluster state continues to use the remote backend via CI/CD as before.
+- CI: cd-template workflow now labels steps/summaries per action (a destroy run no longer reports "Apply Complete"), forces HTTP/1.1 for provider downloads (GODEBUG=http2client=0) and retries terraform init up to 3 times to survive transient HTTP/2 PROTOCOL_ERROR on self-hosted runners.
+
 ## 1.8.0
 - Feature: Private endpoints for Key Vault and ACR in standalone (no-hub) deployments via enable_private_endpoints (default false). When enabled the module creates the private-endpoints subnet, turns OFF public network access on Key Vault and ACR, and (when no external private DNS zone ids are supplied) creates and links privatelink.vaultcore.azure.net and privatelink.azurecr.io to the spoke VNet so the cluster resolves both to their private IPs. Corp/hub topology is unchanged (zones still come from the hub). NOTE: enabling this makes the ACR public endpoint unreachable - CI image builds/pushes must run on a runner with network line of sight to the registry (self-hosted runner in the VNet); GitHub-hosted runners can no longer push.
 

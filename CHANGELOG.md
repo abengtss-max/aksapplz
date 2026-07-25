@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-07-25
+
+### Added
+- **Team-owned bootstrap Terraform state (`bootstrap_state_backend`).** The
+  bootstrap/foundation state location is now a team decision in `inputs.yaml`.
+  The default (`local`) keeps the state on the machine that runs
+  `Deploy-AKSLandingZone` and **never** pushes it to a storage account. Teams
+  that want a shared remote backend set `bootstrap_state_backend: remote`
+  (optionally overriding `bootstrap_state_resource_group` /
+  `bootstrap_state_storage_account` / `bootstrap_state_container`) and own the
+  network + RBAC path to that backend.
+
+### Fixed
+- **BUG-D — no more impossible bootstrap-state migration.** Earlier releases
+  always tried to migrate the bootstrap state into the azurerm backend right
+  after apply. When the state storage account is private-only
+  (`publicNetworkAccess=Disabled`, e.g. under governance policies that force
+  it), migrating from an operator workstation failed with
+  `403 AuthorizationFailure`, and a stale `backend.tf` left in the module cache
+  could later break `terraform init` with a DNS `no such host` after the
+  account was destroyed. Keeping bootstrap state `local` by default removes the
+  implicit migration entirely. The workload/cluster state is unaffected — it
+  still uses the remote backend via the GitHub Actions CI/CD pipeline.
+
+### CI
+- **`cd-template` workflow hardening.** Steps and summaries are now
+  action-aware (a `destroy` run no longer reports "Apply Complete"), provider
+  downloads force HTTP/1.1 (`GODEBUG=http2client=0`), and `terraform init` is
+  retried up to three times to survive transient HTTP/2 `PROTOCOL_ERROR` from
+  the GitHub release-assets CDN on self-hosted runners.
+
 ## [1.9.1] - 2026-07-11
 
 ### Fixed
