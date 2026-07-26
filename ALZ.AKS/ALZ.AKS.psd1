@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.15.0'
+    ModuleVersion     = '1.15.1'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.15.1
+- Fix (deployment reliability): the Flux and Dapr cluster extensions (added in 1.14.0) now depend on the whole AKS module, so they no longer install concurrently with the AVM module's post-create system agent-pool update (`azapi_update_resource.default_agent_pool`). That concurrency caused a 409 `EtagMismatch` / `PutAgentPool_FailedPrecondition` ("Another operation is in progress", https://aka.ms/aks/aksoperationpreempted) that failed the whole apply on fresh deployments with GitOps/Dapr enabled, leaving later resources (e.g. the ACR private endpoint) uncreated and ingress unwired. The extensions are also serialized against each other (Dapr waits for Flux) so at most one long-running cluster extension operation is in flight at a time.
+
 ## 1.15.0
 - Change (Grafana private by default): Managed Grafana now follows Microsoft security guidance (disable public network access + private endpoint). When private endpoints are in use (corp/hub topology, or standalone with the default `enable_private_endpoints = true`), Grafana `public_network_access_enabled` is turned off and a Grafana private endpoint is provisioned in the private-endpoints subnet with a self-managed `privatelink.grafana.azure.com` DNS zone linked to the spoke VNet (hub-supplied zone ids honored in corp). `grafana_public_access` is now a nullable override derived from the private-endpoint posture when unset; the wizard default and example tfvars default to private (false). New `grafana_private_dns_zone_ids` variable. Note: portal Pin-to-Grafana stops working when private and SSO still uses the public network; access requires VNet line-of-sight. Backward compatible: setting `grafana_public_access = true` keeps public access.
 

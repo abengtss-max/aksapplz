@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-07-26
+
+### Fixed
+- **Deployment reliability: Flux/Dapr cluster extensions no longer race the AKS
+  agent-pool update.** The `azurerm_kubernetes_cluster_extension` resources for
+  Flux and Dapr (added in 1.14.0) only referenced the cluster id, so Terraform
+  installed them (a long-running cluster operation, ~18 min for Flux)
+  concurrently with the AVM AKS module's post-create system agent-pool update
+  (`azapi_update_resource.default_agent_pool`). AKS rejected the overlapping
+  control-plane PUT with a 409 `EtagMismatch` /
+  `PutAgentPool_FailedPrecondition` ("Another operation is in progress",
+  https://aka.ms/aks/aksoperationpreempted), failing the entire `terraform
+  apply` on fresh deployments that enable GitOps/Dapr and leaving later
+  resources (e.g. the ACR private endpoint) uncreated and ingress unwired. Both
+  extensions now `depends_on` the whole AKS module, and Dapr additionally waits
+  for Flux, so at most one long-running cluster extension operation runs at a
+  time. No configuration change; existing deployments are unaffected.
+
 ## [1.15.0] - 2026-07-26
 
 ### Changed
