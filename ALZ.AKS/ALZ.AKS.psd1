@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.14.0'
+    ModuleVersion     = '1.15.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.15.0
+- Change (Grafana private by default): Managed Grafana now follows Microsoft security guidance (disable public network access + private endpoint). When private endpoints are in use (corp/hub topology, or standalone with the default `enable_private_endpoints = true`), Grafana `public_network_access_enabled` is turned off and a Grafana private endpoint is provisioned in the private-endpoints subnet with a self-managed `privatelink.grafana.azure.com` DNS zone linked to the spoke VNet (hub-supplied zone ids honored in corp). `grafana_public_access` is now a nullable override derived from the private-endpoint posture when unset; the wizard default and example tfvars default to private (false). New `grafana_private_dns_zone_ids` variable. Note: portal Pin-to-Grafana stops working when private and SSO still uses the public network; access requires VNet line-of-sight. Backward compatible: setting `grafana_public_access = true` keeps public access.
+
 ## 1.14.0
 - Fix (feature wiring): `enable_flux`, `enable_dapr` and `enable_cost_analysis` were exposed as toggles (wizard prompt + rendered tfvars) but were never consumed by the Terraform - setting them true did nothing. They are now fully wired in the region module: Flux (`microsoft.flux`) and Dapr (`Microsoft.Dapr`) are provisioned as `azurerm_kubernetes_cluster_extension` resources (new `platform-extensions.tf`), and Cost Analysis is wired through the AKS module's `metrics_profile.cost_analysis.enabled` (requires the Standard/Premium SKU, which the accelerator already uses). Passed through `main.region.tf` and declared in the region module. Backward compatible: all three default to false. Discovered during live-cluster validation where the toggles were true in tfvars but Flux/Dapr extensions were absent and cost analysis was off.
 

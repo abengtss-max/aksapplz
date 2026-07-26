@@ -745,9 +745,15 @@ variable "grafana_zone_redundancy" {
 }
 
 variable "grafana_public_access" {
-  description = "Enable public access for Grafana."
+  description = "Public network access for Managed Grafana. When null (default) it is derived from the private-endpoint posture: private (false) when private endpoints are in use, public (true) otherwise. Set true/false to override."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "grafana_private_dns_zone_ids" {
+  description = "Private DNS zone IDs (privatelink.grafana.azure.com) for the Grafana private endpoint, supplied from the hub in corp topology. Empty = self-manage the zone in standalone."
+  type        = list(string)
+  default     = []
 }
 
 variable "grafana_admin_group_object_id" {

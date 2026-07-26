@@ -1012,7 +1012,7 @@ function Get-InteractiveInputs {
         # --- Monitoring ---
         @{ Key = "enable_prometheus";       Label = "Enable Managed Prometheus?";               Default = "true" }
         @{ Key = "enable_grafana";          Label = "Enable Managed Grafana?";                  Default = "true" }
-        @{ Key = "grafana_public_access";   Label = "Allow public network access to Managed Grafana?"; Default = "true" }
+        @{ Key = "grafana_public_access";   Label = "Allow PUBLIC network access to Managed Grafana? (recommended: false = private via private endpoint)"; Default = "false" }
         # --- Supporting Resources (ACR + Key Vault always deployed — not toggleable) ---
         # Ingress: pick EITHER Application Gateway WAF OR App Gateway for Containers, not both.
         @{ Key = "enable_app_gateway";      Label = "Enable Application Gateway WAF? (ingress option A — not with AGC)"; Default = "true" }
@@ -1300,9 +1300,11 @@ function Write-TfvarsFile {
     $isRegulated   = $Config.scenario -match "regulated"
     $nodeMinCount  = if ($isRegulated) { 3 } else { 2 }
     # Grafana public network access: honor an explicit config value (so an
-    # operator can require private access via inputs.yaml) but default to true
-    # for backward compatibility when the key is absent.
-    $grafanaPublic = if ($null -ne $Config.grafana_public_access) { [bool]$Config.grafana_public_access } else { $true }
+    # operator can force public access via inputs.yaml) but default to false
+    # (private) — WAF/CAF security best practice. A Grafana private endpoint +
+    # privatelink.grafana.azure.com DNS zone are provisioned automatically when
+    # private endpoints are in use, keeping the workspace reachable from the VNet.
+    $grafanaPublic = if ($null -ne $Config.grafana_public_access) { [bool]$Config.grafana_public_access } else { $false }
     $userNodeLabelsBlock = if ($isRegulated) {
         @"
   node_labels = {

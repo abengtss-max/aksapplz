@@ -203,5 +203,5 @@ keyvault_private_dns_zone_ids  = []
 log_retention_days    = 90
 grafana_sku           = "Standard"
 grafana_zone_redundancy = true
-grafana_public_access   = true
+grafana_public_access   = false
 grafana_admin_group_object_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"

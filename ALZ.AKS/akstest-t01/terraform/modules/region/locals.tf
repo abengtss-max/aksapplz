@@ -110,4 +110,13 @@ locals {
   # the spoke VNet when private endpoints are enabled without a hub. In corp the
   # zones are supplied from the hub via *_private_dns_zone_ids.
   manage_private_dns = var.enable_private_endpoints && !local.is_corp
+
+  # Grafana is private whenever private endpoints are in use (corp topology or
+  # standalone + enable_private_endpoints). The explicit grafana_public_access
+  # variable overrides this when set to a non-null value.
+  grafana_public_access_effective = var.grafana_public_access != null ? var.grafana_public_access : !local.use_private_endpoints
+
+  # Private DNS zone ids for the Grafana private endpoint: the self-managed zone
+  # in standalone, or hub-supplied ids in corp topology.
+  grafana_private_dns_zone_ids = local.manage_private_dns && var.enable_managed_grafana ? [azurerm_private_dns_zone.grafana[0].id] : var.grafana_private_dns_zone_ids
 }

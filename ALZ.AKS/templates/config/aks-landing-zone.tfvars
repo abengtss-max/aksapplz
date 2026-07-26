@@ -197,5 +197,5 @@ keyvault_private_dns_zone_ids = []  # Set to existing ALZ private DNS zone IDs
 log_retention_days    = 90
 grafana_sku           = "Standard"
 grafana_zone_redundancy = true
-grafana_public_access   = true
+grafana_public_access   = false
 grafana_admin_group_object_id = "REPLACE_ME"  # Entra ID group for Grafana admins

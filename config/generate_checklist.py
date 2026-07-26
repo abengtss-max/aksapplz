@@ -122,6 +122,7 @@ REFERENCES = {
     "enable_azure_policy": "https://learn.microsoft.com/azure/aks/use-azure-policy",
     "enable_prometheus": "https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-metrics-overview",
     "enable_grafana": "https://learn.microsoft.com/azure/managed-grafana/overview",
+    "grafana_public_access": "https://learn.microsoft.com/azure/managed-grafana/how-to-set-up-private-access",
     "enable_app_gateway": "https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview",
     "ingress_controller": "https://learn.microsoft.com/azure/application-gateway/overview",
     "appgw_tls_key_vault_secret_id": "https://learn.microsoft.com/azure/application-gateway/key-vault-certs",
@@ -393,6 +394,10 @@ decisions = [
         "Dashboards for the metrics above.",
         "true | false",
         "true"),
+    ("11e2", "grafana_public_access",
+        "Public network access to Managed Grafana. Recommended false (private via private endpoint); a Grafana private endpoint + private DNS zone are created automatically when private endpoints are enabled.",
+        "true | false",
+        "false"),
     ("11f", "enable_app_gateway",
         "Application Gateway with a Web Application Firewall in front of the cluster.",
         "true | false",
@@ -475,6 +480,7 @@ bool_settings = {
     "enable_vpa", "enable_node_auto_provisioning", "enable_istio",
     "enable_flux", "enable_dapr", "enable_fips", "enable_backup",
     "enable_cost_analysis", "enable_agc", "hub_deploy_firewall",
+    "grafana_public_access",
 }
 for r in range(5, row):
     s = ws1.cell(row=r, column=2).value

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-26
+
+### Changed
+- **Managed Grafana is now private by default (WAF/CAF-aligned).** Azure Managed
+  Grafana's product default is public, but Microsoft's security guidance
+  recommends disabling public network access and reaching the workspace over a
+  private endpoint. The accelerator now follows that guidance: when private
+  endpoints are in use (corp/hub topology, or standalone with the default
+  `enable_private_endpoints = true`), Grafana's `public_network_access_enabled`
+  is turned OFF and a **Grafana private endpoint** is provisioned in the
+  private-endpoints subnet, with a self-managed `privatelink.grafana.azure.com`
+  private DNS zone linked to the spoke VNet (or hub-supplied zone ids in corp).
+  The workspace stays reachable from the VNet.
+- `grafana_public_access` is now a nullable override: when unset it is derived
+  from the private-endpoint posture (private when private endpoints are used,
+  public otherwise); set it explicitly to `true`/`false` to force a value. The
+  wizard default and example tfvars now default to private (`false`). New
+  `grafana_private_dns_zone_ids` variable accepts hub-supplied DNS zone ids.
+
+### Notes
+- Portal **Pin to Grafana** stops working when private (the portal cannot reach
+  a private IP), and the SSO/OAuth endpoint still traverses the public network.
+  Access to a private workspace requires VNet line-of-sight (VPN / bastion /
+  peered network).
+- Backward compatible: configs that set `grafana_public_access = true` keep
+  public access.
+
 ## [1.14.0] - 2026-07-25
 
 ### Fixed

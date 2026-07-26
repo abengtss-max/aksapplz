@@ -98,7 +98,7 @@ resource "azurerm_dashboard_grafana" "main" {
 
   sku                           = var.grafana_sku # "Standard"
   zone_redundancy_enabled       = var.grafana_zone_redundancy
-  public_network_access_enabled = var.grafana_public_access
+  public_network_access_enabled = local.grafana_public_access_effective
   api_key_enabled               = true
   grafana_major_version         = var.grafana_major_version
 
@@ -140,4 +140,56 @@ resource "azurerm_role_assignment" "grafana_monitor_data_reader" {
   scope                = azurerm_monitor_workspace.main[0].id
   role_definition_name = "Monitoring Data Reader"
   principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
+}
+
+# -----------------------------------------------------------------------------
+# Managed Grafana private connectivity
+# When private endpoints are in use (corp topology or standalone +
+# enable_private_endpoints), public access is disabled by default and the
+# workspace is reachable via a private endpoint in the PE subnet. The
+# privatelink.grafana.azure.com zone is supplied from the hub (corp) or
+# self-managed and linked to the spoke VNet for standalone deployments.
+# -----------------------------------------------------------------------------
+resource "azurerm_private_dns_zone" "grafana" {
+  count = var.enable_managed_grafana && local.manage_private_dns ? 1 : 0
+
+  name                = "privatelink.grafana.azure.com"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "grafana" {
+  count = var.enable_managed_grafana && local.manage_private_dns ? 1 : 0
+
+  name                  = "pdnslink-grf-${local.name_prefix}"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.grafana[0].name
+  virtual_network_id    = module.spoke_vnet.resource_id
+  registration_enabled  = false
+  tags                  = local.default_tags
+}
+
+resource "azurerm_private_endpoint" "grafana" {
+  count = var.enable_managed_grafana && local.use_private_endpoints ? 1 : 0
+
+  name                = "pe-${local.grafana_name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  subnet_id           = module.spoke_vnet.subnets["private_endpoints"].resource_id
+  tags                = local.default_tags
+
+  private_service_connection {
+    name                           = "psc-${local.grafana_name}"
+    private_connection_resource_id = azurerm_dashboard_grafana.main[0].id
+    subresource_names              = ["grafana"]
+    is_manual_connection           = false
+  }
+
+  dynamic "private_dns_zone_group" {
+    for_each = length(local.grafana_private_dns_zone_ids) > 0 ? [1] : []
+    content {
+      name                 = "grafana-dns-zone-group"
+      private_dns_zone_ids = local.grafana_private_dns_zone_ids
+    }
+  }
 }
