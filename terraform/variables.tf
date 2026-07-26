@@ -444,21 +444,20 @@ variable "ingress_controller" {
   description = <<-EOT
     Ingress controller the Application Gateway forwards to when it is used as the
     AKS ingress (i.e. NOT AGIC and NOT Application Gateway for Containers). One of:
-      - "istio"   : the managed Istio internal ingress gateway (requires
-                    enable_istio_service_mesh = true and
-                    istio_internal_ingress_gateway = true);
-      - "traefik" : Traefik deployed internally by the CD pipeline;
-      - "manual"  : you deploy your own internal ingress controller.
-    Only meaningful when enable_app_gateway = true and enable_agic = false. For
-    "istio"/"traefik" the CD pipeline discovers the internal load balancer IP
-    after the controller is deployed and wires it into the App Gateway backend
-    pool (no hard-coded IP).
+      - "istio"  : the managed Istio internal ingress gateway - set up and wired
+                   end-to-end for you (requires enable_istio_service_mesh = true
+                   and istio_internal_ingress_gateway = true). The CD pipeline
+                   discovers its internal load balancer IP and sets it on the App
+                   Gateway backend pool (no hard-coded IP);
+      - "manual" : baseline only - you bring and configure your own (open-source)
+                   internal ingress controller and wire it into the backend pool.
+    Only meaningful when enable_app_gateway = true and enable_agic = false.
   EOT
   type        = string
   default     = "manual"
   validation {
-    condition     = contains(["istio", "traefik", "manual"], var.ingress_controller)
-    error_message = "ingress_controller must be one of: istio, traefik, manual."
+    condition     = contains(["istio", "manual"], var.ingress_controller)
+    error_message = "ingress_controller must be one of: istio, manual."
   }
 }
 
@@ -752,6 +751,12 @@ variable "grafana_public_access" {
 
 variable "grafana_private_dns_zone_ids" {
   description = "Private DNS zone IDs (privatelink.grafana.azure.com) for the Grafana private endpoint, supplied from the hub in corp topology. Empty = self-manage the zone in standalone."
+  type        = list(string)
+  default     = []
+}
+
+variable "monitor_private_dns_zone_ids" {
+  description = "Private DNS zone IDs for the Azure Monitor (AMPLS) private endpoint (privatelink.monitor.azure.com, .oms/.ods.opinsights.azure.com, .agentsvc.azure-automation.net, .blob.core.windows.net), supplied from the hub in corp topology. Empty = self-manage the zones in standalone."
   type        = list(string)
   default     = []
 }

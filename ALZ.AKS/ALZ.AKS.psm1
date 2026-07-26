@@ -1051,28 +1051,18 @@ function Get-InteractiveInputs {
 
     # ── Ingress controller behind Application Gateway (no AGIC / no AGC) ──
     # When Application Gateway WAF is the ingress, it forwards to an INTERNAL
-    # in-cluster ingress controller. Istio's managed internal gateway is used
-    # automatically when the mesh is enabled; otherwise offer Traefik (nginx is
-    # intentionally excluded as the ingress-nginx project is being retired) or a
-    # 'manual' bring-your-own controller. The CD pipeline discovers the internal
-    # load balancer IP at deploy time and wires it into the App Gateway backend
-    # pool (no hard-coded IP).
+    # in-cluster ingress controller. If the Istio mesh is enabled we set up and
+    # auto-wire its managed internal ingress gateway end-to-end. Otherwise the
+    # baseline is delivered as 'manual': the customer installs and wires their own
+    # (open-source) ingress controller. The CD pipeline only auto-wires Istio.
     if ($config.enable_app_gateway -eq $true) {
         Write-Host ""
         if ($config.enable_istio -eq $true) {
             $config.ingress_controller = "istio"
-            Write-Log "Application Gateway will forward to the Istio internal ingress gateway (mesh enabled). Its private IP is auto-wired by the CD pipeline." -Severity "INFO"
+            Write-Log "Application Gateway will forward to the managed Istio internal ingress gateway (mesh enabled). It is set up and its private IP is auto-wired by the CD pipeline." -Severity "INFO"
         } else {
-            Write-Log "ingress_controller" -Severity "INPUT REQUIRED"
-            Write-Host "Application Gateway needs an INTERNAL ingress controller to forward to."
-            Write-Host "  Deploy Traefik automatically (internal-only), or choose manual to deploy your own."
-            Write-Host "  (nginx is intentionally not offered — the ingress-nginx project is being retired.)"
-            $v = Read-Host "  Deploy Traefik as the internal ingress controller? (true = Traefik, false = manual) [true]"
-            if ($v -eq "false") {
-                $config.ingress_controller = "manual"
-            } else {
-                $config.ingress_controller = "traefik"
-            }
+            $config.ingress_controller = "manual"
+            Write-Log "Istio mesh is disabled, so the Application Gateway baseline is delivered with ingress_controller = 'manual'. After deployment, install your own internal ingress controller (e.g. Traefik or another open-source controller) and wire its private IP into the App Gateway backend pool. Enable Istio if you want this set up for you end-to-end." -Severity "INFO"
         }
 
         Write-Host ""
@@ -1243,7 +1233,7 @@ grafana_public_access: $(& $boolStr $Config.grafana_public_access)
 # Supporting resources (ACR + Key Vault always deployed)
 enable_app_gateway: $(& $boolStr $Config.enable_app_gateway)
 enable_agc: $(& $boolStr $Config.enable_agc)
-# App Gateway as AKS ingress (no AGIC/AGC): istio | traefik | manual
+# App Gateway as AKS ingress (no AGIC/AGC): istio | manual
 ingress_controller: "$(if ($Config.ingress_controller) { $Config.ingress_controller } else { 'manual' })"
 appgw_tls_key_vault_secret_id: "$($Config.appgw_tls_key_vault_secret_id)"
 # Scaling
@@ -1487,8 +1477,9 @@ enable_istio_service_mesh                 = $(& $boolTf $Config.enable_istio)
 istio_internal_ingress_gateway            = $(& $boolTf $Config.enable_istio)
 istio_external_ingress_gateway            = false
 
-# App Gateway as AKS ingress (no AGIC/AGC): istio | traefik | manual.
-# The CD pipeline discovers the internal ingress LB IP and wires the backend.
+# App Gateway as AKS ingress (no AGIC/AGC): istio | manual.
+# For istio the CD pipeline discovers the internal ingress LB IP and wires the
+# backend pool; for manual the customer installs and wires their own controller.
 ingress_controller                        = "$(if ($Config.ingress_controller) { $Config.ingress_controller } else { 'manual' })"
 appgw_tls_key_vault_secret_id             = "$($Config.appgw_tls_key_vault_secret_id)"
 

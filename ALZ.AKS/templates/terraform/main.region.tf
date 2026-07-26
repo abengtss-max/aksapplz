@@ -114,5 +114,6 @@ module "region" {
   grafana_zone_redundancy       = var.grafana_zone_redundancy
   grafana_public_access         = var.grafana_public_access
   grafana_private_dns_zone_ids  = var.grafana_private_dns_zone_ids
+  monitor_private_dns_zone_ids  = var.monitor_private_dns_zone_ids
   grafana_admin_group_object_id = var.grafana_admin_group_object_id
 }

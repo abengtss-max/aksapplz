@@ -403,9 +403,9 @@ decisions = [
         "true | false",
         "true"),
     ("11f2", "ingress_controller",
-        "Only used when enable_app_gateway (11f) is true. Application Gateway acts as a reverse proxy in front of an INTERNAL in-cluster ingress controller: istio (managed Istio internal gateway — auto-selected when Istio 11j is on), traefik (deployed internally for you), or manual (you deploy your own). nginx is not offered (ingress-nginx is being retired). The CD pipeline auto-wires the controller's private IP into the gateway backend pool.",
-        "istio | traefik | manual",
-        "traefik  (istio when enable_istio is true)"),
+        "Only used when enable_app_gateway (11f) is true. Application Gateway acts as a reverse proxy in front of an INTERNAL in-cluster ingress controller: istio (managed Istio internal gateway — set up and auto-wired for you; auto-selected when Istio 11j is on) or manual (baseline only — you install and wire your own open-source ingress controller). Only istio is wired by the CD pipeline; manual leaves the ingress controller and backend-pool wiring to you.",
+        "istio | manual",
+        "manual  (istio when enable_istio is true)"),
     ("11f3", "appgw_tls_key_vault_secret_id",
         "Optional. Key Vault secret ID of the TLS certificate for the Application Gateway HTTPS:443 listener (also adds an HTTP→HTTPS redirect). The gateway reads it with the AKS identity. Leave blank to serve HTTP:80 only; you can add TLS later.",
         "Key Vault secret URI, or blank",
@@ -496,7 +496,7 @@ for r in range(5, row):
     elif s == "aks_sku_tier":
         dropdown(ws1, r, 6, ["Free", "Standard", "Premium"])
     elif s == "ingress_controller":
-        dropdown(ws1, r, 6, ["istio", "traefik", "manual"])
+        dropdown(ws1, r, 6, ["istio", "manual"])
     elif s in bool_settings:
         dropdown(ws1, r, 6, ["true", "false"])
 

@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.15.1'
+    ModuleVersion     = '1.16.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,11 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.16.0
+- Change (ingress model simplified - managed Istio or bring-your-own): the App Gateway ingress path no longer installs an open-source controller for you. `ingress_controller` is now `istio` or `manual` (the `traefik` value and the CD's Helm/Traefik install are removed). For `istio` the accelerator sets up the managed Istio internal ingress gateway AND the CD auto-wires its private IP into the App Gateway backend pool. For `manual` the accelerator delivers the baseline (cluster + App Gateway + empty backend pool) and hands off: the customer installs and wires their own open-source ingress controller (guidance in the `ingress_next_steps` output and the CD job summary). This removes Helm from the pipeline entirely and keeps a single, understandable framework per path.
+- Change (Managed Prometheus + Grafana private): when private endpoints are in use (corp topology, or standalone with `enable_private_endpoints = true`) and Managed Prometheus is enabled, the Azure Monitor workspace and its Prometheus data collection endpoint are no longer reachable over the public internet. The module creates an Azure Monitor Private Link Scope (AMPLS) with a private endpoint (`pe-ampls-*`, subresource `azuremonitor`), adds the Prometheus DCE and the Log Analytics workspace as scoped services, sets `public_network_access_enabled = false` on the workspace and DCE, self-manages the five Azure Monitor `privatelink.*` DNS zones (or consumes hub-supplied ids via the new `monitor_private_dns_zone_ids` variable), and creates a Grafana managed private endpoint (`groupIds = ["prometheusMetrics"]`) so managed Grafana keeps querying Prometheus over the private path. Public deployments (no private endpoints) are unchanged.
+- Fix/perf (ingress wiring speed + reliability): when `istio` is selected, the CD "Wire ingress controller into App Gateway" step now discovers the internal LoadBalancer IP inside a SINGLE `az aks command invoke` (one in-cluster wait loop) instead of up to 30 separate poll invokes. Each invoke pays a ~15-20s command-pod scheduling cost, so the old design could take ~12 minutes and, on a transient inner failure, gave up silently (the inner command's non-zero exit was masked because `az aks command invoke` returns 0 and `-o none` hid the output). The step now surfaces failures and typically completes in ~1 minute.
+
 ## 1.15.1
 - Fix (deployment reliability): the Flux and Dapr cluster extensions (added in 1.14.0) now depend on the whole AKS module, so they no longer install concurrently with the AVM module's post-create system agent-pool update (`azapi_update_resource.default_agent_pool`). That concurrency caused a 409 `EtagMismatch` / `PutAgentPool_FailedPrecondition` ("Another operation is in progress", https://aka.ms/aks/aksoperationpreempted) that failed the whole apply on fresh deployments with GitOps/Dapr enabled, leaving later resources (e.g. the ACR private endpoint) uncreated and ingress unwired. The extensions are also serialized against each other (Dapr waits for Flux) so at most one long-running cluster extension operation is in flight at a time.
 

@@ -257,12 +257,12 @@ variable "enable_agic" {
 }
 
 variable "ingress_controller" {
-  description = "Ingress controller that the Application Gateway forwards to when it is used as the AKS ingress (i.e. NOT AGIC and NOT Application Gateway for Containers). One of: 'istio' (managed Istio internal ingress gateway), 'traefik' (deployed internally by the CD pipeline), or 'manual' (bring your own internal controller). Only meaningful when enable_app_gateway = true and enable_agic = false."
+  description = "Ingress controller that the Application Gateway forwards to when it is used as the AKS ingress (i.e. NOT AGIC and NOT Application Gateway for Containers). One of: 'istio' (managed Istio internal ingress gateway - set up and auto-wired) or 'manual' (baseline only; bring and wire your own open-source internal controller). Only meaningful when enable_app_gateway = true and enable_agic = false."
   type        = string
   default     = "manual"
   validation {
-    condition     = contains(["istio", "traefik", "manual"], var.ingress_controller)
-    error_message = "ingress_controller must be one of: istio, traefik, manual."
+    condition     = contains(["istio", "manual"], var.ingress_controller)
+    error_message = "ingress_controller must be one of: istio, manual."
   }
 }
 
@@ -484,6 +484,12 @@ variable "grafana_public_access" {
 
 variable "grafana_private_dns_zone_ids" {
   description = "Private DNS zone IDs (privatelink.grafana.azure.com) for the Grafana private endpoint, supplied from the hub in corp topology. Empty = self-manage the zone in standalone."
+  type        = list(string)
+  default     = []
+}
+
+variable "monitor_private_dns_zone_ids" {
+  description = "Private DNS zone IDs for the Azure Monitor (AMPLS) private endpoint (privatelink.monitor.azure.com, .oms/.ods.opinsights.azure.com, .agentsvc.azure-automation.net, .blob.core.windows.net), supplied from the hub in corp topology. Empty = self-manage the zones in standalone."
   type        = list(string)
   default     = []
 }

@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-27
+
+### Changed
+- **Ingress model simplified — managed Istio or bring-your-own.** The
+  Application Gateway ingress path no longer installs an open-source controller
+  for you. The `ingress_controller` variable now accepts only `istio` or
+  `manual` (the `traefik` value and the CD pipeline's Helm/Traefik install are
+  removed):
+  - `istio` — the accelerator sets up the managed Istio internal ingress
+    gateway and the CD pipeline auto-wires its private IP into the App Gateway
+    backend pool end-to-end. Requires `enable_istio_service_mesh = true` and
+    `istio_internal_ingress_gateway = true` (both set automatically when the
+    mesh is enabled).
+  - `manual` — the accelerator delivers the baseline (cluster + Application
+    Gateway + empty backend pool) and hands off. The customer installs and
+    wires their own open-source ingress controller (e.g. Traefik or
+    ingress-nginx) as an internal `LoadBalancer` Service and sets the backend
+    pool to its private IP. Guidance is printed in the `ingress_next_steps`
+    output and the CD job summary.
+
+  This removes Helm from the pipeline entirely and keeps a single, understandable
+  framework per path. The interactive wizard no longer prompts for a controller:
+  it selects `istio` when the mesh is enabled, otherwise `manual`.
+
+- **Managed Prometheus and Grafana are now private when private endpoints are
+  enabled.** Previously the Azure Monitor workspace (Managed Prometheus) and its
+  data collection endpoint were reachable over the public internet even in a
+  private-endpoint deployment. When private endpoints are in use (corp topology,
+  or standalone with `enable_private_endpoints = true`) and Managed Prometheus is
+  enabled, the module now:
+  - creates an **Azure Monitor Private Link Scope (AMPLS)** with a private
+    endpoint (`pe-ampls-*`, subresource `azuremonitor`) into the spoke's
+    private-endpoint subnet, and adds the Prometheus **data collection endpoint**
+    and the **Log Analytics workspace** as scoped services (private ingestion);
+  - sets `public_network_access_enabled = false` on the **Azure Monitor
+    workspace** and the **Prometheus DCE**, removing their public exposure;
+  - self-manages the five Azure Monitor `privatelink.*` DNS zones and links them
+    to the spoke VNet in standalone, or consumes hub-supplied zone ids via the
+    new `monitor_private_dns_zone_ids` variable in corp topology;
+  - creates a **Grafana managed private endpoint** to the workspace
+    (`groupIds = ["prometheusMetrics"]`) so managed Grafana keeps querying
+    Prometheus over the private query path after public access is disabled.
+
+  Public deployments (no private endpoints) are unchanged: the workspace and DCE
+  keep public network access and no AMPLS is created.
+
+### Fixed
+- **Ingress wiring speed and reliability (istio path).** The CD
+  "Wire ingress controller into App Gateway" step now discovers the internal
+  LoadBalancer IP inside a **single** `az aks command invoke` (one in-cluster
+  wait loop) instead of up to 30 separate poll invokes. Each invoke pays a
+  ~15–20s command-pod scheduling cost, so the old design could take ~12 minutes
+  and, on a transient inner failure, gave up silently — the inner command's
+  non-zero exit was masked because `az aks command invoke` returns 0 and
+  `-o none` hid the output. The step now runs the wait script with
+  `set -eo pipefail`, surfaces failures, and typically completes in ~1 minute.
+
 ## [1.15.1] - 2026-07-26
 
 ### Fixed

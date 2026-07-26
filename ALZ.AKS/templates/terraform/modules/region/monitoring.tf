@@ -24,6 +24,11 @@ resource "azurerm_monitor_workspace" "main" {
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   tags                = local.default_tags
+
+  # Query (PromQL) public access is disabled when private link is in use; Grafana
+  # reaches the workspace over a managed private endpoint (see
+  # monitoring-privatelink.tf).
+  public_network_access_enabled = local.monitor_private_link ? false : true
 }
 
 # Data Collection Endpoint for Prometheus
@@ -35,6 +40,10 @@ resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
   location            = azurerm_resource_group.main.location
   kind                = "Linux"
   tags                = local.default_tags
+
+  # Ingestion public access is disabled when private link is in use; the AKS
+  # metrics agent reaches the DCE over the AMPLS private endpoint.
+  public_network_access_enabled = local.monitor_private_link ? false : true
 }
 
 # Data Collection Rule for Prometheus metrics

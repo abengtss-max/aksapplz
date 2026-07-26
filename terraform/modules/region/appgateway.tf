@@ -99,11 +99,12 @@ resource "azurerm_application_gateway" "main" {
     port = 80
   }
 
-  # Backend pool for the in-cluster ingress controller (Istio internal gateway
-  # or Traefik), reached over its internal load balancer private IP. Left empty
-  # here: the CD pipeline discovers the internal LB IP after the controller is
-  # deployed and updates this pool out of band, so Terraform ignores changes to
-  # its addresses (see lifecycle below). An optional seed IP can be supplied.
+  # Backend pool for the in-cluster ingress controller, reached over its internal
+  # load balancer private IP. Left empty here: for ingress_controller = "istio"
+  # the CD pipeline discovers the managed Istio internal gateway's LB IP and
+  # updates this pool out of band (Terraform ignores changes to its addresses -
+  # see lifecycle below); for "manual" the customer wires their own controller's
+  # IP. An optional seed IP can be supplied via ingress_backend_ip.
   backend_address_pool {
     name         = local.appgw_backend_pool_name
     ip_addresses = var.ingress_backend_ip != "" ? [var.ingress_backend_ip] : null
