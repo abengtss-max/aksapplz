@@ -63,6 +63,7 @@ nav:
       - Multi-region: concepts/multi-region.md
   - Configuration reference: reference/configuration.md
   - Advanced: advanced.md
+  - Roadmap: https://github.com/users/abengtss-max/projects/1
   - Releases & versions: releases.md
   - Known issues: known-issues.md
   - FAQ: faq.md
