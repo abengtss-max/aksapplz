@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-07-27
+
+### Fixed
+- **Ingress controller is now auto-selected from the topology.** The
+  `ingress_controller` output previously echoed the raw variable, which allowed
+  an inconsistent state: with the managed Istio internal ingress gateway enabled
+  but `ingress_controller` left at `manual`, the CD pipeline silently skipped the
+  automatic App Gateway backend-pool wiring and left the pool empty. The value is
+  now **derived**: it resolves to `istio` automatically whenever
+  `enable_app_gateway && enable_istio_service_mesh && istio_internal_ingress_gateway`
+  are all true, otherwise it falls back to the customer-selected value. The
+  wiring is implemented entirely in the pipeline and stays fully **dynamic** - it
+  discovers the Istio internal ingress gateway's private LoadBalancer IP at run
+  time and sets it on the backend pool, so no IP is ever hard-coded (customers
+  bring their own address space).
+- **Defender for Containers plan now enables the full extension set.** When
+  `enable_defender_for_containers_plan` is set, the subscription plan now
+  enables `AgentlessVmScanning` and `ContainerSensor` in addition to
+  `AgentlessDiscoveryForKubernetes` and `ContainerRegistriesVulnerabilityAssessments`.
+  Previously only the latter two were configured, so opting into the plan left
+  Defender for Cloud reporting the sensor / agentless-scanning coverage as
+  "partial". The completed set yields full container protection.
+- **Deploying identity is now granted Kubernetes read access so automatic
+  ingress wiring works end-to-end.** With Azure RBAC for Kubernetes enabled and
+  local accounts disabled, the CD identity's `az aks command invoke` kubectl was
+  silently *forbidden* to read the Istio internal ingress gateway service, so the
+  automatic App Gateway backend-pool wiring never resolved an IP (it only worked
+  when an operator wired it by hand). The region module now assigns the deployer
+  an **Azure Kubernetes Service RBAC Reader** role on the cluster
+  (gated on `enable_azure_rbac`), and the CD wire step now surfaces the in-cluster
+  kubectl error instead of swallowing it. Ingress wiring is now genuinely
+  hands-off for customers.
+
 ## [1.16.0] - 2026-07-27
 
 ### Changed

@@ -17,6 +17,21 @@ resource "azurerm_role_assignment" "aks_network_contributor" {
   principal_id         = azurerm_user_assigned_identity.aks.principal_id
 }
 
+# The deploying identity (the CD service principal in the pipeline) authenticates
+# to the cluster through Azure RBAC for Kubernetes when enable_azure_rbac = true
+# and local accounts are disabled. Without a Kubernetes RBAC role its kubectl
+# calls are silently forbidden - including the `az aks command invoke` the CD
+# pipeline uses to discover the Istio internal ingress gateway's private IP for
+# automatic App Gateway backend-pool wiring. Granting the deployer the read role
+# lets that automatic ingress wiring run end-to-end with no manual step.
+resource "azurerm_role_assignment" "deployer_aks_rbac_reader" {
+  count = var.enable_azure_rbac ? 1 : 0
+
+  scope                = module.aks.resource_id
+  role_definition_name = "Azure Kubernetes Service RBAC Reader"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
 # NOTE: The AcrPull grant for this region's kubelet identity is created at the
 # root (main.acr.tf), scoped to the real ACR resource. Keeping it here would
 # require the deterministic ACR id (to avoid a region<->acr cycle), which loses

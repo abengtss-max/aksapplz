@@ -30,4 +30,16 @@ resource "azurerm_security_center_subscription_pricing" "containers" {
   extension {
     name = "ContainerRegistriesVulnerabilityAssessments"
   }
+
+  # Agentless scanning of AKS node VMs for vulnerabilities and misconfigurations.
+  extension {
+    name = "AgentlessVmScanning"
+  }
+
+  # In-cluster Defender sensor (runtime threat detection, anti-malware and
+  # security gating), provisioned via the AKS security-profile add-on. Without
+  # this extension Defender for Cloud reports the sensor coverage as "partial".
+  extension {
+    name = "ContainerSensor"
+  }
 }

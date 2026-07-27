@@ -37,6 +37,24 @@ locals {
   traffic_manager_dns_name = lower("${var.workload_name}-${local.env_short}-${substr(sha256("${var.subscription_id}-${var.workload_name}-${local.env_short}"), 0, 8)}")
   fleet_name               = "fleet-${var.workload_name}-${local.env_short}"
 
+  # ---------------------------------------------------------------------------
+  # Effective ingress controller for the Application Gateway backend pool.
+  #
+  # When the managed Istio internal ingress gateway is provisioned it IS the
+  # cluster ingress, so the CD pipeline auto-wires the App Gateway backend pool
+  # to that gateway's PRIVATE load-balancer IP, which it discovers at run time
+  # (no hard-coded IP - customers bring their own address space). Only when
+  # there is no Istio internal gateway does the customer-selected
+  # var.ingress_controller apply (default "manual" = bring your own controller).
+  #
+  # Deriving the value here prevents an inconsistent state where the Istio
+  # internal ingress gateway is enabled but ingress_controller was left at
+  # "manual", which would silently skip the automatic backend-pool wiring.
+  # ---------------------------------------------------------------------------
+  effective_ingress_controller = (
+    var.enable_app_gateway && var.enable_istio_service_mesh && var.istio_internal_ingress_gateway
+  ) ? "istio" : var.ingress_controller
+
   # Tags
   default_tags = merge(var.tags, {
     workload    = var.workload_name

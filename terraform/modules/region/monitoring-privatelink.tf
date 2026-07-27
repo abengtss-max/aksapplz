@@ -125,8 +125,12 @@ resource "azurerm_private_endpoint" "monitor" {
 resource "azapi_resource" "grafana_amw_mpe" {
   count = local.monitor_private_link && var.enable_managed_grafana ? 1 : 0
 
-  type      = "Microsoft.Dashboard/grafana/managedPrivateEndpoints@2023-09-01"
-  name      = "mpe-amw-${local.name_prefix}"
+  type = "Microsoft.Dashboard/grafana/managedPrivateEndpoints@2023-09-01"
+  # Grafana managed private endpoint names are limited to 2-20 characters
+  # (alphanumeric/dashes, begin with a letter, end with a letter or digit), so
+  # the descriptive name_prefix cannot be used directly. Use a short, stable
+  # hash suffix to stay within the limit while remaining deterministic.
+  name      = "mpe-amw-${substr(md5(local.name_prefix), 0, 8)}"
   parent_id = azurerm_dashboard_grafana.main[0].id
   location  = azurerm_resource_group.main.location
   tags      = local.default_tags
