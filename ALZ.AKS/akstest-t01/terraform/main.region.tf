@@ -76,6 +76,7 @@ module "region" {
   istio_external_ingress_gateway  = var.istio_external_ingress_gateway
   enable_vpa                      = var.enable_vpa
   enable_node_auto_provisioning   = var.enable_node_auto_provisioning
+  auto_scaler_profile             = var.auto_scaler_profile
   enable_fips                     = var.enable_fips
   enable_blob_csi_driver          = var.enable_blob_csi_driver
   enable_disk_csi_driver          = var.enable_disk_csi_driver

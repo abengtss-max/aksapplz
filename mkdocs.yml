@@ -62,7 +62,9 @@ nav:
       - Topologies: concepts/topologies.md
       - Multi-region: concepts/multi-region.md
   - Configuration reference: reference/configuration.md
-  - Advanced: advanced.md
+  - Advanced:
+      - advanced.md
+      - Cluster autoscaler tuning: advanced/cluster-autoscaler-tuning.md
   - Roadmap: https://github.com/users/abengtss-max/projects/1
   - Releases & versions: releases.md
   - Known issues: known-issues.md

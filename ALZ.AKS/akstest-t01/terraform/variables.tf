@@ -506,6 +506,38 @@ variable "enable_node_auto_provisioning" {
   default     = false
 }
 
+variable "auto_scaler_profile" {
+  description = "Opt-in cluster-autoscaler profile tuning applied to every region. Leave null (default) to keep the native AKS cluster-autoscaler defaults - the accelerator does not impose an opinionated profile because it is cluster-wide and the right cost-vs-performance values depend on your workload. Set only the keys you want to override. See docs: Advanced > Cluster autoscaler tuning."
+  type = object({
+    balance_similar_node_groups           = optional(string)
+    daemonset_eviction_for_empty_nodes    = optional(bool)
+    daemonset_eviction_for_occupied_nodes = optional(bool)
+    expander                              = optional(string)
+    ignore_daemonsets_utilization         = optional(bool)
+    max_empty_bulk_delete                 = optional(string)
+    max_graceful_termination_sec          = optional(string)
+    max_node_provision_time               = optional(string)
+    max_total_unready_percentage          = optional(string)
+    new_pod_scale_up_delay                = optional(string)
+    ok_total_unready_count                = optional(string)
+    scale_down_delay_after_add            = optional(string)
+    scale_down_delay_after_delete         = optional(string)
+    scale_down_delay_after_failure        = optional(string)
+    scale_down_unneeded_time              = optional(string)
+    scale_down_unready_time               = optional(string)
+    scale_down_utilization_threshold      = optional(string)
+    scan_interval                         = optional(string)
+    skip_nodes_with_local_storage         = optional(string)
+    skip_nodes_with_system_pods           = optional(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.auto_scaler_profile == null || try(var.auto_scaler_profile.expander, null) == null || contains(["least-waste", "most-pods", "priority", "random"], var.auto_scaler_profile.expander)
+    error_message = "auto_scaler_profile.expander must be one of: least-waste, most-pods, priority, random."
+  }
+}
+
 variable "enable_fips" {
   description = "Enable FIPS 140-2 compliant node OS."
   type        = bool

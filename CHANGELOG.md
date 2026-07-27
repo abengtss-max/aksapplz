@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-27
+
+### Added
+- **The AKS cluster autoscaler profile is now tunable — opt-in, with defaults
+  unchanged.** A new `auto_scaler_profile` object variable is plumbed through the
+  root module, the region module, and into the AVM AKS module's
+  `auto_scaler_profile`. It defaults to `null`, so clusters keep the **native AKS
+  autoscaler defaults** and existing deployments see **no behavioural change**.
+  - The accelerator deliberately does **not** ship an opinionated profile. The
+    profile is **cluster-wide** (it also affects the system pool) and the right
+    cost-versus-performance values are **workload-specific** — this matches
+    Microsoft's own guidance, which frames tuning the profile as a per-workload
+    trade-off rather than a default.
+  - Customers set only the keys they want to override in their `*.tfvars`;
+    everything omitted falls back to the AKS default. The `expander` value is
+    validated at plan time to one of `least-waste | most-pods | priority |
+    random`.
+  - Rather than choosing values for the customer, the accelerator **exposes and
+    explains** them: a dedicated docs page (**Advanced → Cluster autoscaler
+    tuning**) covering the trade-off, the AKS defaults, Microsoft's example
+    cost/performance profiles and copy-paste tfvars snippets; a Configuration
+    reference row; a Day-2 runbook cross-link; and a single optional awareness
+    row in the planning checklist.
+  - Closes roadmap issue #13.
+
 ## [1.16.2] - 2026-07-27
 
 ### Fixed

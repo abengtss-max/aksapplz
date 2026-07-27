@@ -31,6 +31,10 @@ Always upgrade `test` first, then promote.
 - **System pool** is managed by the cluster-autoscaler (`min/max` in tfvars).
 - **User pool** scales by HPA + KEDA (if enabled). Tune via tfvars
   `aks_user_pool_min_count` / `aks_user_pool_max_count`.
+- **Autoscaler behaviour (cost vs performance)** is left at native AKS defaults but can be
+  tuned via the opt-in `auto_scaler_profile` tfvars object. See
+  [Cluster autoscaler tuning](../../docs/advanced/cluster-autoscaler-tuning.md) for the
+  trade-offs and Microsoft's example cost/performance profiles.
 
 ### App workloads
 - Use HPA + KEDA for event-driven scale.

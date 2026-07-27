@@ -295,6 +295,15 @@ module "aks" {
   } : null
 
   # --------------------------------------------------------------------------
+  # Cluster autoscaler profile (opt-in). When var.auto_scaler_profile is null
+  # the module receives null and the cluster keeps the native AKS autoscaler
+  # defaults - the accelerator deliberately does NOT ship an opinionated
+  # profile (it is cluster-wide and the cost-vs-performance trade-off is
+  # workload-specific). Customers tune it in their tfvars; see the docs.
+  # --------------------------------------------------------------------------
+  auto_scaler_profile = var.auto_scaler_profile
+
+  # --------------------------------------------------------------------------
   # Blob CSI Driver & Key Vault CSI Driver
   # --------------------------------------------------------------------------
   storage_profile = {

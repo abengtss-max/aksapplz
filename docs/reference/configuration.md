@@ -26,6 +26,7 @@ editing this file is idempotent.
 | `enable_keda` | `true` | KEDA event-driven autoscaling. |
 | `enable_vpa` | scenario | Vertical Pod Autoscaler. |
 | `enable_node_auto_provisioning` | scenario | Karpenter-style node auto-provisioning. |
+| `auto_scaler_profile` | `null` (AKS defaults) | Opt-in [cluster autoscaler tuning](../advanced/cluster-autoscaler-tuning.md) (cost vs performance). Set only the keys you want to override; leave unset to keep native AKS defaults. |
 
 ## Networking & ingress
 

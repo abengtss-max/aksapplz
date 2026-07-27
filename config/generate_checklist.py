@@ -136,6 +136,7 @@ REFERENCES = {
     "enable_fips": "https://learn.microsoft.com/azure/aks/enable-fips-nodes",
     "enable_backup": "https://learn.microsoft.com/azure/backup/azure-kubernetes-service-backup-overview",
     "enable_cost_analysis": "https://learn.microsoft.com/azure/aks/cost-analysis",
+    "auto_scaler_profile": "https://learn.microsoft.com/azure/aks/cluster-autoscaler-overview#optimizing-the-cluster-autoscaler-profile",
     # Advanced cluster settings (Tab 2)
     "system_node_pool.vm_size": "https://learn.microsoft.com/azure/aks/use-system-pools",
     "system_node_pool.min_count": "https://learn.microsoft.com/azure/aks/cluster-autoscaler-overview",
@@ -450,6 +451,10 @@ decisions = [
         "Cost breakdown per namespace in the Azure portal.",
         "true | false",
         "false  (true for regulated)"),
+    ("11p", "auto_scaler_profile",
+        "Day-2 (optional): fine-tune the cluster autoscaler for cost vs performance. Keep AKS defaults unless Azure Advisor flags idle nodes. See docs.",
+        "Keep AKS defaults | tune in tfvars",
+        "Keep AKS defaults"),
 ]
 
 row = 5

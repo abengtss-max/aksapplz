@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.16.2'
+    ModuleVersion     = '1.17.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.17.0
+- Feature (expose the cluster autoscaler profile - opt-in, defaults unchanged): the AKS cluster-autoscaler profile is now tunable via a new `auto_scaler_profile` object variable, plumbed root -> region module -> AVM `auto_scaler_profile`. It defaults to `null`, so clusters keep the native AKS autoscaler defaults and existing deployments are completely unaffected (no behavioural change). The accelerator deliberately does NOT ship an opinionated profile: the profile is cluster-wide (it also affects the system pool) and the right cost-vs-performance values are workload-specific, which matches Microsoft's own "optimize the cluster autoscaler profile" guidance (a per-workload trade-off, not a default). Customers set only the keys they want to override in tfvars; `expander` is validated to one of `least-waste | most-pods | priority | random`. Instead of picking values for the customer, the accelerator now EXPOSES and EXPLAINS them across three layers: a dedicated docs page (Advanced > Cluster autoscaler tuning) with the trade-off, AKS defaults, Microsoft's example cost/performance profiles and copy-paste tfvars snippets; a Configuration reference row; a Day-2 runbook cross-link; and a single optional awareness row in the planning checklist. Closes roadmap issue #13.
+
 ## 1.16.2
 - Fix (Azure Backup for AKS deployed in `ProtectionError`): the hardened, AAD-only backup datastore (`shared_access_key_enabled = false`, and public network access disabled where the platform mandates private connectivity) left the backup instance unhealthy on a fresh deploy for two reasons, both now fixed. (1) The backup extension is now installed with `configuration.backupStorageLocation.config.useAAD = "true"`, so its in-cluster data mover authenticates to blob storage with the user-assigned extension identity (already granted `Storage Blob Data Contributor`) instead of defaulting to storage-account-key mode and trying to list the (disabled) account keys - the previous behaviour reported the `default` BackupStorageLocation as unavailable with `UserErrorExtensionIdentityNotFound`. (2) The region module now provisions a blob private endpoint (`pe-<storage account>`, subresource `blob`) for the backup storage account in the spoke private-endpoint subnet and derives the account's `public_network_access_enabled` from the private-endpoint posture; without it, public-access-disabled + ignored VNet service endpoints blocked the data mover with `403 AuthorizationFailure`. The blob `privatelink.blob.core.windows.net` zone is reused from the Azure Monitor (AMPLS) setup when present, self-managed otherwise, or hub-supplied in corp topology, and the backup container create is ordered behind the private endpoint.
 
