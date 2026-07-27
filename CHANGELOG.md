@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.2] - 2026-07-27
+
+### Fixed
+- **Azure Backup for AKS no longer deploys in a `ProtectionError` state.** The
+  backup datastore is intentionally hardened (`shared_access_key_enabled = false`,
+  AAD-only) and, on platforms that mandate private connectivity, has public
+  network access disabled. Two gaps left the backup instance unhealthy on a
+  fresh deploy:
+  - **The backup extension was not told to use Microsoft Entra ID (AAD) for its
+    Backup Storage Location.** Without it the in-cluster data mover defaulted to
+    *storage-account-key* mode and tried to list the account keys — which the
+    keys-disabled account refuses — so the `default` BackupStorageLocation was
+    reported *unavailable* (`UserErrorExtensionIdentityNotFound`). The extension
+    now sets `configuration.backupStorageLocation.config.useAAD = "true"`, so it
+    authenticates to blob storage with its user-assigned extension identity
+    (already granted `Storage Blob Data Contributor`) and never lists keys.
+  - **The backup storage account had no private endpoint.** With public network
+    access disabled the VNet service-endpoint firewall rules are ignored, so the
+    data mover's blob requests were blocked (`403 AuthorizationFailure`). The
+    region module now provisions a **blob private endpoint** for the backup
+    storage account in the spoke's private-endpoint subnet (and sets the
+    account's `public_network_access_enabled` from the private-endpoint posture),
+    reusing the Azure Monitor (AMPLS) `privatelink.blob.core.windows.net` zone
+    when present, self-managing it otherwise, or consuming the hub-supplied zone
+    id in corp topology. The backup container create is ordered behind the
+    private endpoint so the VNet-injected deployer can reach the account.
+
 ## [1.16.1] - 2026-07-27
 
 ### Fixed

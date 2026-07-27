@@ -50,7 +50,12 @@ resource "azurerm_storage_account" "backup" {
   min_tls_version                   = "TLS1_2"
   allow_nested_items_to_be_public   = false
   infrastructure_encryption_enabled = true
-  public_network_access_enabled     = true
+  # Disable public network access when private endpoints are in use. The platform
+  # (and MCAPS policy) mandate private connectivity, and once public access is
+  # off VNet service endpoints are ignored, so the blob private endpoint created
+  # below is the reachability path for the backup extension's in-cluster data
+  # mover (and the VNet-injected deployer).
+  public_network_access_enabled = local.use_private_endpoints ? false : true
   # AAD-only: the backup extension and vault authenticate with managed
   # identities (Storage Blob Data Contributor); shared keys are disabled.
   shared_access_key_enabled = false
@@ -92,6 +97,74 @@ resource "azurerm_storage_account" "backup" {
   depends_on = [module.spoke_vnet]
 }
 
+# --- Private connectivity for the backup datastore ---------------------------
+# When private endpoints are in use the storage account has public network
+# access disabled (above), so the backup extension's in-cluster data mover (and
+# the VNet-injected deployer) reach the blob service through a private endpoint
+# in the spoke's private-endpoint subnet. Only one privatelink.blob.core.windows
+# .net zone may exist per resource group, so the Azure Monitor (AMPLS) blob zone
+# is reused when Managed Prometheus already manages it; otherwise this feature
+# manages its own; in corp topology the zone id is supplied from the hub.
+locals {
+  backup_use_pe = var.enable_backup && local.use_private_endpoints
+
+  backup_manage_blob_dns = local.backup_use_pe && local.manage_private_dns && !local.monitor_private_link
+
+  backup_blob_dns_zone_id = (
+    !local.backup_use_pe ? null :
+    local.manage_private_dns ? (
+      local.monitor_private_link
+      ? try(azurerm_private_dns_zone.monitor["privatelink.blob.core.windows.net"].id, null)
+      : try(azurerm_private_dns_zone.backup_blob[0].id, null)
+    ) :
+    try(one([for id in var.monitor_private_dns_zone_ids : id if length(regexall("privatelink[.]blob[.]core[.]windows[.]net$", id)) > 0]), null)
+  )
+}
+
+resource "azurerm_private_dns_zone" "backup_blob" {
+  count = local.backup_manage_blob_dns ? 1 : 0
+
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "backup_blob" {
+  count = local.backup_manage_blob_dns ? 1 : 0
+
+  name                  = "pdnslink-bkp-blob-${local.name_prefix}"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.backup_blob[0].name
+  virtual_network_id    = module.spoke_vnet.resource_id
+  registration_enabled  = false
+  tags                  = local.default_tags
+}
+
+resource "azurerm_private_endpoint" "backup_blob" {
+  count = local.backup_use_pe ? 1 : 0
+
+  name                = "pe-${local.backup_storage_account_name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  subnet_id           = module.spoke_vnet.subnets["private_endpoints"].resource_id
+  tags                = local.default_tags
+
+  private_service_connection {
+    name                           = "psc-${local.backup_storage_account_name}"
+    private_connection_resource_id = azurerm_storage_account.backup[0].id
+    subresource_names              = ["blob"]
+    is_manual_connection           = false
+  }
+
+  dynamic "private_dns_zone_group" {
+    for_each = local.backup_blob_dns_zone_id != null ? [1] : []
+    content {
+      name                 = "blob-dns-zone-group"
+      private_dns_zone_ids = [local.backup_blob_dns_zone_id]
+    }
+  }
+}
+
 # The deploying identity creates the container over the AAD data plane (shared
 # keys are disabled), so it needs a blob data role on the account first.
 resource "azurerm_role_assignment" "backup_deployer_blob_contributor" {
@@ -111,7 +184,13 @@ resource "azurerm_storage_container" "backup" {
 
   # Wait for the deployer's blob data role + the network ACL to settle; data
   # plane auth is AAD-only and RBAC propagation must precede container create.
-  depends_on = [azurerm_role_assignment.backup_deployer_blob_contributor]
+  # When private endpoints are in use the deployer reaches the blob service over
+  # the private endpoint, so it (and its DNS link) must exist before this create.
+  depends_on = [
+    azurerm_role_assignment.backup_deployer_blob_contributor,
+    azurerm_private_endpoint.backup_blob,
+    azurerm_private_dns_zone_virtual_network_link.backup_blob,
+  ]
 }
 
 # Blob service diagnostic logging (read/write/delete) to Log Analytics.
@@ -172,7 +251,13 @@ resource "azurerm_kubernetes_cluster_extension" "backup" {
     "configuration.backupStorageLocation.config.resourceGroup"  = azurerm_resource_group.main.name
     "configuration.backupStorageLocation.config.storageAccount" = azurerm_storage_account.backup[0].name
     "configuration.backupStorageLocation.config.subscriptionId" = data.azurerm_client_config.current.subscription_id
-    "credentials.tenantId"                                      = var.tenant_id
+    # Use Microsoft Entra ID (AAD) auth for the BackupStorageLocation via the
+    # extension's user-assigned identity (granted Storage Blob Data Contributor).
+    # Required because the backup storage account has shared_access_key_enabled =
+    # false; without this the data mover falls back to listing storage keys and
+    # the BackupStorageLocation "default" becomes unavailable (ProtectionError).
+    "configuration.backupStorageLocation.config.useAAD" = "true"
+    "credentials.tenantId"                              = var.tenant_id
   }
 }
 

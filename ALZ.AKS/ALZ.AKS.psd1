@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.16.1'
+    ModuleVersion     = '1.16.2'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.16.2
+- Fix (Azure Backup for AKS deployed in `ProtectionError`): the hardened, AAD-only backup datastore (`shared_access_key_enabled = false`, and public network access disabled where the platform mandates private connectivity) left the backup instance unhealthy on a fresh deploy for two reasons, both now fixed. (1) The backup extension is now installed with `configuration.backupStorageLocation.config.useAAD = "true"`, so its in-cluster data mover authenticates to blob storage with the user-assigned extension identity (already granted `Storage Blob Data Contributor`) instead of defaulting to storage-account-key mode and trying to list the (disabled) account keys - the previous behaviour reported the `default` BackupStorageLocation as unavailable with `UserErrorExtensionIdentityNotFound`. (2) The region module now provisions a blob private endpoint (`pe-<storage account>`, subresource `blob`) for the backup storage account in the spoke private-endpoint subnet and derives the account's `public_network_access_enabled` from the private-endpoint posture; without it, public-access-disabled + ignored VNet service endpoints blocked the data mover with `403 AuthorizationFailure`. The blob `privatelink.blob.core.windows.net` zone is reused from the Azure Monitor (AMPLS) setup when present, self-managed otherwise, or hub-supplied in corp topology, and the backup container create is ordered behind the private endpoint.
+
 ## 1.16.1
 - Fix (ingress auto-selection): the `ingress_controller` output is now DERIVED from the deployment topology instead of echoing the raw variable. It resolves to `istio` automatically whenever the managed Istio internal ingress gateway is present (`enable_app_gateway && enable_istio_service_mesh && istio_internal_ingress_gateway`), otherwise it falls back to the customer-selected value (`manual`). This prevents an inconsistent config where the Istio internal ingress gateway is enabled but `ingress_controller` was left at `manual`, which silently skipped the CD auto-wiring and left the App Gateway backend pool empty. The wiring itself is implemented in the pipeline and remains fully dynamic - it discovers the Istio internal ingress gateway private LoadBalancer IP at run time and sets it on the backend pool, so no IP is ever hard-coded (customers bring their own address space).
 - Fix (Defender for Containers completeness): when `enable_defender_for_containers_plan` is set, the subscription plan now enables the FULL extension set - `AgentlessVmScanning` and `ContainerSensor` were added alongside `AgentlessDiscoveryForKubernetes` and `ContainerRegistriesVulnerabilityAssessments`. Previously only the latter two were configured, so opting into the plan left Defender for Cloud reporting the sensor/agentless-scanning coverage as "partial". The completed set yields full container protection.
