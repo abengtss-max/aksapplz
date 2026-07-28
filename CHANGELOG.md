@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.3] - 2026-07-28
+
+### Fixed
+- **`terraform destroy` / plan failed on the `acr_login_server` output.** The
+  root output referenced `module.acr.resource.login_server`, but the
+  `Azure/avm-res-containerregistry-registry` module (constraint `~> 0.4`, which
+  resolves any version below `1.0.0`) does not expose a `resource.login_server`
+  attribute across every version it resolves to — newer versions removed the
+  `resource` output entirely. Because Terraform evaluates outputs during both
+  apply and destroy planning, a `terraform destroy` (or any plan) failed with
+  `Unsupported attribute ... module.acr ... does not have an attribute named
+  "resource"` and exited before doing any work. The output now derives the login
+  server from the always-present `name` output as `"${module.acr.name}.azurecr.io"`,
+  which is version-agnostic across the `~> 0.4` range and matches the public-cloud
+  ACR login-server convention the accelerator already assumes. No inputs changed
+  and the emitted value is unchanged for every deployment.
+
 ## [1.18.2] - 2026-07-28
 
 ### Fixed

@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.2'
+    ModuleVersion     = '1.18.3'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.3
+- Fix (`terraform destroy` / plan failed on the `acr_login_server` output): the root output referenced `module.acr.resource.login_server`, but the `Azure/avm-res-containerregistry-registry` module (constraint `~> 0.4`, which resolves anything below `1.0.0`) does not expose a `resource.login_server` attribute in every version it resolves to - newer versions removed the `resource` output entirely. Because Terraform evaluates outputs during BOTH apply and destroy planning, a `terraform destroy` (or any plan) failed with `Unsupported attribute ... module.acr ... does not have an attribute named "resource"` and exited 1 before doing any work. The output now derives the login server from the always-present `name` output as `"${module.acr.name}.azurecr.io"`, which is version-agnostic across the whole `~> 0.4` range and matches the public-cloud ACR login-server convention the accelerator already assumes (e.g. the `privatelink.azurecr.io` zone). No inputs changed and the emitted output value is unchanged for every deployment.
+
 ## 1.18.2
 - Fix (jumpbox outbound connectivity): a standalone jumpbox failed the CD apply at the `AADSSHLoginForLinux` extension with `Network is unreachable` / connection timeouts because the no-public-IP VM had no outbound internet access. Azure retired **default outbound access** (2025-09-30), so a VM with no public IP in a standalone spoke has zero implicit egress, and the Entra SSH extension installer (and cloud-init tooling install) could not reach the Ubuntu/Microsoft package repositories. The jumpbox subnet now gets a dedicated **NAT gateway** (Standard SKU + Standard static public IP) for deterministic, secure egress while the VM itself remains private. This is created only for **standalone** deployments (`enable_management_jumpbox = true` and no hub) via a new `enable_jumpbox_nat` gate; in corp/ALZ topologies egress continues to flow through the hub firewall using the AKS route table, so no NAT gateway is added there. The `AzureBastionSubnet` is untouched. No new inputs; deployments without the jumpbox are unaffected.
 

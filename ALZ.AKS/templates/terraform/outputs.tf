@@ -103,7 +103,7 @@ output "acr_id" {
 
 output "acr_login_server" {
   description = "The login server URL for ACR."
-  value       = module.acr.resource.login_server
+  value       = "${module.acr.name}.azurecr.io"
 }
 
 # --- Per-region maps (multi-region) ---
