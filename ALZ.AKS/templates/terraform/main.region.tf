@@ -118,4 +118,12 @@ module "region" {
   grafana_private_dns_zone_ids  = var.grafana_private_dns_zone_ids
   monitor_private_dns_zone_ids  = var.monitor_private_dns_zone_ids
   grafana_admin_group_object_id = var.grafana_admin_group_object_id
+
+  # Management access (opt-in Azure Bastion + jumpbox VM)
+  enable_management_jumpbox      = var.enable_management_jumpbox
+  jumpbox_vm_size                = var.jumpbox_vm_size
+  jumpbox_admin_username         = var.jumpbox_admin_username
+  bastion_sku                    = var.bastion_sku
+  jumpbox_auto_shutdown_time     = var.jumpbox_auto_shutdown_time
+  jumpbox_auto_shutdown_timezone = var.jumpbox_auto_shutdown_timezone
 }

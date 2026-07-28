@@ -43,6 +43,16 @@ locals {
   nsg_aks_system_name   = "nsg-aks-system-${local.name_prefix}"
   nsg_aks_user_name     = "nsg-aks-user-${local.name_prefix}"
   nsg_apiserver_name    = "nsg-aks-apiserver-${local.name_prefix}"
+  nsg_jumpbox_name      = "nsg-jbx-${local.name_prefix}"
+  nsg_bastion_name      = "nsg-bas-${local.name_prefix}"
+
+  # Management access (opt-in Azure Bastion + jumpbox VM)
+  enable_jumpbox    = var.enable_management_jumpbox
+  bastion_name      = "bas-${local.name_prefix}"
+  bastion_pip_name  = "pip-bas-${local.name_prefix}"
+  jumpbox_vm_name   = "vm-jbx-${local.name_prefix}"
+  jumpbox_nic_name  = "nic-jbx-${local.name_prefix}"
+  jumpbox_disk_name = "osdisk-jbx-${local.name_prefix}"
 
   # Backup datastore storage account — globally unique, <=24 lowercase alnum.
   backup_storage_account_name = "stbkp${substr(md5(local.name_prefix), 0, 18)}"
@@ -84,6 +94,16 @@ locals {
     ingress = {
       name             = "snet-ingress-${local.name_prefix}"
       address_prefixes = [var.subnet_address_prefixes.ingress]
+    }
+    jumpbox = {
+      name             = "snet-jbx-${local.name_prefix}"
+      address_prefixes = [var.subnet_address_prefixes.jumpbox]
+    }
+    # Azure Bastion requires the subnet to be named exactly "AzureBastionSubnet"
+    # and be at least a /26.
+    bastion = {
+      name             = "AzureBastionSubnet"
+      address_prefixes = [var.subnet_address_prefixes.bastion]
     }
   }
 

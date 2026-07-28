@@ -233,6 +233,41 @@ Quick wins:
 - Disable Defender (`enable_defender = false`) in `dev`/`test` envs.
 - Use `aks_sku_tier = "Free"` in `dev` (scenario 11 demonstrates this).
 
+## 10a. Management access via Bastion + jumpbox (opt-in)
+
+Only relevant when `enable_management_jumpbox = true` (standalone deployments).
+A **private** AKS cluster has no public API endpoint, so `kubectl` must run from
+inside the VNet. The opt-in jumpbox provides that access path with **no public
+IP on the VM** — reachable only through Azure Bastion using Microsoft Entra ID.
+
+> In ALZ/corp topologies leave this off and use the connectivity hub's
+> centralized Bastion/VPN instead.
+
+Connect (native SSH client over Bastion tunneling — requires `bastion_sku = "Standard"`):
+
+```powershell
+# Entra ID login through Bastion to the jumpbox (no public IP, no SSH key needed)
+az network bastion ssh `
+  --name bas-<workload>-<env>-<loc> `
+  --resource-group rg-<workload>-<env>-<loc> `
+  --target-resource-id <jumpbox-vm-resource-id> `
+  --auth-type AAD --username <you>@<tenant>
+```
+
+On the jumpbox (tooling is pre-installed via cloud-init):
+
+```bash
+az login --identity            # uses the jumpbox system-assigned managed identity
+az aks get-credentials -g rg-<workload>-<env>-<loc> -n aks-<workload>-<env>-<loc>
+kubelogin convert-kubeconfig -l azurecli
+kubectl get nodes
+```
+
+The jumpbox identity is granted **Azure Kubernetes Service Cluster User** (to
+pull the kubeconfig) and, when `enable_azure_rbac = true`, **Azure Kubernetes
+Service RBAC Reader** (read-only in-cluster). Grant additional Kubernetes RBAC
+as needed. The VM auto-shuts down daily (`jumpbox_auto_shutdown_time`).
+
 ## 11. Pre-publish accelerator updates
 
 When publishing accelerator changes that affect generated workload repos:

@@ -73,6 +73,11 @@ enable_dapr: false
 enable_fips: false
 enable_backup: true
 enable_cost_analysis: true
+# Opt-in Azure Bastion + hardened jumpbox VM (standalone only; ALZ hubs provide Bastion/VPN)
+# jumpbox_vm_size / bastion_sku apply only when enable_management_jumpbox: true
+enable_management_jumpbox: false
+jumpbox_vm_size: Standard_B2s
+bastion_sku: Standard
 enable_acr_geo_replication: false
 
 # Basic Inputs (Do not modify)

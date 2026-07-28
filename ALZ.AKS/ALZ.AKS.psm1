@@ -1030,6 +1030,8 @@ function Get-InteractiveInputs {
         @{ Key = "enable_fips";             Label = "Enable FIPS 140-2 compliant node OS?";     Default = $(if ($isRegulated) { "true" } else { "false" }) }
         @{ Key = "enable_backup";           Label = "Enable Azure Backup for AKS?";             Default = $(if ($isRegulated -or $isMultiRegion) { "true" } else { "false" }) }
         @{ Key = "enable_cost_analysis";    Label = "Enable cost analysis add-on?";             Default = $(if ($isRegulated) { "true" } else { "false" }) }
+        # --- Management access (standalone only; ALZ hubs provide Bastion/VPN) ---
+        @{ Key = "enable_management_jumpbox"; Label = "Enable opt-in Azure Bastion + jumpbox VM (standalone only)?"; Default = "false" }
     )
     foreach ($feat in $featureDefaults) {
         $v = Read-Host "  $($feat.Label) (true/false) [$($feat.Default)]"
@@ -1101,6 +1103,30 @@ function Get-InteractiveInputs {
         $config.subnet_address_prefix_agc = if ([string]::IsNullOrEmpty($v)) { "10.10.24.0/24" } else { $v }
     } else {
         $config.subnet_address_prefix_agc = "10.10.24.0/24"
+    }
+
+    # ── Management jumpbox sizing — prompt only when the jumpbox is enabled ──
+    # A private cluster is operated from an in-VNet jumpbox reached over Azure
+    # Bastion. The customer picks the VM size (any valid Azure VM size) and the
+    # Bastion SKU; both keep their defaults when the jumpbox is disabled so the
+    # rendered tfvars stay valid.
+    if ($config.enable_management_jumpbox -eq $true) {
+        Write-Host ""
+        Write-Log "jumpbox_vm_size" -Severity "INPUT REQUIRED"
+        Write-Host "VM size for the management jumpbox (any valid Azure VM size, e.g. Standard_B2s, Standard_D2s_v5)."
+        Write-Host "Default: Standard_B2s (2 vCPU / 4 GiB burstable — sufficient for kubectl/helm/az ops)."
+        $v = Read-Host "Enter value (press enter to accept default)"
+        $config.jumpbox_vm_size = if ([string]::IsNullOrEmpty($v)) { "Standard_B2s" } else { $v }
+
+        Write-Host ""
+        Write-Log "bastion_sku" -Severity "INPUT REQUIRED"
+        Write-Host "Azure Bastion SKU: 'Standard' (native-client SSH/tunneling) or 'Basic' (browser-only)."
+        Write-Host "Default: Standard"
+        $v = Read-Host "Enter value (press enter to accept default)"
+        $config.bastion_sku = if ([string]::IsNullOrEmpty($v)) { "Standard" } else { $v }
+    } else {
+        $config.jumpbox_vm_size = "Standard_B2s"
+        $config.bastion_sku     = "Standard"
     }
     Write-Host ""
 
@@ -1249,6 +1275,10 @@ enable_dapr: $(& $boolStr $Config.enable_dapr)
 enable_fips: $(& $boolStr $Config.enable_fips)
 enable_backup: $(& $boolStr $Config.enable_backup)
 enable_cost_analysis: $(& $boolStr $Config.enable_cost_analysis)
+# Management access (standalone only; ALZ hubs provide Bastion/VPN)
+enable_management_jumpbox: $(& $boolStr $Config.enable_management_jumpbox)
+jumpbox_vm_size: $(if ($Config.jumpbox_vm_size) { $Config.jumpbox_vm_size } else { "Standard_B2s" })
+bastion_sku: $(if ($Config.bastion_sku) { $Config.bastion_sku } else { "Standard" })
 # Multi-region
 enable_acr_geo_replication: $(& $boolStr $Config.enable_acr_geo_replication)
 
@@ -1503,6 +1533,13 @@ enable_dapr = $(& $boolTf $Config.enable_dapr)
 enable_fips          = $(& $boolTf $Config.enable_fips)
 enable_backup        = $(& $boolTf $Config.enable_backup)
 enable_cost_analysis = $(& $boolTf $Config.enable_cost_analysis)
+
+# -----------------------------------------------------------------------------
+# Management access (opt-in Azure Bastion + jumpbox VM; standalone only)
+# -----------------------------------------------------------------------------
+enable_management_jumpbox = $(& $boolTf $Config.enable_management_jumpbox)
+jumpbox_vm_size           = "$(if ($Config.jumpbox_vm_size) { $Config.jumpbox_vm_size } else { "Standard_B2s" })"
+bastion_sku               = "$(if ($Config.bastion_sku) { $Config.bastion_sku } else { "Standard" })"
 
 # -----------------------------------------------------------------------------
 # Application Gateway with WAF v2

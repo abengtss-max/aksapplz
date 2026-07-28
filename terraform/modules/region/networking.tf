@@ -160,6 +160,164 @@ resource "azurerm_network_security_group" "agc" {
   tags                = local.default_tags
 }
 
+# NSG - Management jumpbox subnet (opt-in). Inbound SSH is allowed only from the
+# Azure Bastion subnet; all other inbound is denied. Outbound is left at the
+# platform defaults so the VM can reach Azure control-plane and package feeds.
+resource "azurerm_network_security_group" "jumpbox" {
+  count = local.enable_jumpbox ? 1 : 0
+
+  name                = local.nsg_jumpbox_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+
+  security_rule {
+    name                       = "AllowBastionSshInbound"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = var.subnet_address_prefixes.bastion
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "DenyAllInbound"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+# NSG - Azure Bastion subnet (opt-in). Implements the required rule set from
+# the Azure Bastion NSG documentation so the AzureBastionSubnet satisfies the
+# ALZ "Deny-Subnet-Without-Nsg" policy without breaking the service.
+resource "azurerm_network_security_group" "bastion" {
+  count = local.enable_jumpbox ? 1 : 0
+
+  name                = local.nsg_bastion_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.default_tags
+
+  # --- Inbound ---
+  security_rule {
+    name                       = "AllowHttpsInbound"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowGatewayManagerInbound"
+    priority                   = 130
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "GatewayManager"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowAzureLoadBalancerInbound"
+    priority                   = 140
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "AzureLoadBalancer"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowBastionHostCommunicationInbound"
+    priority                   = 150
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_ranges    = ["8080", "5701"]
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "DenyAllInbound"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # --- Outbound ---
+  security_rule {
+    name                       = "AllowSshRdpOutbound"
+    priority                   = 100
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_ranges    = ["22", "3389"]
+    source_address_prefix      = "*"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "AllowAzureCloudOutbound"
+    priority                   = 110
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "*"
+    destination_address_prefix = "AzureCloud"
+  }
+
+  security_rule {
+    name                       = "AllowBastionCommunicationOutbound"
+    priority                   = 120
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_ranges    = ["8080", "5701"]
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "AllowGetSessionInformationOutbound"
+    priority                   = 130
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "*"
+    destination_address_prefix = "Internet"
+  }
+}
+
 # Spoke VNet using Azure Verified Module
 module "spoke_vnet" {
   source  = "Azure/avm-res-network-virtualnetwork/azurerm"
@@ -265,7 +423,29 @@ module "spoke_vnet" {
           id = azurerm_network_security_group.aks_user_nodes.id
         }
       }
-    }
+    },
+    # Management jumpbox + Azure Bastion subnets — opt-in only
+    local.enable_jumpbox ? {
+      jumpbox = {
+        name             = local.subnets.jumpbox.name
+        address_prefixes = local.subnets.jumpbox.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.jumpbox[0].id
+        }
+        route_table = local.is_corp ? {
+          id = azurerm_route_table.aks[0].id
+        } : null
+      }
+    } : {},
+    local.enable_jumpbox ? {
+      bastion = {
+        name             = local.subnets.bastion.name
+        address_prefixes = local.subnets.bastion.address_prefixes
+        network_security_group = {
+          id = azurerm_network_security_group.bastion[0].id
+        }
+      }
+    } : {}
   )
 }
 

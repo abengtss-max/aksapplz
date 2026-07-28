@@ -48,6 +48,8 @@ variable "secondary_subnet_address_prefixes" {
     private_endpoints = string
     ingress           = string
     agc               = optional(string, "10.20.24.0/24")
+    jumpbox           = optional(string, "10.20.25.0/27")
+    bastion           = optional(string, "10.20.26.0/26")
   })
   default = {
     aks_system_nodes  = "10.20.0.0/24"
@@ -57,6 +59,8 @@ variable "secondary_subnet_address_prefixes" {
     private_endpoints = "10.20.22.0/24"
     ingress           = "10.20.23.0/24"
     agc               = "10.20.24.0/24"
+    jumpbox           = "10.20.25.0/27"
+    bastion           = "10.20.26.0/26"
   }
 }
 

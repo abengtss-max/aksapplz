@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-07-29
+
+### Added
+- **Opt-in management access: Azure Bastion + hardened jumpbox VM
+  (`enable_management_jumpbox`, default `false`).** Provisions an Azure Bastion
+  host and a hardened, **no-public-IP** Ubuntu 22.04 jumpbox VM for operating a
+  **private** cluster and its private endpoints from inside the spoke VNet.
+  - Login is via **Microsoft Entra ID** over Bastion (`AADSSHLoginForLinux`;
+    password authentication disabled). The VM has a **system-assigned managed
+    identity** granted `Azure Kubernetes Service Cluster User` (and
+    `Azure Kubernetes Service RBAC Reader` when `enable_azure_rbac = true`).
+  - Hardening: encryption-at-host, daily auto-shutdown to cap idle cost, and
+    locked-down NSGs — the jumpbox subnet allows SSH only from the Bastion
+    subnet, and the `AzureBastionSubnet` carries the required Bastion rule set
+    so it satisfies the ALZ `Deny-Subnet-Without-Nsg` policy.
+  - Operator tooling (az CLI, kubectl, kubelogin, helm) is pre-installed via
+    cloud-init.
+  - Two new subnets (`jumpbox` `10.10.25.0/27`, `AzureBastionSubnet`
+    `10.10.26.0/26`; `10.20.x` in the secondary region) are created **only**
+    when the flag is on — a standard deployment provisions **zero** of these
+    resources and is completely unaffected.
+  - Intended for **standalone** deployments; in ALZ/corp topologies the
+    connectivity hub provides centralized Bastion/VPN, so leave it off there.
+  - New tunables: `jumpbox_vm_size` (`Standard_B2s`), `jumpbox_admin_username`
+    (`azureuser`), `bastion_sku` (`Standard`), `jumpbox_auto_shutdown_time` /
+    `jumpbox_auto_shutdown_timezone`.
+  - Surfaced in the interactive wizard, generated tfvars/config, the planning
+    checklist, the configuration reference, scenarios-and-options, and a new
+    Day-2 "Management access via Bastion + jumpbox" runbook section.
+  - Closes issue #29.
+
 ## [1.17.1] - 2026-07-28
 
 ### Fixed

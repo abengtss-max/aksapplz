@@ -54,6 +54,8 @@ variable "subnet_address_prefixes" {
     private_endpoints = string
     ingress           = string
     agc               = optional(string, "10.10.24.0/24")
+    jumpbox           = optional(string, "10.10.25.0/27")
+    bastion           = optional(string, "10.10.26.0/26")
   })
 }
 
@@ -495,4 +497,41 @@ variable "grafana_private_dns_zone_ids" {
 variable "grafana_admin_group_object_id" {
   type    = string
   default = ""
+}
+
+# --- Management access (Azure Bastion + hardened jumpbox VM) ---
+variable "enable_management_jumpbox" {
+  description = "Provision an opt-in Azure Bastion host and a hardened, no-public-IP Linux jumpbox VM for secure management access to a private AKS cluster and private endpoints. Default `false`. Intended for STANDALONE deployments — ALZ/corp platforms typically provide centralized Bastion/VPN in the hub, so leave this off there. When true it creates an AzureBastionSubnet + Bastion host and a management subnet + Ubuntu VM (Entra ID SSH login, system-assigned identity, auto-shutdown, locked-down NSG, tooling preinstalled). Adds an Azure Bastion public IP (the only public IP)."
+  type        = bool
+  default     = false
+}
+
+variable "jumpbox_vm_size" {
+  description = "VM size for the management jumpbox. Only used when enable_management_jumpbox = true."
+  type        = string
+  default     = "Standard_B2s"
+}
+
+variable "jumpbox_admin_username" {
+  description = "Local admin username for the jumpbox VM. Login is via Microsoft Entra ID; password authentication is disabled. Only used when enable_management_jumpbox = true."
+  type        = string
+  default     = "azureuser"
+}
+
+variable "bastion_sku" {
+  description = "Azure Bastion SKU. 'Standard' enables native client / tunneling; 'Basic' is browser-only. Only used when enable_management_jumpbox = true."
+  type        = string
+  default     = "Standard"
+}
+
+variable "jumpbox_auto_shutdown_time" {
+  description = "Daily auto-shutdown time for the jumpbox VM in 24h HHmm format (e.g. '1900'). Only used when enable_management_jumpbox = true."
+  type        = string
+  default     = "1900"
+}
+
+variable "jumpbox_auto_shutdown_timezone" {
+  description = "Windows time zone id for the jumpbox auto-shutdown schedule (e.g. 'W. Europe Standard Time'). Only used when enable_management_jumpbox = true."
+  type        = string
+  default     = "UTC"
 }

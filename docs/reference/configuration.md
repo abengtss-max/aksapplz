@@ -49,6 +49,8 @@ editing this file is idempotent.
 | Private endpoints | `10.10.22.0/24` |
 | Ingress / load balancer | `10.10.23.0/24` |
 | App Gateway for Containers (AGC) | `10.10.24.0/24` |
+| Management jumpbox (opt-in) | `10.10.25.0/27` |
+| `AzureBastionSubnet` (opt-in) | `10.10.26.0/26` |
 
 The secondary region mirrors this under `10.20.x.0/24`.
 
@@ -61,6 +63,7 @@ The secondary region mirrors this under `10.20.x.0/24`.
 | `enable_defender` | `true` | Microsoft Defender for Containers. |
 | `acr_geo_replication` | scenario | Geo-replicate ACR across regions. |
 | `enable_backup` | scenario | Azure Backup for AKS. |
+| `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened no-public-IP Linux jumpbox VM for private-cluster access. Standalone only — ALZ/corp hubs provide centralized Bastion/VPN. Adds `jumpbox_vm_size`, `jumpbox_admin_username`, `bastion_sku`, `jumpbox_auto_shutdown_time`, `jumpbox_auto_shutdown_timezone`. |
 
 ## GitHub & pipeline
 
