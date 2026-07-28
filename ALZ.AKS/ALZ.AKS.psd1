@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.0'
+    ModuleVersion     = '1.18.1'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.1
+- Fix (jumpbox VM size availability): the default `jumpbox_vm_size` changed from `Standard_B2s` to `Standard_B2s_v2`. The v1 B-series (`Standard_B2s`, `Standard_B2ms`, ...) is `NotAvailableForSubscription` / capacity-restricted in several regions (observed as a `409 SkuNotAvailable` "Capacity Restrictions" failure when creating the jumpbox in `SwedenCentral`), which blocked the CD apply after the rest of the landing zone had provisioned. `Standard_B2s_v2` is the modern burstable equivalent (2 vCPU / 8 GiB, Gen2-capable) and is broadly available. The new default is applied consistently across the terraform variable defaults, the interactive wizard, the generated tfvars/config, every scenario config template, the planning checklist and the configuration reference. Existing deployments that explicitly set `jumpbox_vm_size` are unaffected; only the default recommendation changed. If your subscription/region still restricts this size, pick any available size (e.g. `Standard_D2s_v5`) via `jumpbox_vm_size`.
+
 ## 1.18.0
 - Feature (opt-in management access - Azure Bastion + hardened jumpbox VM, default off): a new `enable_management_jumpbox` flag (default `false`) provisions an Azure Bastion host and a hardened, **no-public-IP** Ubuntu 22.04 jumpbox VM for operating a PRIVATE cluster and its private endpoints from inside the spoke VNet. Login is via **Microsoft Entra ID** over Bastion (AADSSHLoginForLinux; password auth disabled); the VM has a **system-assigned managed identity** granted `Azure Kubernetes Service Cluster User` (and `Azure Kubernetes Service RBAC Reader` when `enable_azure_rbac = true`), auto-shutdown to cap idle cost, encryption-at-host, locked-down NSGs (jumpbox allows SSH only from the Bastion subnet; the `AzureBastionSubnet` carries the required Bastion rule set so it satisfies the ALZ "Deny-Subnet-Without-Nsg" policy), and operator tooling (az CLI, kubectl, kubelogin, helm) pre-installed via cloud-init. Two new subnets (`jumpbox` `10.10.25.0/27`, `AzureBastionSubnet` `10.10.26.0/26`; `10.20.x` in the secondary region) are created **only** when the flag is on - a standard deployment provisions ZERO of these resources and is completely unaffected. Intended for **standalone** deployments; in ALZ/corp topologies the connectivity hub provides centralized Bastion/VPN, so leave it off there. New tunables: `jumpbox_vm_size` (`Standard_B2s`), `jumpbox_admin_username` (`azureuser`), `bastion_sku` (`Standard`), `jumpbox_auto_shutdown_time`/`_timezone`. Surfaced in the interactive wizard, generated tfvars/config, the planning checklist, the configuration reference, scenarios-and-options, and a new Day-2 "Management access via Bastion + jumpbox" runbook section. Closes issue #29.
 

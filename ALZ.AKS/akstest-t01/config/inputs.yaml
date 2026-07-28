@@ -49,7 +49,7 @@ enable_cost_analysis: false
 # Opt-in Azure Bastion + hardened jumpbox VM (standalone only; ALZ hubs provide Bastion/VPN)
 # jumpbox_vm_size / bastion_sku apply only when enable_management_jumpbox: true
 enable_management_jumpbox: false
-jumpbox_vm_size: Standard_B2s
+jumpbox_vm_size: Standard_B2s_v2
 bastion_sku: Standard
 enable_node_auto_provisioning: false
 iac_type: "terraform"

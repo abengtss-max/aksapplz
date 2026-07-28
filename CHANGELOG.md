@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-07-28
+
+### Fixed
+- **Jumpbox VM size availability — default changed from `Standard_B2s` to
+  `Standard_B2s_v2`.** The v1 B-series (`Standard_B2s`, `Standard_B2ms`, …) is
+  `NotAvailableForSubscription` / capacity-restricted in several regions, which
+  surfaced as a `409 SkuNotAvailable` "Capacity Restrictions" error when
+  creating the jumpbox in `SwedenCentral` and failed the CD apply after the rest
+  of the landing zone had already provisioned. `Standard_B2s_v2` is the modern
+  burstable equivalent (2 vCPU / 8 GiB, Gen2-capable) and is broadly available.
+  The new default is applied consistently across the terraform variable
+  defaults, the interactive wizard, the generated tfvars/config, every scenario
+  config template, the planning checklist and the configuration reference.
+  Deployments that explicitly set `jumpbox_vm_size` are unaffected — only the
+  default recommendation changed. If a region still restricts this size, set
+  any available size (e.g. `Standard_D2s_v5`) via `jumpbox_vm_size`.
+
 ## [1.18.0] - 2026-07-29
 
 ### Added

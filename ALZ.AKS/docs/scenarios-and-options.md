@@ -139,7 +139,7 @@ Options are feature toggles that can be customized within any scenario. Each sce
 | Option | Default | Description |
 |--------|---------|-------------|
 | `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened, no-public-IP Linux jumpbox VM for operating a private cluster / private endpoints. **Standalone only** — in ALZ/corp topologies the connectivity hub provides centralized Bastion/VPN, so leave this off there. |
-| `jumpbox_vm_size` | `Standard_B2s` | Jumpbox VM size (only when jumpbox enabled). |
+| `jumpbox_vm_size` | `Standard_B2s_v2` | Jumpbox VM size (only when jumpbox enabled). |
 | `jumpbox_admin_username` | `azureuser` | Local admin username; login is via Microsoft Entra ID (password auth disabled). |
 | `bastion_sku` | `Standard` | Azure Bastion SKU (`Standard` enables native-client tunneling). |
 | `jumpbox_auto_shutdown_time` / `_timezone` | `1900` / `UTC` | Daily auto-shutdown schedule to cap idle cost. |

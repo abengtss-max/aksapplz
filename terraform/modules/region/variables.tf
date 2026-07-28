@@ -549,7 +549,7 @@ variable "enable_management_jumpbox" {
 variable "jumpbox_vm_size" {
   description = "VM size for the management jumpbox. Only used when enable_management_jumpbox = true."
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_B2s_v2"
 }
 
 variable "jumpbox_admin_username" {

@@ -1113,10 +1113,10 @@ function Get-InteractiveInputs {
     if ($config.enable_management_jumpbox -eq $true) {
         Write-Host ""
         Write-Log "jumpbox_vm_size" -Severity "INPUT REQUIRED"
-        Write-Host "VM size for the management jumpbox (any valid Azure VM size, e.g. Standard_B2s, Standard_D2s_v5)."
-        Write-Host "Default: Standard_B2s (2 vCPU / 4 GiB burstable — sufficient for kubectl/helm/az ops)."
+        Write-Host "VM size for the management jumpbox (any valid Azure VM size, e.g. Standard_B2s_v2, Standard_D2s_v5)."
+        Write-Host "Default: Standard_B2s_v2 (2 vCPU / 8 GiB burstable — sufficient for kubectl/helm/az ops)."
         $v = Read-Host "Enter value (press enter to accept default)"
-        $config.jumpbox_vm_size = if ([string]::IsNullOrEmpty($v)) { "Standard_B2s" } else { $v }
+        $config.jumpbox_vm_size = if ([string]::IsNullOrEmpty($v)) { "Standard_B2s_v2" } else { $v }
 
         Write-Host ""
         Write-Log "bastion_sku" -Severity "INPUT REQUIRED"
@@ -1125,7 +1125,7 @@ function Get-InteractiveInputs {
         $v = Read-Host "Enter value (press enter to accept default)"
         $config.bastion_sku = if ([string]::IsNullOrEmpty($v)) { "Standard" } else { $v }
     } else {
-        $config.jumpbox_vm_size = "Standard_B2s"
+        $config.jumpbox_vm_size = "Standard_B2s_v2"
         $config.bastion_sku     = "Standard"
     }
     Write-Host ""
@@ -1277,7 +1277,7 @@ enable_backup: $(& $boolStr $Config.enable_backup)
 enable_cost_analysis: $(& $boolStr $Config.enable_cost_analysis)
 # Management access (standalone only; ALZ hubs provide Bastion/VPN)
 enable_management_jumpbox: $(& $boolStr $Config.enable_management_jumpbox)
-jumpbox_vm_size: $(if ($Config.jumpbox_vm_size) { $Config.jumpbox_vm_size } else { "Standard_B2s" })
+jumpbox_vm_size: $(if ($Config.jumpbox_vm_size) { $Config.jumpbox_vm_size } else { "Standard_B2s_v2" })
 bastion_sku: $(if ($Config.bastion_sku) { $Config.bastion_sku } else { "Standard" })
 # Multi-region
 enable_acr_geo_replication: $(& $boolStr $Config.enable_acr_geo_replication)
@@ -1538,7 +1538,7 @@ enable_cost_analysis = $(& $boolTf $Config.enable_cost_analysis)
 # Management access (opt-in Azure Bastion + jumpbox VM; standalone only)
 # -----------------------------------------------------------------------------
 enable_management_jumpbox = $(& $boolTf $Config.enable_management_jumpbox)
-jumpbox_vm_size           = "$(if ($Config.jumpbox_vm_size) { $Config.jumpbox_vm_size } else { "Standard_B2s" })"
+jumpbox_vm_size           = "$(if ($Config.jumpbox_vm_size) { $Config.jumpbox_vm_size } else { "Standard_B2s_v2" })"
 bastion_sku               = "$(if ($Config.bastion_sku) { $Config.bastion_sku } else { "Standard" })"
 
 # -----------------------------------------------------------------------------
