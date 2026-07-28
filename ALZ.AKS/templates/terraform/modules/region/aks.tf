@@ -24,12 +24,31 @@ resource "azurerm_role_assignment" "aks_network_contributor" {
 # pipeline uses to discover the Istio internal ingress gateway's private IP for
 # automatic App Gateway backend-pool wiring. Granting the deployer the read role
 # lets that automatic ingress wiring run end-to-end with no manual step.
+#
+# IMPORTANT (plan-vs-apply identity): in the split plan/apply CD pipeline the
+# `az aks command invoke` used for ingress auto-wire runs in the APPLY job and
+# therefore authenticates as the APPLY managed identity - while
+# `data.azurerm_client_config.current` resolves at PLAN time to the PLAN
+# identity and is frozen in the saved tfplan. Granting only the plan identity
+# leaves the apply job's kubectl calls silently Forbidden (empty AGW backend
+# pool). We therefore grant EVERY CD identity supplied by the bootstrap
+# (plan + apply) via cd_identity_principal_ids, and fall back to the current
+# (plan-time) identity only for standalone `terraform apply` runs where that
+# list is not populated.
+locals {
+  deployer_aks_rbac_principal_ids = var.enable_azure_rbac ? toset(
+    length(var.cd_identity_principal_ids) > 0
+    ? var.cd_identity_principal_ids
+    : [data.azurerm_client_config.current.object_id]
+  ) : toset([])
+}
+
 resource "azurerm_role_assignment" "deployer_aks_rbac_reader" {
-  count = var.enable_azure_rbac ? 1 : 0
+  for_each = local.deployer_aks_rbac_principal_ids
 
   scope                = module.aks.resource_id
   role_definition_name = "Azure Kubernetes Service RBAC Reader"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = each.value
 }
 
 # NOTE: The AcrPull grant for this region's kubelet identity is created at the

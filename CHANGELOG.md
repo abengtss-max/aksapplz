@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-07-28
+
+### Fixed
+- **Durable fix for the plan-vs-apply CD identity RBAC gap that could leave the
+  App Gateway backend pool empty on a fresh rebuild.** With Azure RBAC for
+  Kubernetes enabled and local accounts disabled, the region module previously
+  granted `Azure Kubernetes Service RBAC Reader` only to
+  `data.azurerm_client_config.current.object_id`. In the split plan/apply CD
+  pipeline that data source resolves at **plan** time to the **plan** managed
+  identity and is frozen in the saved `tfplan` - but the CD ingress wire step
+  (`az aks command invoke`) runs in the **apply** job as the **apply** managed
+  identity, whose kubectl calls were therefore silently `Forbidden`, so the
+  Istio internal ingress gateway IP was never discovered and the backend pool
+  stayed empty (previously only recoverable by a manual
+  `az role assignment create`).
+  - The bootstrap composition now emits **both** the plan and apply managed
+    identity principal (object) IDs into a terraform-generated
+    `terraform/cd-identities.auto.tfvars`, merged into the workload repository's
+    managed files. terraform auto-loads it alongside the rendered
+    `aks-landing-zone.auto.tfvars`.
+  - A new `cd_identity_principal_ids` list variable is plumbed from the root
+    module into the region module, and the `deployer_aks_rbac_reader` role
+    assignment moved from `count` to `for_each` so the RBAC Reader role is
+    granted to **every** CD identity (plan + apply).
+  - Standalone `terraform apply` runs where the list is empty fall back to
+    `data.azurerm_client_config.current.object_id`, so behaviour outside the
+    pipeline is unchanged. Ingress auto-wiring is now genuinely hands-off on
+    every fresh rebuild.
+- **Destroy is now resilient to transient Azure 409 conflicts on the private
+  monitoring/Grafana teardown.** A `terraform destroy` (CD `destroy` action)
+  could fail with two concurrency errors: (1) deleting the AMPLS private
+  endpoint's `monitor-dns-zone-group` returned `409 AnotherOperationInProgress`,
+  because the backup blob private endpoint reuses the SAME shared
+  `privatelink.blob.core.windows.net` zone and their private DNS zone groups
+  were being deleted concurrently; and (2) deleting the Grafana managed private
+  endpoint `mpe-amw-*` returned `409 ConflictInProcessing` ("Operation conflict
+  occurred for workspace ... Please try again later") because the Grafana
+  control plane serializes operations per workspace and was still busy tearing
+  Grafana down.
+  - The backup blob private endpoint now has an explicit `depends_on` on the
+    AMPLS private endpoint, so Terraform tears the two blob-zone endpoints down
+    sequentially instead of in parallel (no-op when the AMPLS endpoint is
+    absent).
+  - The Grafana managed private endpoint (`azapi_resource`) now retries on the
+    transient `ConflictInProcessing` / `AnotherOperationInProgress` responses
+    until the workspace is free, instead of failing the whole destroy.
+  - Result: destroy and re-apply are now smooth and idempotent with no manual
+    cleanup step.
+- **Destroy re-runs are now safe — no more `Saved plan is stale`.** The CD
+  destroy path previously generated a `terraform plan -destroy` artifact in the
+  `plan` job and applied that saved plan in the `apply` job. If a teardown
+  stopped partway (e.g. on a transient Azure error), the state moved on and
+  re-running the failed job — which reuses the original artifact — failed with
+  `Saved plan is stale`. The apply job now runs `terraform destroy -auto-approve`
+  (recomputed from live state) for the `destroy` action instead of applying the
+  saved plan, so re-running the failed job or dispatching a fresh destroy always
+  resumes the teardown idempotently. The `apply` (create/update) path is
+  unchanged — it still applies the exact saved plan the approver reviewed — and
+  the environment approval gate still governs when destroy may proceed.
+
 ## [1.17.0] - 2026-07-27
 
 ### Added

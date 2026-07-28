@@ -24,6 +24,31 @@ module "azure" {
   tags                                 = var.tags
 }
 
+# Emit the plan + apply managed identity principal (object) IDs into an
+# auto-loaded tfvars file in the workload repo. The workload terraform grants
+# each of these "Azure Kubernetes Service RBAC Reader" on the AKS cluster so the
+# CD apply job's `az aks command invoke` (Istio ingress auto-wire) can read
+# in-cluster services under Azure RBAC + disabled local accounts.
+#
+# Generated here (not by the PowerShell renderer) because the identities are
+# created by module.azure in this same composition and are not known to the
+# renderer up front. terraform auto-loads any *.auto.tfvars in the working
+# directory, so this supplements the rendered aks-landing-zone.auto.tfvars
+# (which must NOT also set cd_identity_principal_ids). The renderer's drift
+# reconciliation ignores files it does not manage, so this file is left intact.
+locals {
+  cd_identity_tfvars_files = {
+    "terraform/cd-identities.auto.tfvars" = <<-EOT
+      # Managed by aksapplz bootstrap - do not edit.
+      # CD managed identity principal (object) IDs granted AKS Azure-RBAC Reader.
+      cd_identity_principal_ids = [
+        "${module.azure.managed_identity_principal_ids["plan"]}",
+        "${module.azure.managed_identity_principal_ids["apply"]}",
+      ]
+    EOT
+  }
+}
+
 module "github" {
   source = "../../modules/github"
 
@@ -44,7 +69,7 @@ module "github" {
   backend_storage_account_name   = module.azure.state_storage_account_name
   backend_storage_container_name = module.azure.state_container_name
 
-  repository_files = var.repository_files
+  repository_files = merge(var.repository_files, local.cd_identity_tfvars_files)
 
   use_runner_group  = var.use_self_hosted_runners
   runner_group_name = module.resource_names.resource_names["version_control_system_runner_group"]

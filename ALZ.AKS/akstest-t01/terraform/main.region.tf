@@ -67,6 +67,7 @@ module "region" {
   enable_diagnostic_settings      = var.enable_diagnostic_settings
   enable_workload_identity        = var.enable_workload_identity
   enable_azure_rbac               = var.enable_azure_rbac
+  cd_identity_principal_ids       = var.cd_identity_principal_ids
   disable_local_accounts          = var.disable_local_accounts
   enable_image_cleaner            = var.enable_image_cleaner
   image_cleaner_interval_hours    = var.image_cleaner_interval_hours

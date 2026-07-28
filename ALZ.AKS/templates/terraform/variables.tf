@@ -493,6 +493,12 @@ variable "enable_azure_rbac" {
   default     = true
 }
 
+variable "cd_identity_principal_ids" {
+  description = "Principal (object) IDs of the CD managed identities (plan + apply). Each is granted 'Azure Kubernetes Service RBAC Reader' on every region's cluster so the CD apply job's `az aks command invoke` (Istio ingress auto-wire) works under Azure RBAC + disabled local accounts. Populated by the bootstrap via terraform/cd-identities.auto.tfvars; empty falls back to the plan-time terraform identity."
+  type        = list(string)
+  default     = []
+}
+
 variable "disable_local_accounts" {
   description = "Disable local Kubernetes accounts (enforce Entra ID only)."
   type        = bool

@@ -163,6 +163,17 @@ resource "azurerm_private_endpoint" "backup_blob" {
       private_dns_zone_ids = [local.backup_blob_dns_zone_id]
     }
   }
+
+  # Serialize this blob private endpoint against the Azure Monitor (AMPLS)
+  # private endpoint. When Managed Prometheus is private this endpoint REUSES the
+  # AMPLS-managed privatelink.blob.core.windows.net zone, so both endpoints write
+  # records into the SAME zone. Deleting their private DNS zone groups
+  # concurrently makes the Network resource provider return a transient 409
+  # "AnotherOperationInProgress" that fails the whole destroy. This explicit
+  # dependency tears this endpoint down BEFORE the AMPLS endpoint so the two
+  # blob-zone operations never overlap. No-op when the AMPLS endpoint is absent
+  # (count 0) - a depends_on on a zero-count resource is an empty dependency.
+  depends_on = [azurerm_private_endpoint.monitor]
 }
 
 # The deploying identity creates the container over the AAD data plane (shared

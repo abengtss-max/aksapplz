@@ -164,6 +164,7 @@ jobs:
           exit 1
 
       - name: Download Plan
+        if: inputs.action != 'destroy'
         uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ github.run_id }}
@@ -171,9 +172,20 @@ jobs:
 
       - name: ${{ inputs.action == 'destroy' && 'Terraform Destroy' || 'Terraform Apply' }}
         run: |
-          # Applies the saved plan. For a destroy plan this tears down infrastructure;
-          # Terraform still prints "Apply complete!" because it is applying a saved plan.
-          terraform apply -auto-approve -input=false tfplan
+          if [ "${{ inputs.action }}" = "destroy" ]; then
+            # Re-plan-and-destroy against CURRENT state instead of applying the
+            # saved destroy plan. A teardown that stops on a transient Azure error
+            # (e.g. a 409) changes state, which makes the previously saved plan
+            # "stale" and unusable on a re-run ("Saved plan is stale"). Running
+            # terraform destroy here recomputes the teardown from live state every
+            # time, so re-running the failed job - or a fresh dispatch - always
+            # resumes the teardown cleanly and idempotently. The environment
+            # approval gate on this job still governs when destroy may proceed.
+            terraform destroy -auto-approve -input=false
+          else
+            # Apply the EXACT saved plan the approver reviewed (create/update).
+            terraform apply -auto-approve -input=false tfplan
+          fi
 
       - name: Apply Summary
         if: success()

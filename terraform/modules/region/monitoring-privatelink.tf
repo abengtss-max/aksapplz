@@ -135,6 +135,19 @@ resource "azapi_resource" "grafana_amw_mpe" {
   location  = azurerm_resource_group.main.location
   tags      = local.default_tags
 
+  # The Grafana control plane serializes operations per workspace and returns a
+  # transient 409 (ConflictInProcessing: "Operation conflict occurred for
+  # workspace ... Please try again later") when this managed private endpoint is
+  # created OR deleted while another Grafana operation is still settling - which
+  # is common on teardown, where Grafana itself is being deleted at the same
+  # time. Retry the operation until the workspace is free instead of failing the
+  # whole apply/destroy.
+  retry = {
+    error_message_regex  = ["ConflictInProcessing", "Operation conflict occurred", "AnotherOperationInProgress", "Please try again later"]
+    interval_seconds     = 15
+    max_interval_seconds = 120
+  }
+
   body = {
     properties = {
       privateLinkResourceId     = azurerm_monitor_workspace.main[0].id
