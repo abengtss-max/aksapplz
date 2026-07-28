@@ -61,6 +61,43 @@ resource "azurerm_bastion_host" "main" {
   }
 }
 
+# --- Jumpbox outbound egress (NAT gateway, standalone only) ----------------
+#
+# The jumpbox VM has no public IP, and Azure retired default outbound access
+# (2025-09-30). Without explicit egress the AADSSHLoginForLinux extension and
+# cloud-init tooling install fail ("Network is unreachable"). A NAT gateway
+# gives the subnet deterministic, secure outbound access while keeping the VM
+# private. Only created for STANDALONE deployments — in corp/ALZ topologies the
+# jumpbox subnet egresses via the hub firewall using the AKS route table.
+resource "azurerm_public_ip" "jumpbox_nat" {
+  count = local.enable_jumpbox_nat ? 1 : 0
+
+  name                = local.jumpbox_nat_pip_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = local.default_tags
+}
+
+resource "azurerm_nat_gateway" "jumpbox" {
+  count = local.enable_jumpbox_nat ? 1 : 0
+
+  name                    = local.jumpbox_natgw_name
+  location                = azurerm_resource_group.main.location
+  resource_group_name     = azurerm_resource_group.main.name
+  sku_name                = "Standard"
+  idle_timeout_in_minutes = 4
+  tags                    = local.default_tags
+}
+
+resource "azurerm_nat_gateway_public_ip_association" "jumpbox" {
+  count = local.enable_jumpbox_nat ? 1 : 0
+
+  nat_gateway_id       = azurerm_nat_gateway.jumpbox[0].id
+  public_ip_address_id = azurerm_public_ip.jumpbox_nat[0].id
+}
+
 # --- Jumpbox VM ------------------------------------------------------------
 
 resource "azurerm_network_interface" "jumpbox" {

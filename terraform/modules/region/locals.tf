@@ -58,12 +58,21 @@ locals {
   nsg_bastion_name      = "nsg-bas-${local.name_prefix}"
 
   # Management access (opt-in Azure Bastion + jumpbox VM)
-  enable_jumpbox    = var.enable_management_jumpbox
-  bastion_name      = "bas-${local.name_prefix}"
-  bastion_pip_name  = "pip-bas-${local.name_prefix}"
-  jumpbox_vm_name   = "vm-jbx-${local.name_prefix}"
-  jumpbox_nic_name  = "nic-jbx-${local.name_prefix}"
-  jumpbox_disk_name = "osdisk-jbx-${local.name_prefix}"
+  enable_jumpbox = var.enable_management_jumpbox
+  # Default outbound access was retired (2025-09-30), so a no-public-IP VM has no
+  # implicit internet egress. In a STANDALONE spoke there is no hub firewall to
+  # route through, so the jumpbox subnet needs a NAT gateway for outbound access
+  # (Entra SSH extension install, apt, and operator tooling). In a corp/ALZ
+  # topology egress is provided by the hub firewall via the AKS route table, so
+  # no NAT gateway is created there.
+  enable_jumpbox_nat   = var.enable_management_jumpbox && !local.is_corp
+  bastion_name         = "bas-${local.name_prefix}"
+  bastion_pip_name     = "pip-bas-${local.name_prefix}"
+  jumpbox_vm_name      = "vm-jbx-${local.name_prefix}"
+  jumpbox_nic_name     = "nic-jbx-${local.name_prefix}"
+  jumpbox_disk_name    = "osdisk-jbx-${local.name_prefix}"
+  jumpbox_natgw_name   = "natgw-jbx-${local.name_prefix}"
+  jumpbox_nat_pip_name = "pip-natgw-jbx-${local.name_prefix}"
 
   backup_storage_account_name = "stbkp${substr(md5(local.name_prefix), 0, 18)}"
 

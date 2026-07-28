@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.1'
+    ModuleVersion     = '1.18.2'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.2
+- Fix (jumpbox outbound connectivity): a standalone jumpbox failed the CD apply at the `AADSSHLoginForLinux` extension with `Network is unreachable` / connection timeouts because the no-public-IP VM had no outbound internet access. Azure retired **default outbound access** (2025-09-30), so a VM with no public IP in a standalone spoke has zero implicit egress, and the Entra SSH extension installer (and cloud-init tooling install) could not reach the Ubuntu/Microsoft package repositories. The jumpbox subnet now gets a dedicated **NAT gateway** (Standard SKU + Standard static public IP) for deterministic, secure egress while the VM itself remains private. This is created only for **standalone** deployments (`enable_management_jumpbox = true` and no hub) via a new `enable_jumpbox_nat` gate; in corp/ALZ topologies egress continues to flow through the hub firewall using the AKS route table, so no NAT gateway is added there. The `AzureBastionSubnet` is untouched. No new inputs; deployments without the jumpbox are unaffected.
+
 ## 1.18.1
 - Fix (jumpbox VM size availability): the default `jumpbox_vm_size` changed from `Standard_B2s` to `Standard_B2s_v2`. The v1 B-series (`Standard_B2s`, `Standard_B2ms`, ...) is `NotAvailableForSubscription` / capacity-restricted in several regions (observed as a `409 SkuNotAvailable` "Capacity Restrictions" failure when creating the jumpbox in `SwedenCentral`), which blocked the CD apply after the rest of the landing zone had provisioned. `Standard_B2s_v2` is the modern burstable equivalent (2 vCPU / 8 GiB, Gen2-capable) and is broadly available. The new default is applied consistently across the terraform variable defaults, the interactive wizard, the generated tfvars/config, every scenario config template, the planning checklist and the configuration reference. Existing deployments that explicitly set `jumpbox_vm_size` are unaffected; only the default recommendation changed. If your subscription/region still restricts this size, pick any available size (e.g. `Standard_D2s_v5`) via `jumpbox_vm_size`.
 

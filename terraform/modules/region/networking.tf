@@ -432,6 +432,11 @@ module "spoke_vnet" {
         network_security_group = {
           id = azurerm_network_security_group.jumpbox[0].id
         }
+        # Standalone: egress via a dedicated NAT gateway (no public IP on the VM).
+        # Corp: egress via the hub firewall using the AKS route table below.
+        nat_gateway = local.enable_jumpbox_nat ? {
+          id = azurerm_nat_gateway.jumpbox[0].id
+        } : null
         route_table = local.is_corp ? {
           id = azurerm_route_table.aks[0].id
         } : null

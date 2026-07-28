@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-07-28
+
+### Fixed
+- **Jumpbox outbound connectivity — dedicated NAT gateway for standalone
+  egress.** With the jumpbox enabled, the CD apply failed at the
+  `AADSSHLoginForLinux` extension with `Network is unreachable` / connection
+  timeouts: the no-public-IP VM had no outbound internet access. Azure retired
+  **default outbound access** (2025-09-30), so a VM with no public IP in a
+  standalone spoke has zero implicit egress, and the Entra SSH extension
+  installer (and the cloud-init operator-tooling install) could not reach the
+  Ubuntu/Microsoft package repositories. The jumpbox subnet now provisions a
+  dedicated **NAT gateway** (Standard SKU + Standard static public IP) for
+  deterministic, secure egress while the VM stays private. It is created only
+  for **standalone** deployments (via a new `enable_jumpbox_nat` gate =
+  `enable_management_jumpbox && !is_corp`); in corp/ALZ topologies egress
+  continues to flow through the hub firewall via the AKS route table, so no NAT
+  gateway is added there, and the `AzureBastionSubnet` is left untouched. No new
+  user-facing inputs; deployments without the jumpbox are unaffected.
+
 ## [1.18.1] - 2026-07-28
 
 ### Fixed
