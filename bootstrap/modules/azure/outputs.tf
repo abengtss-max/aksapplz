@@ -46,7 +46,7 @@ output "identity_resource_group_name" {
 
 output "container_registry_login_server" {
   description = "ACR login server FQDN (empty when self-hosted runners disabled)."
-  value       = var.use_self_hosted_runners ? module.container_registry[0].resource.login_server : ""
+  value       = var.use_self_hosted_runners ? "${module.container_registry[0].name}.azurecr.io" : ""
 }
 
 output "runner_image" {

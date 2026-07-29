@@ -1,5 +1,5 @@
 locals {
-  runner_image_fqn = var.use_self_hosted_runners ? "${module.container_registry[0].resource.login_server}/${var.resource_names["container_image_name"]}:${var.runner_container_image_tag}" : ""
+  runner_image_fqn = var.use_self_hosted_runners ? "${module.container_registry[0].name}.azurecr.io/${var.resource_names["container_image_name"]}:${var.runner_container_image_tag}" : ""
 
   runner_instances = var.use_self_hosted_runners ? {
     for i in range(var.runner_count) :
@@ -27,7 +27,7 @@ resource "azurerm_container_group" "runner" {
   }
 
   image_registry_credential {
-    server                    = module.container_registry[0].resource.login_server
+    server                    = "${module.container_registry[0].name}.azurecr.io"
     user_assigned_identity_id = module.managed_identities["aci_runner"].resource_id
   }
 

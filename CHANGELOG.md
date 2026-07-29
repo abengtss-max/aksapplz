@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.4] - 2026-07-29
+
+### Fixed
+- **Bootstrap `terraform apply` failed on the self-hosted runner ACR reference.**
+  `Deploy-AKSLandingZone` failed with `Unsupported attribute ...
+  module.container_registry[0] is a object ... does not have an attribute named
+  "resource"` whenever `use_self_hosted_runners = true`. The bootstrap `azure`
+  module referenced `module.container_registry[0].resource.login_server`, but the
+  `Azure/avm-res-containerregistry-registry` module (constraint `~> 0.5`, which
+  resolves any version below `1.0.0`) removed the `resource` passthrough output in
+  newer versions, so a fresh `terraform init -upgrade` resolved a version without
+  it and aborted the bootstrap before creating anything. All three references
+  (the runner image FQDN, the container group `image_registry_credential.server`,
+  and the `container_registry_login_server` output) now derive the login server
+  from the always-present `name` output as
+  `"${module.container_registry[0].name}.azurecr.io"`, which is version-agnostic
+  and matches the public-cloud ACR login-server convention. This mirrors the
+  v1.18.3 workload-output fix. No inputs changed and the emitted values are
+  unchanged.
+
 ## [1.18.3] - 2026-07-28
 
 ### Fixed

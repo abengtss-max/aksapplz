@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.3'
+    ModuleVersion     = '1.18.4'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.4
+- Fix (bootstrap apply failed on the self-hosted runner ACR reference): `Deploy-AKSLandingZone` failed at `terraform apply` with `Unsupported attribute ... module.container_registry[0] is a object ... does not have an attribute named "resource"` whenever `use_self_hosted_runners = true`. The bootstrap `azure` module referenced `module.container_registry[0].resource.login_server`, but the `Azure/avm-res-containerregistry-registry` module (constraint `~> 0.5`, which resolves anything below `1.0.0`) removed the `resource` passthrough output in newer versions, so a fresh `terraform init -upgrade` resolved a version without it and aborted the bootstrap. The three references (runner image FQDN, the container group `image_registry_credential.server`, and the `container_registry_login_server` output) now derive the login server from the always-present `name` output as `"${module.container_registry[0].name}.azurecr.io"` - version-agnostic and matching the public-cloud ACR login-server convention. This mirrors the v1.18.3 workload-output fix. No inputs changed and the emitted values are unchanged.
+
 ## 1.18.3
 - Fix (`terraform destroy` / plan failed on the `acr_login_server` output): the root output referenced `module.acr.resource.login_server`, but the `Azure/avm-res-containerregistry-registry` module (constraint `~> 0.4`, which resolves anything below `1.0.0`) does not expose a `resource.login_server` attribute in every version it resolves to - newer versions removed the `resource` output entirely. Because Terraform evaluates outputs during BOTH apply and destroy planning, a `terraform destroy` (or any plan) failed with `Unsupported attribute ... module.acr ... does not have an attribute named "resource"` and exited 1 before doing any work. The output now derives the login server from the always-present `name` output as `"${module.acr.name}.azurecr.io"`, which is version-agnostic across the whole `~> 0.4` range and matches the public-cloud ACR login-server convention the accelerator already assumes (e.g. the `privatelink.azurecr.io` zone). No inputs changed and the emitted output value is unchanged for every deployment.
 
