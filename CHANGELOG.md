@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.6] - 2026-07-30
+
+### Fixed
+- **v1.18.5 `terraform apply` failed creating the Container Insights DCR.**
+  `azurerm_monitor_data_collection_rule.container_insights` was rejected with
+  `unexpected status 400 (400 Bad Request) ... InvalidPayload: Data collection
+  rule is invalid`. The `dataCollectionSettings` passed `namespaces = []`, but the
+  Container Insights DCR validator requires a **non-empty** `namespaces` list even
+  when `namespaceFilteringMode = "Off"` (the mode makes the list a no-op, but the
+  payload must still carry it). Set
+  `namespaces = ["kube-system", "gatekeeper-system", "azure-arc"]` to match
+  Microsoft's reference onboarding Terraform (`microsoft/Docker-Provider`).
+  Applied byte-identical to all three Terraform trees. No behavior change versus
+  the intended v1.18.5 fix — the DCR now creates and `ContainerLogV2`/`Heartbeat`
+  ingest (issue #34).
+
 ## [1.18.5] - 2026-07-30
 
 ### Fixed

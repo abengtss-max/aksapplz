@@ -132,7 +132,7 @@ resource "azurerm_monitor_data_collection_rule" "container_insights" {
         dataCollectionSettings = {
           interval               = "1m"
           namespaceFilteringMode = "Off"
-          namespaces             = []
+          namespaces             = ["kube-system", "gatekeeper-system", "azure-arc"]
           enableContainerLogV2   = true
         }
       })
