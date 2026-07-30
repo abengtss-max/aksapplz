@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.5] - 2026-07-30
+
+### Fixed
+- **Container Insights `ContainerLogV2` logs never ingested.** The cluster
+  enabled the Container Insights (`oms_agent`) addon, but no Container Insights
+  Data Collection Rule (DCR) was ever created or associated, so the `ama-logs`
+  agent pulled an empty config (`mdsd: "No JSON file found ... DCR Json data:"`)
+  and zero `Heartbeat`/`ContainerLogV2` rows reached the AMPLS-only Log Analytics
+  workspace. Enabling the addon does **not** auto-create the DCR via the AVM
+  Terraform composition — it must be declared explicitly. Added
+  `azurerm_monitor_data_collection_rule.container_insights` (stream
+  `Microsoft-ContainerInsights-Group-Default`, `enableContainerLogV2 = true`)
+  targeting the Log Analytics workspace, plus the cluster DCR association and a
+  64-char-safe `dcr_container_insights_name` local. Applied byte-identical to all
+  three Terraform trees. Private ingestion is covered by the existing AMPLS Log
+  Analytics scoped-service; config access by the existing cluster DCE
+  association, so no new logs DCE is required. Fixes GAPS.md §G2 Container
+  Insights logs gap (issue #34).
+
 ## [1.18.4] - 2026-07-29
 
 ### Fixed

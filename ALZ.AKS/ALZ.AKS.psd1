@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.4'
+    ModuleVersion     = '1.18.5'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.5
+- Fix (Container Insights `ContainerLogV2` logs never ingested): the cluster enabled the Container Insights (`oms_agent`) addon but no Container Insights Data Collection Rule (DCR) was ever created or associated, so the `ama-logs` agent pulled an empty config (`mdsd: "No JSON file found ... DCR Json data:"`) and zero `Heartbeat`/`ContainerLogV2` rows reached the AMPLS-only Log Analytics workspace. Enabling the addon does NOT auto-create the DCR via the AVM Terraform composition - it must be explicit. Added `azurerm_monitor_data_collection_rule.container_insights` (stream `Microsoft-ContainerInsights-Group-Default`, `enableContainerLogV2 = true`) targeting the Log Analytics workspace, plus the cluster DCR association and a 64-char-safe `dcr_container_insights_name` local. Applied byte-identical to all three Terraform trees. Private ingestion is covered by the existing AMPLS Log Analytics scoped-service; config access by the existing cluster DCE association, so no new logs DCE is required. Fixes GAPS.md G2 Container Insights logs gap (issue #34).
+
 ## 1.18.4
 - Fix (bootstrap apply failed on the self-hosted runner ACR reference): `Deploy-AKSLandingZone` failed at `terraform apply` with `Unsupported attribute ... module.container_registry[0] is a object ... does not have an attribute named "resource"` whenever `use_self_hosted_runners = true`. The bootstrap `azure` module referenced `module.container_registry[0].resource.login_server`, but the `Azure/avm-res-containerregistry-registry` module (constraint `~> 0.5`, which resolves anything below `1.0.0`) removed the `resource` passthrough output in newer versions, so a fresh `terraform init -upgrade` resolved a version without it and aborted the bootstrap. The three references (runner image FQDN, the container group `image_registry_credential.server`, and the `container_registry_login_server` output) now derive the login server from the always-present `name` output as `"${module.container_registry[0].name}.azurecr.io"` - version-agnostic and matching the public-cloud ACR login-server convention. This mirrors the v1.18.3 workload-output fix. No inputs changed and the emitted values are unchanged.
 
