@@ -337,7 +337,7 @@ module "spoke_vnet" {
         address_prefixes = local.subnets.aks_system_nodes.address_prefixes
         # Storage service endpoint lets the backup extension reach the
         # default-deny backup storage account (only when backup is enabled).
-        service_endpoints_with_location = var.enable_backup ? [{ service = "Microsoft.Storage" }] : null
+        service_endpoints = var.enable_backup ? ["Microsoft.Storage"] : null
         network_security_group = {
           id = azurerm_network_security_group.aks_system_nodes.id
         }
@@ -349,9 +349,9 @@ module "spoke_vnet" {
     # AKS user node pool subnet — dedicated for workload pods
     {
       aks_user_nodes = {
-        name                            = local.subnets.aks_user_nodes.name
-        address_prefixes                = local.subnets.aks_user_nodes.address_prefixes
-        service_endpoints_with_location = var.enable_backup ? [{ service = "Microsoft.Storage" }] : null
+        name              = local.subnets.aks_user_nodes.name
+        address_prefixes  = local.subnets.aks_user_nodes.address_prefixes
+        service_endpoints = var.enable_backup ? ["Microsoft.Storage"] : null
         network_security_group = {
           id = azurerm_network_security_group.aks_user_nodes.id
         }

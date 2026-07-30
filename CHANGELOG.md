@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.7] - 2026-07-30
+
+### Fixed
+- **Plan/destroy broken by AVM virtual-network module upgrade
+  (`service_endpoints_with_location` removed).** A fresh `terraform init
+  -upgrade` resolved a newer `Azure/avm-res-network-virtualnetwork/azurerm`
+  (`~> 0.7`) release that removed the `service_endpoints_with_location` subnet
+  argument, so every plan — including `terraform destroy` — failed at validation
+  with `Invalid value for variable ... service_endpoints_with_location has been
+  removed. Use service_endpoints with a set of service names instead`. This
+  blocked teardown entirely. Switched the AKS system/user node-pool subnets from
+  `service_endpoints_with_location = [{ service = "Microsoft.Storage" }]` to
+  `service_endpoints = ["Microsoft.Storage"]` (still gated on `var.enable_backup`),
+  matching the module's current schema — Azure now expands service-endpoint
+  locations implicitly, which also removes the perpetual drift the old attribute
+  caused. Applied byte-identical to all three Terraform trees. `terraform fmt`
+  clean; `terraform init -upgrade` + `terraform validate` succeed.
+
 ## [1.18.6] - 2026-07-30
 
 ### Fixed

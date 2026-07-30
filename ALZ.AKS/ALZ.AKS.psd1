@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.6'
+    ModuleVersion     = '1.18.7'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.7
+- Fix (plan/destroy broken by AVM virtual-network module upgrade - `service_endpoints_with_location` removed): a fresh `terraform init -upgrade` resolved a newer `Azure/avm-res-network-virtualnetwork/azurerm` (`~> 0.7`) release that REMOVED the `service_endpoints_with_location` subnet argument, so every plan (including `terraform destroy`) failed at validation with `Invalid value for variable ... service_endpoints_with_location has been removed. Use service_endpoints with a set of service names instead`. This blocked teardown entirely. Switched the AKS system/user node-pool subnets from `service_endpoints_with_location = [{ service = "Microsoft.Storage" }]` to `service_endpoints = ["Microsoft.Storage"]` (still gated on `var.enable_backup`), matching the module`s current schema (Azure expands service-endpoint locations implicitly now, which also removes the perpetual drift the old attribute caused). Applied byte-identical to all three Terraform trees. `terraform fmt` clean; `terraform init -upgrade` + `terraform validate` succeed against the upgraded module.
+
 ## 1.18.6
 - Fix (v1.18.5 `terraform apply` failed creating the Container Insights DCR): `azurerm_monitor_data_collection_rule.container_insights` was rejected with `unexpected status 400 (400 Bad Request) ... InvalidPayload: Data collection rule is invalid`. The `dataCollectionSettings` passed `namespaces = []`, but the Container Insights DCR validator requires a non-empty `namespaces` list even when `namespaceFilteringMode = "Off"` (the mode makes the list a no-op, but the payload must still carry it). Set `namespaces = ["kube-system", "gatekeeper-system", "azure-arc"]` to match Microsoft's reference onboarding Terraform (`microsoft/Docker-Provider`). Applied byte-identical to all three Terraform trees. No behavior change vs the intended v1.18.5 fix - the DCR now creates and `ContainerLogV2`/`Heartbeat` ingest (issue #34).
 
