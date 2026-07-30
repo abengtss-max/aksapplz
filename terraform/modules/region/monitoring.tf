@@ -95,6 +95,60 @@ resource "azurerm_monitor_data_collection_rule_association" "prometheus_dce" {
 }
 
 # -----------------------------------------------------------------------------
+# Container Insights (ContainerLogV2 + inventory) data collection
+#
+# The AKS oms_agent add-on (aks.tf) enables the ama-logs agent with managed-
+# identity auth, but the agent ships NOTHING unless a Container Insights data
+# collection rule is associated with the cluster. Without this DCR the agent
+# pulls an empty config and no Heartbeat / ContainerLogV2 rows reach the
+# workspace. Ingestion is private via the AMPLS (the Log Analytics workspace is
+# a scoped service - see monitoring-privatelink.tf); when Managed Prometheus is
+# enabled the cluster's DCE association above also serves private config access.
+# -----------------------------------------------------------------------------
+resource "azurerm_monitor_data_collection_rule" "container_insights" {
+  name                = local.dcr_container_insights_name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  tags                = local.default_tags
+
+  destinations {
+    log_analytics {
+      name                  = "ciworkspace"
+      workspace_resource_id = module.log_analytics.resource_id
+    }
+  }
+
+  data_flow {
+    streams      = ["Microsoft-ContainerInsights-Group-Default"]
+    destinations = ["ciworkspace"]
+  }
+
+  data_sources {
+    extension {
+      name           = "ContainerInsightsExtension"
+      extension_name = "ContainerInsights"
+      streams        = ["Microsoft-ContainerInsights-Group-Default"]
+      extension_json = jsonencode({
+        dataCollectionSettings = {
+          interval               = "1m"
+          namespaceFilteringMode = "Off"
+          namespaces             = []
+          enableContainerLogV2   = true
+        }
+      })
+    }
+  }
+}
+
+# Associate the Container Insights DCR with the AKS cluster so ama-logs ships
+# ContainerLogV2 + inventory / heartbeat to the Log Analytics workspace.
+resource "azurerm_monitor_data_collection_rule_association" "container_insights" {
+  name                    = "dcra-ci-${local.name_prefix}"
+  target_resource_id      = module.aks.resource_id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.container_insights.id
+}
+
+# -----------------------------------------------------------------------------
 # Managed Grafana
 # -----------------------------------------------------------------------------
 resource "azurerm_dashboard_grafana" "main" {
