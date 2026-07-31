@@ -100,6 +100,10 @@ module "region" {
   # App Gateway as AKS ingress (no AGIC/AGC)
   ingress_controller            = var.ingress_controller
   appgw_tls_key_vault_secret_id = var.appgw_tls_key_vault_secret_id
+  appgw_tls_mode                = var.appgw_tls_mode
+  appgw_https_only              = var.appgw_https_only
+  appgw_ssl_policy_name         = var.appgw_ssl_policy_name
+  appgw_self_signed_subject     = var.appgw_self_signed_subject
   ingress_backend_ip            = var.ingress_backend_ip
   ingress_health_probe_path     = var.ingress_health_probe_path
 

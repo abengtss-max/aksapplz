@@ -269,7 +269,35 @@ variable "ingress_controller" {
 }
 
 variable "appgw_tls_key_vault_secret_id" {
-  description = "Unversioned Key Vault secret ID of the TLS certificate for the Application Gateway HTTPS:443 listener. When set, an HTTPS listener and an HTTP->HTTPS redirect are configured and the gateway reads the certificate using the AKS user-assigned identity (already granted Key Vault Secrets User). Leave empty to keep an HTTP-only listener."
+  description = "Unversioned Key Vault secret ID of a CUSTOMER-PROVIDED TLS certificate for the Application Gateway HTTPS:443 listener. Setting this selects appgw_tls_mode = keyvault regardless of that variable (recommended for production). The gateway reads the certificate using the AKS user-assigned identity (already granted Key Vault Secrets User). Only the unversioned secret URL is passed to Terraform - never the certificate or its password. Leave empty to fall back to appgw_tls_mode."
+  type        = string
+  default     = ""
+}
+
+variable "appgw_tls_mode" {
+  description = "Application Gateway edge TLS behaviour when appgw_tls_key_vault_secret_id is not set. 'keyvault' = customer-provided certificate (recommended for production; supply appgw_tls_key_vault_secret_id). 'self_signed' = the accelerator generates a self-signed certificate INSIDE Key Vault (private key born and kept in Key Vault, never in the repo or Terraform state) for dev/test only. 'disabled' = explicit HTTP-only listener. Production environments hard-fail unless mode resolves to 'keyvault'."
+  type        = string
+  default     = "self_signed"
+  validation {
+    condition     = contains(["keyvault", "self_signed", "disabled"], var.appgw_tls_mode)
+    error_message = "appgw_tls_mode must be one of: keyvault, self_signed, disabled."
+  }
+}
+
+variable "appgw_https_only" {
+  description = "When true the Application Gateway serves HTTPS only and does NOT publish an HTTP->HTTPS redirect (strict posture; clients must connect over HTTPS). When false (default) HTTP:80 permanently redirects to HTTPS. Only meaningful when TLS is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "appgw_ssl_policy_name" {
+  description = "Predefined Application Gateway SSL policy applied to the gateway. The default enforces a minimum of TLS 1.2 (PCI-DSS 4.0.1 Req 4.1 / Microsoft strong-crypto guidance). Override only with another predefined policy that keeps TLS 1.2+."
+  type        = string
+  default     = "AppGwSslPolicy20220101"
+}
+
+variable "appgw_self_signed_subject" {
+  description = "Optional X.509 subject for the self-signed certificate generated in Key Vault when appgw_tls_mode = self_signed. Defaults to CN=<app gateway name>. Ignored for keyvault/disabled modes."
   type        = string
   default     = ""
 }

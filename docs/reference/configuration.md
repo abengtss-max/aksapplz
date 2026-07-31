@@ -33,6 +33,10 @@ editing this file is idempotent.
 | Key | Default | Description |
 |---|---|---|
 | `enable_app_gateway` | `true` | Application Gateway WAF v2 ingress. |
+| `appgw_tls_mode` | `self_signed` | Edge TLS behaviour when no customer certificate is set: `keyvault` (customer certificate, **recommended for production**), `self_signed` (accelerator generates a self-signed cert inside Key Vault — dev/test only), or `disabled` (explicit HTTP-only). Production hard-fails unless the resolved mode is `keyvault`. |
+| `appgw_tls_key_vault_secret_id` | `""` | Unversioned Key Vault secret URL of your **own** TLS certificate. Setting it selects `keyvault` mode. Only the secret URL is passed to Terraform — never the certificate or its password. |
+| `appgw_https_only` | `false` | When `true`, serve HTTPS only with no HTTP→HTTPS redirect (strict posture). |
+| `appgw_ssl_policy_name` | `AppGwSslPolicy20220101` | Predefined SSL policy; the default enforces a minimum of TLS 1.2. |
 | `enable_agc` | `false` | Application Gateway for Containers (ALB): provisions the delegated subnet + NSG. |
 | `enable_istio_service_mesh` | scenario | Istio service mesh with mTLS. |
 | `global_lb_type` | `front_door` | Multi-region global LB: `front_door` or `traffic_manager`. |
@@ -53,6 +57,43 @@ editing this file is idempotent.
 | `AzureBastionSubnet` (opt-in) | `10.10.26.0/26` |
 
 The secondary region mirrors this under `10.20.x.0/24`.
+
+### Application Gateway edge TLS
+
+The Application Gateway terminates TLS at the edge. Three modes are available via
+`appgw_tls_mode` (a customer certificate always wins if `appgw_tls_key_vault_secret_id`
+is set):
+
+- **`keyvault` (recommended for production).** You import your own certificate
+  into Key Vault out of band (from a network-permitted context) and pass only its
+  **unversioned** secret URL as `appgw_tls_key_vault_secret_id`. The gateway reads
+  it with the AKS user-assigned identity (already granted *Key Vault Secrets User*)
+  over the vault's private endpoint; using the unversioned URL means renewals are
+  picked up automatically. Microsoft states production workloads must never use
+  self-signed certificates
+  ([App Gateway TLS overview](https://learn.microsoft.com/azure/application-gateway/ssl-overview),
+  [Key Vault certificates](https://learn.microsoft.com/azure/application-gateway/key-vault-certs)),
+  and PCI-DSS 4.0.1 Req 4.1 requires strong, trusted TLS for data in transit.
+- **`self_signed` (dev/test only).** The accelerator generates a self-signed
+  certificate **inside Key Vault**. The private key is created by and never leaves
+  Key Vault — nothing sensitive is written to the repository or Terraform state.
+  Requires the deploying identity to reach the Key Vault data plane (the
+  VNet-injected self-hosted CD runner does; a GitHub-hosted runner cannot reach a
+  private vault) and to hold *Key Vault Certificates Officer* (granted
+  automatically while this mode is active).
+- **`disabled`.** Explicit HTTP-only listener — must be chosen deliberately.
+
+Regardless of mode, the gateway enforces a **minimum of TLS 1.2** via
+`appgw_ssl_policy_name` (PCI-DSS 4.0.1 Req 4.1). Set `appgw_https_only = true` to
+drop the HTTP→HTTPS redirect and serve HTTPS only. The accelerator never stores
+certificate material in Git: customer certs are referenced only by their Key Vault
+secret URL, and `*.pfx`/`*.pem`/`*.key`/`*.crt`/`*.cer`/`*.p12` are git-ignored.
+
+> **Production guardrail (breaking).** When the environment resolves to production
+> (`prod`/`production`/`prd`), the deployment hard-fails unless a customer Key
+> Vault certificate is supplied. This is intentional: production must use a
+> trusted certificate.
+
 
 ## Supporting resources
 

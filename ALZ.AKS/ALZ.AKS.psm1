@@ -1067,15 +1067,62 @@ function Get-InteractiveInputs {
             Write-Log "Istio mesh is disabled, so the Application Gateway baseline is delivered with ingress_controller = 'manual'. After deployment, install your own internal ingress controller (e.g. Traefik or another open-source controller) and wire its private IP into the App Gateway backend pool. Enable Istio if you want this set up for you end-to-end." -Severity "INFO"
         }
 
+        # ── Edge TLS mode ──
+        # keyvault    = customer-provided certificate (recommended for production;
+        #               a customer-owned cert must be used in prod per MS & PCI-DSS)
+        # self_signed = accelerator generates a cert inside Key Vault (private key
+        #               never leaves Key Vault); dev/test only, blocked in production
+        # disabled    = HTTP:80 only, no TLS
         Write-Host ""
-        Write-Log "appgw_tls_key_vault_secret_id (optional)" -Severity "INFO"
-        Write-Host "Key Vault secret ID of the TLS certificate for the App Gateway HTTPS:443 listener."
-        Write-Host "  Leave blank to serve HTTP:80 only (you can add TLS later)."
-        $v = Read-Host "  Enter Key Vault secret ID (press enter to skip)"
-        $config.appgw_tls_key_vault_secret_id = if ([string]::IsNullOrEmpty($v)) { "" } else { $v }
+        Write-Log "appgw_tls_mode" -Severity "INPUT REQUIRED"
+        Write-Host "How should the Application Gateway terminate TLS at the internet edge?"
+        Write-Host "  TLS 1.2 is always the minimum when TLS is on."
+        Write-Host ""
+        $tlsItems = @(
+            [pscustomobject]@{ label = "Customer certificate (Key Vault) - Bring your own cert. RECOMMENDED for production (required by Microsoft & PCI-DSS)."; value = "keyvault" }
+            [pscustomobject]@{ label = "Self-signed (auto-generated)     - Accelerator creates a cert inside Key Vault. DEV/TEST only; blocked in production."; value = "self_signed" }
+            [pscustomobject]@{ label = "Disabled (HTTP only)             - Serve HTTP:80 only, no TLS. Not recommended for internet-facing workloads."; value = "disabled" }
+        )
+        Show-NumberedList -Items $tlsItems -LabelProperty "label" -ValueProperty "value"
+        $config.appgw_tls_mode = Read-NumberedSelection -Items $tlsItems -ValueProperty "value" -DefaultIndex 0 -PromptLabel "Enter selection"
+        Write-Host ""
+
+        if ($config.appgw_tls_mode -eq "keyvault") {
+            Write-Log "appgw_tls_key_vault_secret_id" -Severity "INPUT REQUIRED"
+            Write-Host "Key Vault secret ID (URL) of your TLS certificate for the HTTPS:443 listener."
+            Write-Host "  Only the secret URL is stored — never the certificate or its private key."
+            $v = Read-Host "  Enter Key Vault secret ID"
+            $config.appgw_tls_key_vault_secret_id = if ([string]::IsNullOrEmpty($v)) { "" } else { $v }
+            if ([string]::IsNullOrEmpty($config.appgw_tls_key_vault_secret_id)) {
+                Write-Log "No Key Vault secret ID provided. A production deployment will not succeed until you supply a customer certificate (self-signed and disabled are blocked in production)." -Severity "WARNING"
+            }
+        }
+        elseif ($config.appgw_tls_mode -eq "self_signed") {
+            $config.appgw_tls_key_vault_secret_id = ""
+            Write-Log "Self-signed TLS selected. The accelerator generates a certificate inside Key Vault (the private key never leaves Key Vault and is never stored in the repo or state). This is DEV/TEST only and is blocked for production — supply a customer certificate (keyvault mode) for production." -Severity "WARNING"
+        }
+        else {
+            $config.appgw_tls_key_vault_secret_id = ""
+            Write-Log "TLS disabled. The Application Gateway will serve HTTP:80 only. Not recommended for internet-facing workloads and blocked in production." -Severity "WARNING"
+        }
+
+        # HTTP→HTTPS redirect is added automatically when TLS is on. Offer https-only
+        # (drop the HTTP:80 listener entirely) for stricter setups.
+        if ($config.appgw_tls_mode -ne "disabled") {
+            Write-Host ""
+            Write-Log "appgw_https_only (optional)" -Severity "INFO"
+            Write-Host "Serve HTTPS only and drop the HTTP:80 listener (no HTTP→HTTPS redirect)?"
+            Write-Host "  Default: false (keep HTTP:80 that redirects to HTTPS:443)."
+            $v = Read-Host "  Enter true/false (press enter to accept default)"
+            $config.appgw_https_only = if ($v -match '^(true|t|yes|y|1)$') { $true } else { $false }
+        } else {
+            $config.appgw_https_only = $false
+        }
     } else {
         $config.ingress_controller = "manual"
+        $config.appgw_tls_mode = "disabled"
         $config.appgw_tls_key_vault_secret_id = ""
+        $config.appgw_https_only = $false
     }
 
     # ── Ingress subnet — prompt only for the L7 ingress actually selected ──
@@ -1261,7 +1308,10 @@ enable_app_gateway: $(& $boolStr $Config.enable_app_gateway)
 enable_agc: $(& $boolStr $Config.enable_agc)
 # App Gateway as AKS ingress (no AGIC/AGC): istio | manual
 ingress_controller: "$(if ($Config.ingress_controller) { $Config.ingress_controller } else { 'manual' })"
+# Application Gateway edge TLS: keyvault (customer cert, recommended prod) | self_signed (dev/test) | disabled
+appgw_tls_mode: "$(if ($Config.appgw_tls_mode) { $Config.appgw_tls_mode } else { 'self_signed' })"
 appgw_tls_key_vault_secret_id: "$($Config.appgw_tls_key_vault_secret_id)"
+appgw_https_only: $(& $boolStr $Config.appgw_https_only)
 # Scaling
 enable_keda: $(& $boolStr $Config.enable_keda)
 enable_vpa: $(& $boolStr $Config.enable_vpa)
@@ -1511,7 +1561,14 @@ istio_external_ingress_gateway            = false
 # For istio the CD pipeline discovers the internal ingress LB IP and wires the
 # backend pool; for manual the customer installs and wires their own controller.
 ingress_controller                        = "$(if ($Config.ingress_controller) { $Config.ingress_controller } else { 'manual' })"
+
+# Application Gateway edge TLS.
+#   keyvault    = customer-provided certificate (recommended for production; required by MS & PCI-DSS)
+#   self_signed = accelerator generates a cert inside Key Vault (dev/test only; blocked in production)
+#   disabled    = HTTP:80 only
+appgw_tls_mode                            = "$(if ($Config.appgw_tls_mode) { $Config.appgw_tls_mode } else { 'self_signed' })"
 appgw_tls_key_vault_secret_id             = "$($Config.appgw_tls_key_vault_secret_id)"
+appgw_https_only                          = $(& $boolTf $Config.appgw_https_only)
 
 # -----------------------------------------------------------------------------
 # Storage

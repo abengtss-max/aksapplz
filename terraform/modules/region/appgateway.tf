@@ -79,6 +79,14 @@ resource "azurerm_application_gateway" "main" {
     max_capacity = var.app_gateway_max_capacity
   }
 
+  # Enforce a modern TLS floor on the edge. The default predefined policy
+  # requires a minimum of TLS 1.2 (PCI-DSS 4.0.1 Req 4.1 / Microsoft strong
+  # crypto). This is an App Gateway resource property, not Azure Policy.
+  ssl_policy {
+    policy_type = "Predefined"
+    policy_name = var.appgw_ssl_policy_name
+  }
+
   gateway_ip_configuration {
     name      = "gateway-ip-config"
     subnet_id = module.spoke_vnet.subnets["app_gateway"].resource_id
@@ -158,7 +166,7 @@ resource "azurerm_application_gateway" "main" {
     for_each = local.appgw_tls_enabled ? [1] : []
     content {
       name                = "appgw-tls-cert"
-      key_vault_secret_id = var.appgw_tls_key_vault_secret_id
+      key_vault_secret_id = local.appgw_tls_secret_id
     }
   }
 
@@ -174,7 +182,7 @@ resource "azurerm_application_gateway" "main" {
   }
 
   dynamic "redirect_configuration" {
-    for_each = local.appgw_tls_enabled ? [1] : []
+    for_each = local.appgw_tls_enabled && !var.appgw_https_only ? [1] : []
     content {
       name                 = "http-to-https"
       redirect_type        = "Permanent"
@@ -198,7 +206,7 @@ resource "azurerm_application_gateway" "main" {
   }
 
   dynamic "request_routing_rule" {
-    for_each = local.appgw_tls_enabled ? [1] : []
+    for_each = local.appgw_tls_enabled && !var.appgw_https_only ? [1] : []
     content {
       name                        = "http-redirect-rule"
       priority                    = 110
@@ -229,6 +237,15 @@ resource "azurerm_application_gateway" "main" {
     ignore_changes = [
       backend_address_pool,
     ]
+
+    # Production must terminate TLS with a customer-provided (trusted) Key Vault
+    # certificate. Microsoft guidance states production workloads must never use
+    # self-signed certificates, and PCI-DSS 4.0.1 Req 4.1 requires strong,
+    # trusted TLS for data in transit.
+    precondition {
+      condition     = !(local.appgw_is_production && local.appgw_tls_mode_effective != "keyvault")
+      error_message = "Production Application Gateway requires a customer-provided Key Vault certificate. Set appgw_tls_key_vault_secret_id (mode 'keyvault'). Self-signed or disabled TLS is not permitted in production (Microsoft: production workloads must never use self-signed certificates; PCI-DSS 4.0.1 Req 4.1 requires strong, trusted TLS)."
+    }
   }
 }
 

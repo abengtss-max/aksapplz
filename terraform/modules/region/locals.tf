@@ -34,10 +34,22 @@ locals {
   key_vault_name          = "kv-${local._kv_prefix}-${random_string.kv_suffix.result}"
   app_gateway_name        = "agw-${local.name_prefix}"
   appgw_backend_pool_name = "ingress-backend-pool"
-  # TLS on the Application Gateway HTTPS:443 listener is activated only when a
-  # Key Vault certificate secret ID is supplied.
-  appgw_tls_enabled      = var.enable_app_gateway && var.appgw_tls_key_vault_secret_id != ""
-  waf_policy_name        = "waf-${local.name_prefix}"
+  # --- Application Gateway edge TLS -------------------------------------------
+  # A supplied Key Vault secret ID always means "keyvault" (customer-provided
+  # certificate) for backward compatibility; otherwise the selected
+  # var.appgw_tls_mode applies ("self_signed" | "keyvault" | "disabled").
+  appgw_tls_mode_effective = var.appgw_tls_key_vault_secret_id != "" ? "keyvault" : var.appgw_tls_mode
+  appgw_self_signed_tls    = var.enable_app_gateway && local.appgw_tls_mode_effective == "self_signed"
+  appgw_tls_enabled        = var.enable_app_gateway && contains(["keyvault", "self_signed"], local.appgw_tls_mode_effective)
+  # Certificate the HTTPS listener reads: the Key Vault-generated self-signed
+  # cert (versionless, so App Gateway auto-picks up renewals) or the customer
+  # certificate secret. Empty string keeps an HTTP-only listener.
+  appgw_tls_secret_id = local.appgw_self_signed_tls ? try(azurerm_key_vault_certificate.appgw_self_signed[0].versionless_secret_id, "") : var.appgw_tls_key_vault_secret_id
+  # Production must use a customer-provided certificate: Microsoft guidance says
+  # production workloads must never use self-signed certs, and PCI-DSS 4.0.1
+  # Req 4.1 requires strong, trusted TLS for data in transit.
+  appgw_is_production = contains(["prod", "production", "prd"], lower(var.environment)) || contains(["prod", "production", "prd"], lower(var.environment_short))
+  waf_policy_name     = "waf-${local.name_prefix}"
   log_analytics_name     = "log-${local.name_prefix}"
   monitor_workspace_name = "amon-${local.name_prefix}"
   grafana_name           = length("grf-${local.name_prefix}") <= 23 ? "grf-${local.name_prefix}" : "grf-${substr(local.name_prefix, 0, 16)}${substr(sha256(local.name_prefix), 0, 3)}"

@@ -7,7 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.18.11] - 2026-07-31
+### Added
+- **HTTPS/TLS at the Application Gateway edge (issue #21).** The Application
+  Gateway now terminates TLS by default via a new `appgw_tls_mode` selector:
+  `keyvault` (customer-provided certificate, recommended for production),
+  `self_signed` (accelerator generates a self-signed certificate **inside Key
+  Vault** — private key born and kept in Key Vault, never written to the repo or
+  Terraform state; dev/test only), or `disabled` (explicit HTTP-only). A modern
+  TLS floor (minimum TLS 1.2) is always enforced through a predefined
+  `ssl_policy` (`appgw_ssl_policy_name`, default `AppGwSslPolicy20220101`), and
+  `appgw_https_only` drops the HTTP→HTTPS redirect for a strict HTTPS-only
+  posture. Customer certificates are referenced only by their unversioned Key
+  Vault secret URL (never the certificate or its password), read by the AKS
+  user-assigned identity over the vault's private endpoint; `.gitignore` now
+  excludes `*.pfx`/`*.p12`/`*.crt`/`*.cer` in addition to `*.pem`/`*.key`.
+  Grounded in Microsoft App Gateway TLS guidance (production workloads must
+  never use self-signed certificates) and PCI-DSS 4.0.1 Req 4.1. Mirrored to
+  `terraform/` and `ALZ.AKS/templates/terraform/`.
+
+### Changed (breaking)
+- **Production now requires a customer-provided Key Vault certificate for the
+  Application Gateway.** A precondition hard-fails a production deployment
+  (`environment` resolving to `prod`/`production`/`prd`) unless
+  `appgw_tls_key_vault_secret_id` is set (mode `keyvault`). Self-signed or
+  disabled TLS is not permitted in production. Non-production defaults to
+  `self_signed`, so the edge is HTTPS-by-default there instead of the previous
+  HTTP-only listener.
+
+
 
 ### Fixed
 - **Fresh full-stack CD apply/destroy fails on transient Azure control-plane

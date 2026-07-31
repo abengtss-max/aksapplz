@@ -125,7 +125,9 @@ REFERENCES = {
     "grafana_public_access": "https://learn.microsoft.com/azure/managed-grafana/how-to-set-up-private-access",
     "enable_app_gateway": "https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview",
     "ingress_controller": "https://learn.microsoft.com/azure/application-gateway/overview",
+    "appgw_tls_mode": "https://learn.microsoft.com/azure/application-gateway/ssl-overview",
     "appgw_tls_key_vault_secret_id": "https://learn.microsoft.com/azure/application-gateway/key-vault-certs",
+    "appgw_https_only": "https://learn.microsoft.com/azure/application-gateway/redirect-http-to-https-portal",
     "enable_agc": "https://learn.microsoft.com/azure/application-gateway/for-containers/overview",
     "enable_keda": "https://learn.microsoft.com/azure/aks/keda-about",
     "enable_vpa": "https://learn.microsoft.com/azure/aks/vertical-pod-autoscaler",
@@ -410,10 +412,18 @@ decisions = [
         "Only used when enable_app_gateway (11f) is true. Application Gateway acts as a reverse proxy in front of an INTERNAL in-cluster ingress controller: istio (managed Istio internal gateway — set up and auto-wired for you; auto-selected when Istio 11j is on) or manual (baseline only — you install and wire your own open-source ingress controller). Only istio is wired by the CD pipeline; manual leaves the ingress controller and backend-pool wiring to you.",
         "istio | manual",
         "manual  (istio when enable_istio is true)"),
+    ("11f2b", "appgw_tls_mode",
+        "How the Application Gateway terminates TLS at the internet edge. 'keyvault' = you bring your own certificate (RECOMMENDED for production; a customer-owned certificate must be used in production per Microsoft guidance and PCI-DSS). 'self_signed' = the accelerator generates a certificate inside Key Vault (the private key never leaves Key Vault and is never stored in the repo or state) — DEV/TEST only and blocked for production environments. 'disabled' = HTTP:80 only, no TLS. TLS 1.2 is always the minimum whenever TLS is on. Setting appgw_tls_key_vault_secret_id (11f3) automatically forces 'keyvault'.",
+        "keyvault | self_signed | disabled",
+        "self_signed  (keyvault required for production)"),
     ("11f3", "appgw_tls_key_vault_secret_id",
-        "Optional. Key Vault secret ID of the TLS certificate for the Application Gateway HTTPS:443 listener (also adds an HTTP→HTTPS redirect). The gateway reads it with the AKS identity. Leave blank to serve HTTP:80 only; you can add TLS later.",
+        "Customer-provided TLS certificate for the HTTPS:443 listener — used when appgw_tls_mode (11f2b) is 'keyvault'. Provide the Key Vault secret ID (URL) only; the certificate and its private key are never stored in the repo or Terraform state, and the gateway reads the cert with the AKS identity over the private endpoint. Setting this automatically selects 'keyvault' mode. Leave blank for self_signed / disabled.",
         "Key Vault secret URI, or blank",
-        "(blank = HTTP:80 only)"),
+        "(blank; required for production)"),
+    ("11f4", "appgw_https_only",
+        "Serve HTTPS only and drop the HTTP:80 listener (no HTTP→HTTPS redirect). Only used when TLS is on (11f2b keyvault or self_signed). Default false keeps HTTP:80 redirecting to HTTPS:443.",
+        "true | false",
+        "false"),
     ("11p", "enable_agc",
         "Application Gateway for Containers (ALB). Provisions a delegated subnet (5h) + NSG; the in-cluster ALB Controller manages the gateway. Coexists with enable_app_gateway.",
         "true | false",
@@ -501,7 +511,7 @@ bool_settings = {
     "enable_flux", "enable_dapr", "enable_fips", "enable_backup",
     "enable_cost_analysis", "enable_agc", "hub_deploy_firewall",
     "enable_management_jumpbox",
-    "grafana_public_access",
+    "grafana_public_access", "appgw_https_only",
 }
 for r in range(5, row):
     s = ws1.cell(row=r, column=2).value
@@ -518,6 +528,8 @@ for r in range(5, row):
         dropdown(ws1, r, 6, ["Free", "Standard", "Premium"])
     elif s == "ingress_controller":
         dropdown(ws1, r, 6, ["istio", "manual"])
+    elif s == "appgw_tls_mode":
+        dropdown(ws1, r, 6, ["keyvault", "self_signed", "disabled"])
     elif s in bool_settings:
         dropdown(ws1, r, 6, ["true", "false"])
 

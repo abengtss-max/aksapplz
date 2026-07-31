@@ -34,8 +34,15 @@ Thumbs.db
 .env
 .env.*
 secrets.*
+# TLS certificates / private keys: the accelerator never stores certificate
+# material in the repo. Self-signed certs are generated inside Key Vault and
+# customer certs are referenced only by their Key Vault secret URL.
 *.pem
 *.key
+*.pfx
+*.p12
+*.crt
+*.cer
 
 bootstrap/alz/github/*.log
 bootstrap/alz/github/.terraform/
