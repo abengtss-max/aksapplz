@@ -65,6 +65,13 @@ The secondary region mirrors this under `10.20.x.0/24`.
 | `enable_backup` | scenario | Azure Backup for AKS. |
 | `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened no-public-IP Linux jumpbox VM for private-cluster access. Standalone only — ALZ/corp hubs provide centralized Bastion/VPN. Adds `jumpbox_vm_size`, `jumpbox_admin_username`, `bastion_sku`, `jumpbox_auto_shutdown_time`, `jumpbox_auto_shutdown_timezone`. |
 
+## Network defense-in-depth
+
+| Key | Default | Description |
+|---|---|---|
+| `enable_node_nsg_rules` | `false` | Attach an explicit inbound allow/deny baseline to the AKS node-pool NSGs (system + user): allow `VirtualNetwork` and `AzureLoadBalancer` inbound, deny everything else (priority 4096). Node-to-node / pod traffic and load-balancer health probes keep working, so required AKS communication is preserved; outbound is left at platform defaults. Cross-pool segmentation is intentionally not applied (overlay pod traffic is node-to-node in the VNet). Opt-in so it can be enabled and validated against a live cluster deliberately. |
+| `enable_nsg_flow_logs` | `false` | Enable Network Watcher NSG flow logs for the node, API-server, App Gateway, private-endpoint, AGC and jumpbox NSGs, written to a dedicated LRS storage account with Traffic Analytics into the region Log Analytics workspace. Also requires `enable_diagnostic_settings`. Opt-in due to added storage / Traffic Analytics cost. |
+
 ## GitHub & pipeline
 
 | Key | Description |

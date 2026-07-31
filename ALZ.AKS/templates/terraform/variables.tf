@@ -444,6 +444,18 @@ variable "enable_diagnostic_settings" {
   default     = true
 }
 
+variable "enable_node_nsg_rules" {
+  description = "Attach an explicit inbound allow/deny baseline to the AKS node-pool NSGs (allow Virtual Network + Azure Load Balancer, deny everything else). Preserves required node-to-node/pod and health-probe traffic. Opt-in (default false) so it can be enabled and validated against a live cluster deliberately."
+  type        = bool
+  default     = false
+}
+
+variable "enable_nsg_flow_logs" {
+  description = "Enable Network Watcher NSG flow logs (node, API-server, App Gateway, private-endpoint, AGC and jumpbox NSGs) to a dedicated storage account with Traffic Analytics into the region Log Analytics workspace. Also requires enable_diagnostic_settings. Opt-in (default false) due to added storage/Traffic Analytics cost."
+  type        = bool
+  default     = false
+}
+
 variable "ingress_controller" {
   description = <<-EOT
     Ingress controller the Application Gateway forwards to when it is used as the

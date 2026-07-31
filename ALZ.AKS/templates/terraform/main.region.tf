@@ -65,6 +65,8 @@ module "region" {
   enable_agc                      = var.enable_agc
   enable_agic                     = var.enable_agic
   enable_diagnostic_settings      = var.enable_diagnostic_settings
+  enable_node_nsg_rules           = var.enable_node_nsg_rules
+  enable_nsg_flow_logs            = var.enable_nsg_flow_logs
   enable_workload_identity        = var.enable_workload_identity
   enable_azure_rbac               = var.enable_azure_rbac
   cd_identity_principal_ids       = var.cd_identity_principal_ids
