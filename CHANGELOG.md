@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.10] - 2026-07-31
+
+### Fixed
+- **Fresh-subscription `terraform apply` fails creating the Managed Prometheus
+  recording-rule groups with `MissingSubscriptionRegistration: ... namespace
+  'Microsoft.AlertsManagement'`.** The v1.18.8 recording rules
+  (`azurerm_monitor_alert_prometheus_rule_group.node_recording` /
+  `.kubernetes_recording`) live under the `Microsoft.AlertsManagement` resource
+  provider, which is **not** part of azurerm's
+  `resource_provider_registrations = "core"` auto-registration set and is not
+  registered by default on a fresh subscription — so apply fails with a 409
+  `MissingSubscriptionRegistration`. Added `Microsoft.AlertsManagement` to the
+  bootstrap pre-flight `Register-RequiredProviders` core provider list
+  (`ALZ.AKS.psm1`) so a fresh deploy self-registers the RP before
+  `terraform apply`, matching how the other monitoring RPs (`microsoft.insights`,
+  `Microsoft.Monitor`, `Microsoft.OperationalInsights`) are handled. No
+  Terraform change required.
+
 ## [1.18.9] - 2026-07-31
 
 ### Fixed

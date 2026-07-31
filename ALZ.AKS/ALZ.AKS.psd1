@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.9'
+    ModuleVersion     = '1.18.10'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.10
+- Fix (fresh-subscription `terraform apply` fails creating the Managed Prometheus recording-rule groups with `MissingSubscriptionRegistration: ... namespace 'Microsoft.AlertsManagement'`): the v1.18.8 recording rules (`azurerm_monitor_alert_prometheus_rule_group.node_recording` / `.kubernetes_recording`) live under the `Microsoft.AlertsManagement` resource provider, which is NOT part of azurerm`s `resource_provider_registrations = "core"` auto-registration set and is not registered by default on a fresh subscription — so apply fails 409 `MissingSubscriptionRegistration`. Added `Microsoft.AlertsManagement` to the bootstrap pre-flight `Register-RequiredProviders` core provider list (`ALZ.AKS.psm1`) so a fresh deploy self-registers the RP before `terraform apply`, matching how the other monitoring RPs (`microsoft.insights`, `Microsoft.Monitor`, `Microsoft.OperationalInsights`) are handled. No Terraform change required.
+
 ## 1.18.9
 - Fix (built-in Microsoft Defender for Cloud / cross-subscription Grafana dashboards always show 0): the Managed Grafana identity was granted `Monitoring Reader` only at the landing-zone RESOURCE-GROUP scope (plus `Monitoring Data Reader` on the Azure Monitor workspace). The out-of-the-box dashboards that ship with Azure Managed Grafana for Microsoft Defender for Cloud read subscription-level security alerts (`Microsoft.Security/locations/alerts`) via Azure Resource Graph, which is RBAC-filtered — so with only RG scope the Grafana identity cannot see subscription-level data and those dashboards render 0/empty even when alerts exist. Added a read-only `Monitoring Reader` role assignment for the Grafana identity at SUBSCRIPTION scope (`azurerm_role_assignment.grafana_subscription_monitoring_reader`), matching what Managed Grafana`s portal integration grants by default. Gated behind the new `grafana_subscription_monitoring_reader` variable (default true) so strict least-privilege deployments can opt out; the AKS/Prometheus/Log Analytics dashboards keep working either way. Applied byte-identical across all three Terraform trees (module + root variable + module passthrough). `terraform fmt` clean; `terraform validate` succeeds. NOTE: this only affects VISIBILITY of alerts in Grafana — whether alerts are GENERATED depends on which Microsoft Defender for Cloud plans are enabled on the subscription.
 

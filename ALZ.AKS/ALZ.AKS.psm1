@@ -1632,6 +1632,11 @@ function Register-RequiredProviders {
         "Microsoft.OperationalInsights"
         "microsoft.insights"
         "Microsoft.Monitor"
+        # Managed Prometheus recording rules (azurerm_monitor_alert_prometheus_rule_group)
+        # live under Microsoft.AlertsManagement. This RP is NOT in azurerm's "core"
+        # auto-registration set, so on a fresh subscription apply fails with
+        # `MissingSubscriptionRegistration: ... namespace 'Microsoft.AlertsManagement'`.
+        "Microsoft.AlertsManagement"
         "Microsoft.ManagedIdentity"
         "Microsoft.Authorization"
     )
