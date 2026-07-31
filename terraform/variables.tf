@@ -599,6 +599,12 @@ variable "enable_fips" {
   default     = false
 }
 
+variable "enable_encryption_at_host" {
+  description = "Enable encryption at host on AKS node pools. Encrypts the VM host (OS/data disk caches and the temp disk) with platform-managed keys, complementing Azure Storage SSE (AKS Secure Baseline / Azure Security Benchmark defense-in-depth). Requires the subscription feature Microsoft.Compute/EncryptionAtHost to be registered and a VM SKU that supports it (e.g. Standard_D4ds_v5)."
+  type        = bool
+  default     = true
+}
+
 # --- GitOps & App Platform Options ---
 
 variable "enable_flux" {

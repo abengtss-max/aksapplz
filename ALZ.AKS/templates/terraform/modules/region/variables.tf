@@ -389,6 +389,11 @@ variable "enable_fips" {
   default = false
 }
 
+variable "enable_encryption_at_host" {
+  type    = bool
+  default = true
+}
+
 variable "enable_blob_csi_driver" {
   type    = bool
   default = true
