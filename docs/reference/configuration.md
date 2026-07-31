@@ -65,6 +65,18 @@ The secondary region mirrors this under `10.20.x.0/24`.
 | `enable_backup` | scenario | Azure Backup for AKS. |
 | `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened no-public-IP Linux jumpbox VM for private-cluster access. Standalone only — ALZ/corp hubs provide centralized Bastion/VPN. Adds `jumpbox_vm_size`, `jumpbox_admin_username`, `bastion_sku`, `jumpbox_auto_shutdown_time`, `jumpbox_auto_shutdown_timezone`. |
 
+## etcd KMS encryption (customer-managed key)
+
+| Key | Default | Description |
+|---|---|---|
+| `enable_kms_etcd_encryption` | `false` | Encrypt Kubernetes secrets in etcd with a customer-managed key using the Azure Key Vault KMS plugin (AKS Secure Baseline). A dedicated RSA key is created in the region's private Key Vault and wired to the cluster with a versionless id so AKS follows key rotation automatically. |
+
+When enabled, the AKS cluster identity is granted **Key Vault Crypto User** and the
+deploying identity **Key Vault Crypto Officer** (to create/rotate the key). Because the
+key lives in the private Key Vault, the deployer needs Key Vault data-plane reachability —
+use a VNet-injected self-hosted runner for a private vault. `key_vault_network_access`
+is set to `Private` automatically when private endpoints are in use, otherwise `Public`.
+
 ## GitHub & pipeline
 
 | Key | Description |

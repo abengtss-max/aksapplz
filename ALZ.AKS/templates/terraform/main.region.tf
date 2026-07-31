@@ -58,6 +58,7 @@ module "region" {
 
   # Feature toggles (shared across regions)
   enable_defender                 = var.enable_defender
+  enable_kms_etcd_encryption      = var.enable_kms_etcd_encryption
   enable_keda                     = var.enable_keda
   enable_managed_prometheus       = var.enable_managed_prometheus
   enable_managed_grafana          = var.enable_managed_grafana

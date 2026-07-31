@@ -137,6 +137,12 @@ module "aks" {
   }
 
   security_profile = {
+    azure_key_vault_kms = var.enable_kms_etcd_encryption ? {
+      enabled                  = true
+      key_id                   = azurerm_key_vault_key.etcd[0].versionless_id
+      key_vault_network_access = local.use_private_endpoints ? "Private" : "Public"
+      key_vault_resource_id    = local.use_private_endpoints ? module.key_vault.resource_id : null
+    } : null
     workload_identity = {
       enabled = var.enable_workload_identity
     }
@@ -364,6 +370,7 @@ module "aks" {
 
   depends_on = [
     azurerm_role_assignment.aks_network_contributor,
+    azurerm_role_assignment.aks_kms_crypto_user,
     module.spoke_vnet
   ]
 }

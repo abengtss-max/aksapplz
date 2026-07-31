@@ -371,6 +371,12 @@ variable "enable_defender" {
   default     = true
 }
 
+variable "enable_kms_etcd_encryption" {
+  description = "Encrypt Kubernetes secrets in etcd with a customer-managed key (the KMS plugin backed by Azure Key Vault), per the AKS Secure Baseline. Opt-in (default false). A dedicated RSA key is created in the region's private Key Vault; the AKS identity is granted Key Vault Crypto User and the deploying identity Key Vault Crypto Officer. Enabling this requires the deployer to have Key Vault data-plane reachability (a VNet-injected self-hosted runner for a private vault)."
+  type        = bool
+  default     = false
+}
+
 variable "enable_defender_for_containers_plan" {
   description = <<-EOT
     Enable the SUBSCRIPTION-WIDE Microsoft Defender for Containers plan
