@@ -404,6 +404,12 @@ variable "enable_managed_grafana" {
   default     = true
 }
 
+variable "enable_sentinel" {
+  description = "Onboard Microsoft Sentinel onto the region's Log Analytics workspace to add SIEM correlation/analytics over the AKS audit logs (WAF for AKS security recommendation). Opt-in (default false) to avoid Sentinel ingestion costs unless requested."
+  type        = bool
+  default     = false
+}
+
 variable "enable_app_gateway" {
   description = "Enable Application Gateway with WAF v2."
   type        = bool

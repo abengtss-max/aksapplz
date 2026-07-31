@@ -61,6 +61,7 @@ module "region" {
   enable_keda                     = var.enable_keda
   enable_managed_prometheus       = var.enable_managed_prometheus
   enable_managed_grafana          = var.enable_managed_grafana
+  enable_sentinel                 = var.enable_sentinel
   enable_app_gateway              = var.enable_app_gateway
   enable_agc                      = var.enable_agc
   enable_agic                     = var.enable_agic

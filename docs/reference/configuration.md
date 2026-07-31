@@ -65,6 +65,12 @@ The secondary region mirrors this under `10.20.x.0/24`.
 | `enable_backup` | scenario | Azure Backup for AKS. |
 | `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened no-public-IP Linux jumpbox VM for private-cluster access. Standalone only — ALZ/corp hubs provide centralized Bastion/VPN. Adds `jumpbox_vm_size`, `jumpbox_admin_username`, `bastion_sku`, `jumpbox_auto_shutdown_time`, `jumpbox_auto_shutdown_timezone`. |
 
+## Microsoft Sentinel (SIEM)
+
+| Key | Default | Description |
+|---|---|---|
+| `enable_sentinel` | `false` | Onboard Microsoft Sentinel onto the region's Log Analytics workspace so the SIEM correlation/analytics layer sits on top of the AKS audit logs (kube-apiserver, kube-audit / kube-audit-admin, guard) the cluster diagnostic settings already stream there. Pairs with Defender for Containers per the WAF for AKS security recommendation. Opt-in (cost-aware). |
+
 ## GitHub & pipeline
 
 | Key | Description |
