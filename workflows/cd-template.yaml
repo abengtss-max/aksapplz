@@ -172,6 +172,14 @@ jobs:
 
       - name: ${{ inputs.action == 'destroy' && 'Terraform Destroy' || 'Terraform Apply' }}
         run: |
+          # Transient Azure control-plane errors that are SAFE to retry by
+          # recomputing from live state (bounded, 3 attempts). These are the
+          # well-known fresh full-stack races: AKS agent-pool EtagMismatch /
+          # "Another operation is in progress" (aka.ms/aks/aksoperationpreempted),
+          # private DNS-zone-group AnotherOperationInProgress during teardown, and
+          # ARM throttling (429). A genuine config error does NOT match this
+          # filter, so the loop exits immediately and the step fails fast.
+          transient='EtagMismatch|[Aa]nother operation .*is in progress|AnotherOperationInProgress|429 Too Many Requests|TooManyRequests|context deadline exceeded'
           if [ "${{ inputs.action }}" = "destroy" ]; then
             # Re-plan-and-destroy against CURRENT state instead of applying the
             # saved destroy plan. A teardown that stops on a transient Azure error
@@ -181,10 +189,32 @@ jobs:
             # time, so re-running the failed job - or a fresh dispatch - always
             # resumes the teardown cleanly and idempotently. The environment
             # approval gate on this job still governs when destroy may proceed.
-            terraform destroy -auto-approve -input=false
+            set +e
+            terraform destroy -auto-approve -input=false 2>&1 | tee tf.log; rc=${PIPESTATUS[0]}
+            attempt=1
+            while [ "$rc" -ne 0 ] && [ "$attempt" -le 3 ] && grep -Eq "$transient" tf.log; do
+              echo "::warning::Transient Azure error during destroy (attempt $attempt/3); retrying from live state in 30s ..."
+              sleep 30
+              terraform destroy -auto-approve -input=false 2>&1 | tee tf.log; rc=${PIPESTATUS[0]}
+              attempt=$((attempt + 1))
+            done
+            exit "$rc"
           else
-            # Apply the EXACT saved plan the approver reviewed (create/update).
-            terraform apply -auto-approve -input=false tfplan
+            # Apply the EXACT saved plan the approver reviewed (create/update). On a
+            # TRANSIENT Azure error the state has already advanced so the saved plan
+            # becomes stale; recover by recomputing from live state and re-applying
+            # (transient-only, bounded) so a clean deploy no longer needs a manual
+            # re-dispatch. The first attempt always applies the approved plan.
+            set +e
+            terraform apply -auto-approve -input=false tfplan 2>&1 | tee tf.log; rc=${PIPESTATUS[0]}
+            attempt=1
+            while [ "$rc" -ne 0 ] && [ "$attempt" -le 3 ] && grep -Eq "$transient" tf.log; do
+              echo "::warning::Transient Azure error during apply (attempt $attempt/3); recomputing from live state and retrying in 30s - see aka.ms/aks/aksoperationpreempted ..."
+              sleep 30
+              terraform apply -auto-approve -input=false 2>&1 | tee tf.log; rc=${PIPESTATUS[0]}
+              attempt=$((attempt + 1))
+            done
+            exit "$rc"
           fi
 
       - name: Apply Summary

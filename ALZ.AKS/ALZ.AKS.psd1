@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.10'
+    ModuleVersion     = '1.18.11'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.11
+- Fix (fresh full-stack CD apply/destroy fails on TRANSIENT Azure control-plane races, forcing a manual re-dispatch): a clean deploy repeatedly tripped over well-known transient errors that resolve on retry — AKS default agent-pool `409 EtagMismatch` / "Another operation is in progress" (`PutAgentPool_FailedPrecondition`, aka.ms/aks/aksoperationpreempted) right after cluster create, private DNS-zone-group `AnotherOperationInProgress` during teardown, and ARM `429` throttling. The CD template previously ran `terraform apply`/`destroy` once with no retry (only `init` retried), so any one transient race failed the whole run. Added a bounded (3-attempt), transient-ONLY auto-retry to the apply and destroy steps in the CD template: the first apply still applies the EXACT approver-reviewed saved plan; on a matching transient error it recomputes from live state and re-applies (a stale saved plan can`t be reused after state advances), and destroy already recomputes from live state. A genuine config error does not match the transient filter and fails fast. Applied to all three workflow templates (`workflows/`, `ALZ.AKS/templates/workflows/`, `ALZ.AKS/akstest-t01/workflows/`); the accelerator`s own `.github/workflows` copy is unaffected. No Terraform change.
+
 ## 1.18.10
 - Fix (fresh-subscription `terraform apply` fails creating the Managed Prometheus recording-rule groups with `MissingSubscriptionRegistration: ... namespace 'Microsoft.AlertsManagement'`): the v1.18.8 recording rules (`azurerm_monitor_alert_prometheus_rule_group.node_recording` / `.kubernetes_recording`) live under the `Microsoft.AlertsManagement` resource provider, which is NOT part of azurerm`s `resource_provider_registrations = "core"` auto-registration set and is not registered by default on a fresh subscription — so apply fails 409 `MissingSubscriptionRegistration`. Added `Microsoft.AlertsManagement` to the bootstrap pre-flight `Register-RequiredProviders` core provider list (`ALZ.AKS.psm1`) so a fresh deploy self-registers the RP before `terraform apply`, matching how the other monitoring RPs (`microsoft.insights`, `Microsoft.Monitor`, `Microsoft.OperationalInsights`) are handled. No Terraform change required.
 

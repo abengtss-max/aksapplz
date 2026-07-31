@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.11] - 2026-07-31
+
+### Fixed
+- **Fresh full-stack CD apply/destroy fails on transient Azure control-plane
+  races, forcing a manual re-dispatch.** A clean deploy repeatedly tripped over
+  well-known transient errors that resolve on retry — AKS default agent-pool
+  `409 EtagMismatch` / "Another operation is in progress"
+  (`PutAgentPool_FailedPrecondition`, aka.ms/aks/aksoperationpreempted) right
+  after cluster create, private DNS-zone-group `AnotherOperationInProgress`
+  during teardown, and ARM `429` throttling. The CD template ran
+  `terraform apply`/`destroy` once with no retry (only `init` retried), so any
+  single transient race failed the whole run. Added a bounded (3-attempt),
+  transient-**only** auto-retry to the apply and destroy steps: the first apply
+  still applies the exact approver-reviewed saved plan; on a matching transient
+  error it recomputes from live state and re-applies (a stale saved plan cannot
+  be reused once state has advanced), and destroy already recomputes from live
+  state. A genuine config error does not match the transient filter and fails
+  fast. Applied to all three workflow templates (`workflows/`,
+  `ALZ.AKS/templates/workflows/`, `ALZ.AKS/akstest-t01/workflows/`). No
+  Terraform change.
+
 ## [1.18.10] - 2026-07-31
 
 ### Fixed
