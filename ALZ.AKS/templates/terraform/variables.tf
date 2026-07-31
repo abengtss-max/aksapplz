@@ -845,3 +845,9 @@ variable "grafana_admin_group_object_id" {
   description = "Entra ID group object ID for Grafana admin access."
   type        = string
 }
+
+variable "grafana_subscription_monitoring_reader" {
+  description = "Grant the Managed Grafana identity the read-only Monitoring Reader role at SUBSCRIPTION scope so the built-in dashboards that query subscription-level data populate (Microsoft Defender for Cloud alerts, cross-subscription Azure Monitor views). Without it those dashboards show zero/empty because Azure Resource Graph is RBAC-filtered and the identity only has resource-group scope. Read-only; set false for strict least-privilege (AKS/Prometheus/Log Analytics dashboards still work)."
+  type        = bool
+  default     = true
+}

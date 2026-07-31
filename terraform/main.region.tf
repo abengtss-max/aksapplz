@@ -110,14 +110,15 @@ module "region" {
   enable_private_endpoints = var.enable_private_endpoints
 
   # Monitoring
-  log_retention_days            = var.log_retention_days
-  grafana_sku                   = var.grafana_sku
-  grafana_major_version         = var.grafana_major_version
-  grafana_zone_redundancy       = var.grafana_zone_redundancy
-  grafana_public_access         = var.grafana_public_access
-  grafana_private_dns_zone_ids  = var.grafana_private_dns_zone_ids
-  monitor_private_dns_zone_ids  = var.monitor_private_dns_zone_ids
-  grafana_admin_group_object_id = var.grafana_admin_group_object_id
+  log_retention_days                     = var.log_retention_days
+  grafana_sku                            = var.grafana_sku
+  grafana_major_version                  = var.grafana_major_version
+  grafana_zone_redundancy                = var.grafana_zone_redundancy
+  grafana_public_access                  = var.grafana_public_access
+  grafana_private_dns_zone_ids           = var.grafana_private_dns_zone_ids
+  monitor_private_dns_zone_ids           = var.monitor_private_dns_zone_ids
+  grafana_admin_group_object_id          = var.grafana_admin_group_object_id
+  grafana_subscription_monitoring_reader = var.grafana_subscription_monitoring_reader
 
   # Management access (opt-in Azure Bastion + jumpbox VM)
   enable_management_jumpbox      = var.enable_management_jumpbox

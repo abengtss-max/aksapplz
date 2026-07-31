@@ -539,6 +539,12 @@ variable "grafana_admin_group_object_id" {
   default = ""
 }
 
+variable "grafana_subscription_monitoring_reader" {
+  description = "Grant the Managed Grafana identity the read-only Monitoring Reader role at SUBSCRIPTION scope so the built-in dashboards that query subscription-level data populate (Microsoft Defender for Cloud alerts, cross-subscription Azure Monitor views). Without it those dashboards show zero/empty because Azure Resource Graph is RBAC-filtered and the identity only has resource-group scope. Read-only; set false for strict least-privilege (AKS/Prometheus/Log Analytics dashboards still work)."
+  type        = bool
+  default     = true
+}
+
 # --- Management access (Azure Bastion + hardened jumpbox VM) ---
 variable "enable_management_jumpbox" {
   description = "Provision an opt-in Azure Bastion host and a hardened, no-public-IP Linux jumpbox VM for secure management access to a private AKS cluster and private endpoints. Default `false`. Intended for STANDALONE deployments — ALZ/corp platforms typically provide centralized Bastion/VPN in the hub, so leave this off there. When true it creates an AzureBastionSubnet + Bastion host and a management subnet + Ubuntu VM (Entra ID SSH login, system-assigned identity, auto-shutdown, locked-down NSG, tooling preinstalled). Adds an Azure Bastion public IP (the only public IP)."

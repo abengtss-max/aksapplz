@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.9] - 2026-07-31
+
+### Fixed
+- **Built-in Microsoft Defender for Cloud (and cross-subscription Azure Monitor)
+  Grafana dashboards always show 0.** The Managed Grafana identity was granted
+  `Monitoring Reader` only at the landing-zone **resource-group** scope (plus
+  `Monitoring Data Reader` on the Azure Monitor workspace). The out-of-the-box
+  dashboards that ship with Azure Managed Grafana for Microsoft Defender for
+  Cloud read subscription-level security alerts
+  (`Microsoft.Security/locations/alerts`) via Azure Resource Graph, which is
+  **RBAC-filtered** — so with only RG scope the Grafana identity cannot see
+  subscription-level data and those dashboards render 0/empty even when alerts
+  exist. Added a read-only `Monitoring Reader` role assignment for the Grafana
+  identity at **subscription** scope
+  (`azurerm_role_assignment.grafana_subscription_monitoring_reader`), matching
+  what Managed Grafana's portal integration grants by default. Gated behind the
+  new `grafana_subscription_monitoring_reader` variable (default `true`) so
+  strict least-privilege deployments can opt out; the AKS / Prometheus / Log
+  Analytics dashboards keep working either way. Applied byte-identical across
+  all three Terraform trees (module resource + module variable + root variable +
+  root passthrough). `terraform fmt` clean; `terraform validate` succeeds.
+
+  > This only affects **visibility** of alerts in Grafana. Whether alerts are
+  > **generated** depends on which Microsoft Defender for Cloud plans are enabled
+  > on the subscription.
+
 ## [1.18.8] - 2026-07-31
 
 ### Fixed

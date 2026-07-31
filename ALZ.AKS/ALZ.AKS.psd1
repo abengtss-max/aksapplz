@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.8'
+    ModuleVersion     = '1.18.9'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.9
+- Fix (built-in Microsoft Defender for Cloud / cross-subscription Grafana dashboards always show 0): the Managed Grafana identity was granted `Monitoring Reader` only at the landing-zone RESOURCE-GROUP scope (plus `Monitoring Data Reader` on the Azure Monitor workspace). The out-of-the-box dashboards that ship with Azure Managed Grafana for Microsoft Defender for Cloud read subscription-level security alerts (`Microsoft.Security/locations/alerts`) via Azure Resource Graph, which is RBAC-filtered — so with only RG scope the Grafana identity cannot see subscription-level data and those dashboards render 0/empty even when alerts exist. Added a read-only `Monitoring Reader` role assignment for the Grafana identity at SUBSCRIPTION scope (`azurerm_role_assignment.grafana_subscription_monitoring_reader`), matching what Managed Grafana`s portal integration grants by default. Gated behind the new `grafana_subscription_monitoring_reader` variable (default true) so strict least-privilege deployments can opt out; the AKS/Prometheus/Log Analytics dashboards keep working either way. Applied byte-identical across all three Terraform trees (module + root variable + module passthrough). `terraform fmt` clean; `terraform validate` succeeds. NOTE: this only affects VISIBILITY of alerts in Grafana — whether alerts are GENERATED depends on which Microsoft Defender for Cloud plans are enabled on the subscription.
+
 ## 1.18.8
 - Fix (Managed Grafana ships with empty dashboards on private deployments - issue #35): on a private deployment (`enable_private_endpoints` + `enable_managed_prometheus`) the built-in Kubernetes dashboards showed "No data" for two independent reasons, both now fixed in-code so a fresh deploy works with zero manual steps. (1) CONNECTIVITY: the Grafana managed private endpoint to the Azure Monitor workspace landed the workspace-side connection in `Pending` and was never approved (Grafana managed private endpoints do NOT auto-approve), so Grafana queries failed with `Access through public network is disabled for this resource`; and even after approval the Grafana side stayed `Pending` (no private IP) so queries failed with `Connection not established through an attached Private Endpoint`. The module now approves the workspace-side connection in-band (`azapi_update_resource.approve_grafana_amw_mpe`) AND refreshes the Grafana side (`azapi_resource_action.refresh_grafana_mpe`, action `refreshManagedPrivateEndpoints`) so the full create -> approve -> refresh flow is automated. (2) RECORDING RULES: Managed Prometheus deploys zero recording rules, so the kubernetes-mixin dashboards (Compute Resources / Cluster, CPU/Memory/Quota) query pre-aggregated series that did not exist. Added `monitoring-recording-rules.tf` deploying the Node + Kubernetes default recording-rule groups (`azurerm_monitor_alert_prometheus_rule_group`, gated on `var.enable_managed_prometheus`). Both fixes applied byte-identical to all applicable Terraform trees; `terraform fmt` clean + `terraform validate` succeed. Pure azapi/azurerm (OIDC-safe; no `az` CLI dependency in CD).
 

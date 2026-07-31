@@ -196,6 +196,24 @@ resource "azurerm_role_assignment" "grafana_monitor_data_reader" {
   principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
 }
 
+# Role assignment: Grafana needs Monitoring Reader at SUBSCRIPTION scope so the
+# out-of-the-box dashboards that query subscription-level data populate — most
+# notably the "Microsoft Defender for Cloud" dashboards (which read
+# Microsoft.Security alerts via Azure Resource Graph) and the cross-subscription
+# Azure Monitor dashboards. The RG-scoped Monitoring Reader above only covers
+# this landing zone's resources, so without this grant those dashboards show
+# zero/empty even when data exists — Azure Resource Graph is RBAC-filtered. This
+# mirrors what Azure Managed Grafana's portal integration grants by default.
+# Read-only; gated so strict least-privilege deployments can opt out (the AKS /
+# Prometheus / Log Analytics dashboards keep working either way).
+resource "azurerm_role_assignment" "grafana_subscription_monitoring_reader" {
+  count = var.enable_managed_grafana && var.grafana_subscription_monitoring_reader ? 1 : 0
+
+  scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  role_definition_name = "Monitoring Reader"
+  principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
+}
+
 # -----------------------------------------------------------------------------
 # Managed Grafana private connectivity
 # When private endpoints are in use (corp topology or standalone +
