@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.7'
+    ModuleVersion     = '1.18.8'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.18.8
+- Fix (Managed Grafana ships with empty dashboards on private deployments - issue #35): on a private deployment (`enable_private_endpoints` + `enable_managed_prometheus`) the built-in Kubernetes dashboards showed "No data" for two independent reasons, both now fixed in-code so a fresh deploy works with zero manual steps. (1) CONNECTIVITY: the Grafana managed private endpoint to the Azure Monitor workspace landed the workspace-side connection in `Pending` and was never approved (Grafana managed private endpoints do NOT auto-approve), so Grafana queries failed with `Access through public network is disabled for this resource`; and even after approval the Grafana side stayed `Pending` (no private IP) so queries failed with `Connection not established through an attached Private Endpoint`. The module now approves the workspace-side connection in-band (`azapi_update_resource.approve_grafana_amw_mpe`) AND refreshes the Grafana side (`azapi_resource_action.refresh_grafana_mpe`, action `refreshManagedPrivateEndpoints`) so the full create -> approve -> refresh flow is automated. (2) RECORDING RULES: Managed Prometheus deploys zero recording rules, so the kubernetes-mixin dashboards (Compute Resources / Cluster, CPU/Memory/Quota) query pre-aggregated series that did not exist. Added `monitoring-recording-rules.tf` deploying the Node + Kubernetes default recording-rule groups (`azurerm_monitor_alert_prometheus_rule_group`, gated on `var.enable_managed_prometheus`). Both fixes applied byte-identical to all applicable Terraform trees; `terraform fmt` clean + `terraform validate` succeed. Pure azapi/azurerm (OIDC-safe; no `az` CLI dependency in CD).
+
 ## 1.18.7
 - Fix (plan/destroy broken by AVM virtual-network module upgrade - `service_endpoints_with_location` removed): a fresh `terraform init -upgrade` resolved a newer `Azure/avm-res-network-virtualnetwork/azurerm` (`~> 0.7`) release that REMOVED the `service_endpoints_with_location` subnet argument, so every plan (including `terraform destroy`) failed at validation with `Invalid value for variable ... service_endpoints_with_location has been removed. Use service_endpoints with a set of service names instead`. This blocked teardown entirely. Switched the AKS system/user node-pool subnets from `service_endpoints_with_location = [{ service = "Microsoft.Storage" }]` to `service_endpoints = ["Microsoft.Storage"]` (still gated on `var.enable_backup`), matching the module`s current schema (Azure expands service-endpoint locations implicitly now, which also removes the perpetual drift the old attribute caused). Applied byte-identical to all three Terraform trees. `terraform fmt` clean; `terraform init -upgrade` + `terraform validate` succeed against the upgraded module.
 

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.8] - 2026-07-31
+
+### Fixed
+- **Managed Grafana ships with empty dashboards on private deployments
+  (issue #35).** On a private deployment (`enable_private_endpoints` +
+  `enable_managed_prometheus`) the built-in Kubernetes dashboards showed
+  "No data" for two independent reasons, both now fixed in-code so a fresh
+  deploy works with no manual steps:
+  - **Connectivity.** The Grafana managed private endpoint to the Azure Monitor
+    workspace left the workspace-side connection `Pending` and was never
+    approved (Grafana managed private endpoints do not auto-approve), so queries
+    failed with `Access through public network is disabled for this resource`.
+    Even once approved, the Grafana side stayed `Pending` with no private IP, so
+    queries failed with `Connection not established through an attached Private
+    Endpoint`. The module now approves the workspace-side connection in-band
+    (`azapi_update_resource.approve_grafana_amw_mpe`) **and** refreshes the
+    Grafana side (`azapi_resource_action.refresh_grafana_mpe`, action
+    `refreshManagedPrivateEndpoints`), automating the full
+    create → approve → refresh flow.
+  - **Recording rules.** Managed Prometheus deploys zero recording rules, so the
+    kubernetes-mixin dashboards (Compute Resources / Cluster, CPU/Memory/Quota)
+    queried pre-aggregated series that did not exist. Added
+    `monitoring-recording-rules.tf` deploying the Node + Kubernetes default
+    recording-rule groups (`azurerm_monitor_alert_prometheus_rule_group`, gated
+    on `var.enable_managed_prometheus`).
+
+  Both fixes are pure `azapi`/`azurerm` (OIDC-safe; no `az` CLI dependency in
+  CD), applied byte-identical across the applicable Terraform trees.
+  `terraform fmt` clean; `terraform validate` succeeds.
+
 ## [1.18.7] - 2026-07-30
 
 ### Fixed
