@@ -65,6 +65,13 @@ The secondary region mirrors this under `10.20.x.0/24`.
 | `enable_backup` | scenario | Azure Backup for AKS. |
 | `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened no-public-IP Linux jumpbox VM for private-cluster access. Standalone only — ALZ/corp hubs provide centralized Bastion/VPN. Adds `jumpbox_vm_size`, `jumpbox_admin_username`, `bastion_sku`, `jumpbox_auto_shutdown_time`, `jumpbox_auto_shutdown_timezone`. |
 
+## Defender for Cloud ticketing automation
+
+| Key | Default | Description |
+|---|---|---|
+| `enable_defender_workflow_automation` | `false` | Create a Defender for Cloud workflow automation (`Microsoft.Security/automations`) that routes High-severity security alerts to a Logic App so a ticket can be opened automatically. Provisions a dedicated `rg-<workload>-<env>-secops` resource group, a Logic App with a system-assigned managed identity and an HTTP-request trigger, and the subscription-scoped automation. Default-off; the connector step is wired in as a follow-up. |
+| `defender_ticketing_target` | `none` | Intended connector for the Logic App: `github`, `azuredevops`, `servicenow` or `none`. Recorded as a tag/hint. The connector API connection and its **Key Vault-backed** credentials are wired in as a follow-up step — grant the Logic App's managed identity `Key Vault Secrets User` on the secrets vault; never inline secrets in the workflow. |
+
 ## GitHub & pipeline
 
 | Key | Description |
