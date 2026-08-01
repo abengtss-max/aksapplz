@@ -1654,6 +1654,12 @@ function Register-RequiredProviders {
     if ($Config.enable_backup -eq $true) {
         $requiredProviders += "Microsoft.DataProtection"
     }
+    # Microsoft Sentinel onboarding (issue #31) — the
+    # azurerm_sentinel_log_analytics_workspace_onboarding resource lives under
+    # Microsoft.SecurityInsights, which is not in azurerm's core set.
+    if ($Config.enable_sentinel -eq $true) {
+        $requiredProviders += "Microsoft.SecurityInsights"
+    }
 
     # ── Required subscription FEATURE flags ──
     # Some resources need a subscription FEATURE registered (az feature register),
