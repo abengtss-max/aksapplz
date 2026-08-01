@@ -1325,6 +1325,19 @@ function Write-TfvarsFile {
     # privatelink.grafana.azure.com DNS zone are provisioned automatically when
     # private endpoints are in use, keeping the workspace reachable from the VNet.
     $grafanaPublic = if ($null -ne $Config.grafana_public_access) { [bool]$Config.grafana_public_access } else { $false }
+    # Node encryption at host (issue #19) is scenario-driven by default: the
+    # workload terraform's local.enable_encryption_at_host_effective turns it ON
+    # for *_regulated (PCI-DSS) scenarios when the var is left null. Only render
+    # it here when the operator set it explicitly in inputs.yaml, so an absent
+    # key preserves the scenario-driven default while a present true/false forces
+    # the value. Forcing it on outside a regulated scenario also requires the
+    # Microsoft.Compute/EncryptionAtHost subscription feature (the bootstrap
+    # wizard's Register-RequiredProviders enables it for regulated/explicit-on).
+    $encHostLine = if ($null -ne $Config.enable_encryption_at_host) {
+        "enable_encryption_at_host = $(& $boolTf $Config.enable_encryption_at_host)"
+    } else {
+        "# enable_encryption_at_host = <unset: scenario-driven; set true/false to force>"
+    }
     $userNodeLabelsBlock = if ($isRegulated) {
         @"
   node_labels = {
@@ -1533,6 +1546,7 @@ enable_dapr = $(& $boolTf $Config.enable_dapr)
 enable_fips          = $(& $boolTf $Config.enable_fips)
 enable_backup        = $(& $boolTf $Config.enable_backup)
 enable_cost_analysis = $(& $boolTf $Config.enable_cost_analysis)
+$encHostLine
 
 # -----------------------------------------------------------------------------
 # Management access (opt-in Azure Bastion + jumpbox VM; standalone only)
@@ -1674,6 +1688,15 @@ function Register-RequiredProviders {
     $requiredFeatures = @(
         @{ Namespace = "Microsoft.Network"; Name = "AllowBringYourOwnPublicIpAddress" }
     )
+
+    # Encryption at host (issue #19) is enabled by default for the regulated
+    # (PCI-DSS) scenarios and requires the subscription feature
+    # Microsoft.Compute/EncryptionAtHost. Without it, `terraform apply` fails on
+    # the node pools with SubscriptionNotRegisteredForFeature. Register it when
+    # the scenario is regulated or the operator forced enable_encryption_at_host.
+    if ($Config.scenario -match "regulated" -or $Config.enable_encryption_at_host -eq $true) {
+        $requiredFeatures += @{ Namespace = "Microsoft.Compute"; Name = "EncryptionAtHost" }
+    }
 
     $registered = az provider list --subscription $aksSubId --query "[?registrationState=='Registered'].namespace" -o tsv 2>$null
     $registeredSet = @{}

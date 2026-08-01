@@ -605,6 +605,25 @@ variable "enable_fips" {
   default     = false
 }
 
+variable "enable_encryption_at_host" {
+  description = <<-EOT
+    Enable encryption at host on AKS node pools. Encrypts the VM host (OS/data
+    disk caches and the temp disk) with platform-managed keys, complementing
+    Azure Storage SSE (AKS Secure Baseline / Azure Security Benchmark
+    defense-in-depth). Requires the subscription feature
+    Microsoft.Compute/EncryptionAtHost to be registered and a VM SKU that
+    supports it (e.g. Standard_D4ds_v5), and forces a node reimage when toggled.
+
+    Leave null (the default) to let the scenario decide: it is enabled
+    automatically for the regulated scenarios (single_region_regulated /
+    multi_region_regulated, where host encryption is a PCI-DSS-aligned control)
+    and disabled for normal (baseline) workloads. Set true or false to force it
+    on or off regardless of scenario.
+  EOT
+  type        = bool
+  default     = null
+}
+
 # --- GitOps & App Platform Options ---
 
 variable "enable_flux" {

@@ -90,6 +90,7 @@ enable_flux: false
 enable_dapr: false
 # Compliance
 enable_fips: false
+# enable_encryption_at_host:  # (optional) VM host encryption. Leave UNSET = scenario-driven (ON for *_regulated, OFF for baseline). Set true/false to force.
 enable_backup: false
 enable_cost_analysis: false
 # Opt-in Azure Bastion + hardened jumpbox VM (standalone only; ALZ hubs provide Bastion/VPN)

@@ -55,6 +55,19 @@ locals {
     var.enable_app_gateway && var.enable_istio_service_mesh && var.istio_internal_ingress_gateway
   ) ? "istio" : var.ingress_controller
 
+  # ---------------------------------------------------------------------------
+  # Regulated (PCI-DSS) scenarios opt in to the stricter, compliance-oriented
+  # defaults. Encryption at host is one such control: it is effectively required
+  # under PCI-DSS but optional for a normal workload (it needs the
+  # Microsoft.Compute/EncryptionAtHost feature registered plus a supporting VM
+  # SKU, and forces a node reimage). So it defaults ON for the regulated
+  # scenarios and OFF otherwise, unless the customer sets
+  # enable_encryption_at_host explicitly (true/false).
+  # ---------------------------------------------------------------------------
+  is_regulated = contains(["single_region_regulated", "multi_region_regulated"], var.scenario)
+
+  enable_encryption_at_host_effective = var.enable_encryption_at_host != null ? var.enable_encryption_at_host : local.is_regulated
+
   # Tags
   default_tags = merge(var.tags, {
     workload    = var.workload_name
