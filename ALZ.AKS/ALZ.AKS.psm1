@@ -1338,6 +1338,14 @@ function Write-TfvarsFile {
     } else {
         "# enable_encryption_at_host = <unset: scenario-driven; set true/false to force>"
     }
+    # etcd KMS customer-managed-key encryption is opt-in (default false) with no
+    # scenario-driven default, so only render it when the operator set it in
+    # inputs.yaml; an absent key leaves it off.
+    $kmsEtcdLine = if ($null -ne $Config.enable_kms_etcd_encryption) {
+        "enable_kms_etcd_encryption = $(& $boolTf $Config.enable_kms_etcd_encryption)"
+    } else {
+        "# enable_kms_etcd_encryption = <unset: default false; set true to encrypt etcd secrets with a customer-managed key>"
+    }
     $userNodeLabelsBlock = if ($isRegulated) {
         @"
   node_labels = {
@@ -1496,6 +1504,7 @@ enable_image_cleaner     = true
 enable_azure_policy      = $(& $boolTf $Config.enable_azure_policy)
 enable_defender          = $(& $boolTf $Config.enable_defender)
 enable_defender_for_containers_plan = $(& $boolTf $Config.enable_defender_for_containers_plan)
+$kmsEtcdLine
 
 # -----------------------------------------------------------------------------
 # Monitoring
