@@ -69,7 +69,7 @@ The secondary region mirrors this under `10.20.x.0/24`.
 
 | Key | Default | Description |
 |---|---|---|
-| `enable_encryption_at_host` | `true` | Encrypts the VM host (OS/data disk caches and the temp disk) for every AKS node with platform-managed keys, complementing Azure Storage server-side encryption. Recommended by the AKS Secure Baseline and Azure Security Benchmark as defense-in-depth for data at rest on the node. |
+| `enable_encryption_at_host` | `null` (scenario-driven) | Encrypts the VM host (OS/data disk caches and the temp disk) for every AKS node with platform-managed keys, complementing Azure Storage server-side encryption. When left at `null` it is enabled automatically **only for the regulated scenarios** (`single_region_regulated` / `multi_region_regulated`), where host encryption is a PCI-DSS-aligned control, and stays off for normal baseline workloads. Set `true`/`false` to force it on or off regardless of scenario. |
 
 Prerequisites: the subscription feature `Microsoft.Compute/EncryptionAtHost` must be
 registered (`az feature register --namespace Microsoft.Compute --name EncryptionAtHost`)
