@@ -81,6 +81,7 @@ module "region" {
   enable_node_auto_provisioning   = var.enable_node_auto_provisioning
   auto_scaler_profile             = var.auto_scaler_profile
   enable_fips                     = var.enable_fips
+  enable_encryption_at_host       = local.enable_encryption_at_host_effective
   enable_blob_csi_driver          = var.enable_blob_csi_driver
   enable_disk_csi_driver          = var.enable_disk_csi_driver
   enable_file_csi_driver          = var.enable_file_csi_driver

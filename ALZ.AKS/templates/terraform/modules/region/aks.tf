@@ -156,19 +156,20 @@ module "aks" {
   # System Node Pool (default_agent_pool)
   # --------------------------------------------------------------------------
   default_agent_pool = {
-    name                = "system"
-    vm_size             = var.system_node_pool.vm_size
-    os_disk_size_gb     = var.system_node_pool.os_disk_size_gb
-    os_disk_type        = var.system_node_pool.os_disk_type # "Ephemeral" for best performance
-    os_sku              = var.system_node_pool.os_sku       # "Ubuntu", "AzureLinux", "Ubuntu2204", ...
-    vnet_subnet_id      = module.spoke_vnet.subnets["aks_system_nodes"].resource_id
-    max_pods            = var.system_node_pool.max_pods
-    availability_zones  = var.availability_zones
-    enable_auto_scaling = true
-    min_count           = var.system_node_pool.min_count
-    max_count           = var.system_node_pool.max_count
-    count_of            = var.system_node_pool.node_count
-    enable_fips         = var.enable_fips
+    name                      = "system"
+    vm_size                   = var.system_node_pool.vm_size
+    os_disk_size_gb           = var.system_node_pool.os_disk_size_gb
+    os_disk_type              = var.system_node_pool.os_disk_type # "Ephemeral" for best performance
+    os_sku                    = var.system_node_pool.os_sku       # "Ubuntu", "AzureLinux", "Ubuntu2204", ...
+    vnet_subnet_id            = module.spoke_vnet.subnets["aks_system_nodes"].resource_id
+    max_pods                  = var.system_node_pool.max_pods
+    availability_zones        = var.availability_zones
+    enable_auto_scaling       = true
+    min_count                 = var.system_node_pool.min_count
+    max_count                 = var.system_node_pool.max_count
+    count_of                  = var.system_node_pool.node_count
+    enable_fips               = var.enable_fips
+    enable_encryption_at_host = var.enable_encryption_at_host
 
     # Reserve the system pool for AKS-managed add-ons (CriticalAddonsOnly by
     # default); user workloads schedule onto the dedicated user pool.
@@ -186,20 +187,21 @@ module "aks" {
   # --------------------------------------------------------------------------
   agent_pools = {
     user = {
-      name                = "user"
-      vm_size             = var.user_node_pool.vm_size
-      os_disk_size_gb     = var.user_node_pool.os_disk_size_gb
-      os_disk_type        = var.user_node_pool.os_disk_type
-      os_sku              = var.user_node_pool.os_sku
-      vnet_subnet_id      = module.spoke_vnet.subnets["aks_user_nodes"].resource_id
-      max_pods            = var.user_node_pool.max_pods
-      availability_zones  = var.availability_zones
-      enable_auto_scaling = true
-      min_count           = var.user_node_pool.min_count
-      max_count           = var.user_node_pool.max_count
-      count_of            = var.user_node_pool.node_count
-      mode                = "User"
-      enable_fips         = var.enable_fips
+      name                      = "user"
+      vm_size                   = var.user_node_pool.vm_size
+      os_disk_size_gb           = var.user_node_pool.os_disk_size_gb
+      os_disk_type              = var.user_node_pool.os_disk_type
+      os_sku                    = var.user_node_pool.os_sku
+      vnet_subnet_id            = module.spoke_vnet.subnets["aks_user_nodes"].resource_id
+      max_pods                  = var.user_node_pool.max_pods
+      availability_zones        = var.availability_zones
+      enable_auto_scaling       = true
+      min_count                 = var.user_node_pool.min_count
+      max_count                 = var.user_node_pool.max_count
+      count_of                  = var.user_node_pool.node_count
+      mode                      = "User"
+      enable_fips               = var.enable_fips
+      enable_encryption_at_host = var.enable_encryption_at_host
 
       upgrade_settings = {
         max_surge = var.user_node_pool.max_surge

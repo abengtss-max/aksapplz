@@ -65,6 +65,17 @@ The secondary region mirrors this under `10.20.x.0/24`.
 | `enable_backup` | scenario | Azure Backup for AKS. |
 | `enable_management_jumpbox` | `false` | Opt-in Azure Bastion + hardened no-public-IP Linux jumpbox VM for private-cluster access. Standalone only — ALZ/corp hubs provide centralized Bastion/VPN. Adds `jumpbox_vm_size`, `jumpbox_admin_username`, `bastion_sku`, `jumpbox_auto_shutdown_time`, `jumpbox_auto_shutdown_timezone`. |
 
+## Node encryption at host
+
+| Key | Default | Description |
+|---|---|---|
+| `enable_encryption_at_host` | `null` (scenario-driven) | Encrypts the VM host (OS/data disk caches and the temp disk) for every AKS node with platform-managed keys, complementing Azure Storage server-side encryption. When left at `null` it is enabled automatically **only for the regulated scenarios** (`single_region_regulated` / `multi_region_regulated`), where host encryption is a PCI-DSS-aligned control, and stays off for normal baseline workloads. Set `true`/`false` to force it on or off regardless of scenario. |
+
+Prerequisites: the subscription feature `Microsoft.Compute/EncryptionAtHost` must be
+registered (`az feature register --namespace Microsoft.Compute --name EncryptionAtHost`)
+and the node VM SKU must support it (for example `Standard_D4ds_v5`). Changing this on an
+existing cluster reimages the node pools.
+
 ## Network defense-in-depth
 
 | Key | Default | Description |
