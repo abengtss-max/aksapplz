@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.19.0'
+    ModuleVersion     = '1.19.1'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.19.1
+- Fix (`terraform destroy` DETERMINISTICALLY fails tearing down the management jumpbox - `AADSSHLoginForLinux ... Cannot modify extensions in the VM when the VM is not running`): the opt-in management jumpbox (`enable_management_jumpbox = true`) has an auto-shutdown schedule (`azurerm_dev_test_global_vm_shutdown_schedule`), so by teardown time the VM is deallocated. Terraform destroys the `AADSSHLoginForLinux` VM extension (a child of the VM) BEFORE the VM itself, and Azure rejects deleting/modifying an extension on a STOPPED VM with `409 OperationNotAllowed: Cannot modify extensions in the VM when the VM is not running`. This is NOT a transient error, so the CD destroy retry loop could not recover it and every teardown failed. Added a best-effort pre-destroy step to the CD template (`workflows/cd-template.yaml` + `ALZ.AKS/templates/workflows/cd-template.yaml`): when `action = destroy`, it OIDC-logs in (`azure/login`, reusing the caller`s `id-token: write`) and runs `az vm start --ids` for every VM in the workload resource group (`terraform output -raw resource_group_name`) so the extension delete succeeds and the VM is then destroyed normally. Skips cleanly when there is no VM. No Terraform change.
+
 ## 1.19.0
 - Feature (encryption-at-host on AKS node pools GA - issue #19): AKS node pools can now enable Azure encryption-at-host, which encrypts the VM host (OS/data disk caches and the temp disk) with platform-managed keys as defense-in-depth for data at rest on the node (AKS Secure Baseline / Azure Security Benchmark). Wired `enable_encryption_at_host` into the AVM AKS module`s `default_agent_pool` and user `agent_pools` across both consumable Terraform trees. The root variable is nullable and SCENARIO-DRIVEN by default: `local.enable_encryption_at_host_effective = var.enable_encryption_at_host != null ? var.enable_encryption_at_host : local.is_regulated`, so it is ON automatically for the `single_region_regulated` / `multi_region_regulated` (PCI-DSS) scenarios and OFF for baseline scenarios; an operator can force it on/off by setting `enable_encryption_at_host` explicitly. The bootstrap wizard (`Register-RequiredProviders`) now registers the subscription feature `Microsoft.Compute/EncryptionAtHost` when the scenario is regulated or the flag is explicitly true, and `Write-TfvarsFile` passes an explicit `inputs.yaml` value through to the workload `aks-landing-zone.auto.tfvars` (absent = scenario-driven default preserved). Note: enabling encryption-at-host triggers a node reimage and requires a VM SKU that supports it (e.g. `Standard_D4ds_v5`). Live-validated on a regulated deployment (both system and user pools `enableEncryptionAtHost = True`, feature `Registered`). `terraform fmt` clean; `terraform validate` succeeds across both consumable trees.
 

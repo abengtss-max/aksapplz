@@ -170,6 +170,46 @@ jobs:
           name: tfplan-${{ github.run_id }}
           path: ${{ inputs.working_directory }}
 
+      # ---------------------------------------------------------------------
+      # Pre-destroy: start any deallocated VM the stack manages.
+      #
+      # The management jumpbox has an auto-shutdown schedule, so by teardown time
+      # its VM is normally deallocated. Terraform destroys the AADSSHLoginForLinux
+      # extension (a child of the VM) BEFORE the VM itself, and Azure rejects
+      # deleting an extension on a stopped VM ("OperationNotAllowed: Cannot modify
+      # extensions in the VM when the VM is not running"), which DETERMINISTICALLY
+      # fails `terraform destroy` (it is not a transient error, so the retry loop
+      # cannot recover it). Starting the VM first lets the extension delete
+      # succeed; the VM is then destroyed normally. Best-effort: never blocks
+      # teardown when there is no VM or Azure is unreachable.
+      # ---------------------------------------------------------------------
+      - name: Azure login (pre-destroy VM start)
+        if: inputs.action == 'destroy'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start deallocated VMs before destroy
+        if: inputs.action == 'destroy'
+        run: |
+          set +e
+          RG="$(terraform output -raw resource_group_name 2>/dev/null || echo '')"
+          if [ -z "$RG" ] || [ "$RG" = "null" ]; then
+            echo "::notice::No resource_group_name output resolved; skipping pre-destroy VM start."
+            exit 0
+          fi
+          IDS="$(az vm list -g "$RG" --query '[].id' -o tsv 2>/dev/null)"
+          if [ -z "$IDS" ]; then
+            echo "::notice::No VMs found in $RG; nothing to start before destroy."
+            exit 0
+          fi
+          echo "::notice::Starting VM(s) in $RG so the jumpbox AAD-login extension can be deleted during destroy ..."
+          az vm start --ids $IDS --only-show-errors
+          echo "::notice::Pre-destroy VM start finished (or already running); proceeding to destroy."
+          exit 0
+
       - name: ${{ inputs.action == 'destroy' && 'Terraform Destroy' || 'Terraform Apply' }}
         run: |
           # Transient Azure control-plane errors that are SAFE to retry by

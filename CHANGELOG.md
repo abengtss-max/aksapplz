@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-08-01
+
+### Fixed
+- **`terraform destroy` deterministically fails tearing down the management
+  jumpbox** (`AADSSHLoginForLinux ... Cannot modify extensions in the VM when the
+  VM is not running`). The opt-in jumpbox (`enable_management_jumpbox = true`)
+  has an auto-shutdown schedule, so by teardown time its VM is deallocated.
+  Terraform destroys the `AADSSHLoginForLinux` VM extension (a child of the VM)
+  before the VM itself, and Azure rejects deleting an extension on a stopped VM
+  with `409 OperationNotAllowed: Cannot modify extensions in the VM when the VM
+  is not running`. This is not a transient error, so the CD destroy retry loop
+  could not recover it and every teardown failed. Added a best-effort pre-destroy
+  step to the CD template (`workflows/cd-template.yaml` +
+  `ALZ.AKS/templates/workflows/cd-template.yaml`): when `action = destroy` it
+  OIDC-logs in (`azure/login`, reusing the caller's `id-token: write`) and runs
+  `az vm start --ids` for every VM in the workload resource group
+  (`terraform output -raw resource_group_name`) so the extension delete succeeds
+  and the VM is then destroyed normally. Skips cleanly when there is no VM. No
+  Terraform change.
+
 ## [1.19.0] - 2026-08-01
 
 ### Added
