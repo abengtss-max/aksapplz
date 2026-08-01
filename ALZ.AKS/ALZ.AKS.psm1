@@ -1675,6 +1675,15 @@ function Register-RequiredProviders {
         @{ Namespace = "Microsoft.Network"; Name = "AllowBringYourOwnPublicIpAddress" }
     )
 
+    # Encryption at host (issue #19) is enabled by default for the regulated
+    # (PCI-DSS) scenarios and requires the subscription feature
+    # Microsoft.Compute/EncryptionAtHost. Without it, `terraform apply` fails on
+    # the node pools with SubscriptionNotRegisteredForFeature. Register it when
+    # the scenario is regulated or the operator forced enable_encryption_at_host.
+    if ($Config.scenario -match "regulated" -or $Config.enable_encryption_at_host -eq $true) {
+        $requiredFeatures += @{ Namespace = "Microsoft.Compute"; Name = "EncryptionAtHost" }
+    }
+
     $registered = az provider list --subscription $aksSubId --query "[?registrationState=='Registered'].namespace" -o tsv 2>$null
     $registeredSet = @{}
     if ($registered) {
