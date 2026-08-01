@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.18.11'
+    ModuleVersion     = '1.19.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,9 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 1.19.0
+- Feature (encryption-at-host on AKS node pools GA - issue #19): AKS node pools can now enable Azure encryption-at-host, which encrypts the VM host (OS/data disk caches and the temp disk) with platform-managed keys as defense-in-depth for data at rest on the node (AKS Secure Baseline / Azure Security Benchmark). Wired `enable_encryption_at_host` into the AVM AKS module`s `default_agent_pool` and user `agent_pools` across both consumable Terraform trees. The root variable is nullable and SCENARIO-DRIVEN by default: `local.enable_encryption_at_host_effective = var.enable_encryption_at_host != null ? var.enable_encryption_at_host : local.is_regulated`, so it is ON automatically for the `single_region_regulated` / `multi_region_regulated` (PCI-DSS) scenarios and OFF for baseline scenarios; an operator can force it on/off by setting `enable_encryption_at_host` explicitly. The bootstrap wizard (`Register-RequiredProviders`) now registers the subscription feature `Microsoft.Compute/EncryptionAtHost` when the scenario is regulated or the flag is explicitly true, and `Write-TfvarsFile` passes an explicit `inputs.yaml` value through to the workload `aks-landing-zone.auto.tfvars` (absent = scenario-driven default preserved). Note: enabling encryption-at-host triggers a node reimage and requires a VM SKU that supports it (e.g. `Standard_D4ds_v5`). Live-validated on a regulated deployment (both system and user pools `enableEncryptionAtHost = True`, feature `Registered`). `terraform fmt` clean; `terraform validate` succeeds across both consumable trees.
+
 ## 1.18.11
 - Fix (fresh full-stack CD apply/destroy fails on TRANSIENT Azure control-plane races, forcing a manual re-dispatch): a clean deploy repeatedly tripped over well-known transient errors that resolve on retry — AKS default agent-pool `409 EtagMismatch` / "Another operation is in progress" (`PutAgentPool_FailedPrecondition`, aka.ms/aks/aksoperationpreempted) right after cluster create, private DNS-zone-group `AnotherOperationInProgress` during teardown, and ARM `429` throttling. The CD template previously ran `terraform apply`/`destroy` once with no retry (only `init` retried), so any one transient race failed the whole run. Added a bounded (3-attempt), transient-ONLY auto-retry to the apply and destroy steps in the CD template: the first apply still applies the EXACT approver-reviewed saved plan; on a matching transient error it recomputes from live state and re-applies (a stale saved plan can`t be reused after state advances), and destroy already recomputes from live state. A genuine config error does not match the transient filter and fails fast. Applied to all three workflow templates (`workflows/`, `ALZ.AKS/templates/workflows/`, `ALZ.AKS/akstest-t01/workflows/`); the accelerator`s own `.github/workflows` copy is unaffected. No Terraform change.
 

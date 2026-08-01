@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-08-01
+
+### Added
+- **Encryption-at-host on AKS node pools (GA - issue #19).** AKS node pools can
+  now enable Azure encryption-at-host, which encrypts the VM host (OS/data disk
+  caches and the temp disk) with platform-managed keys as defense-in-depth for
+  data at rest on the node (AKS Secure Baseline / Azure Security Benchmark).
+  `enable_encryption_at_host` is wired into the AVM AKS module's
+  `default_agent_pool` and user `agent_pools` across both consumable Terraform
+  trees. The root variable is nullable and **scenario-driven** by default
+  (`local.enable_encryption_at_host_effective` = the var when set, otherwise
+  `local.is_regulated`): ON automatically for the `single_region_regulated` /
+  `multi_region_regulated` (PCI-DSS) scenarios, OFF for baseline; an operator can
+  force it on/off by setting `enable_encryption_at_host` explicitly. The
+  bootstrap wizard (`Register-RequiredProviders`) registers the subscription
+  feature `Microsoft.Compute/EncryptionAtHost` for regulated/explicit-on
+  deployments, and `Write-TfvarsFile` passes an explicit `inputs.yaml` value
+  through to the workload `aks-landing-zone.auto.tfvars` (absent preserves the
+  scenario-driven default). Enabling it triggers a node reimage and requires a
+  VM SKU that supports it (e.g. `Standard_D4ds_v5`). Live-validated on a
+  regulated deployment (both pools `enableEncryptionAtHost = True`, feature
+  `Registered`). `terraform fmt` clean; `terraform validate` succeeds across
+  both consumable trees.
+
 ## [1.18.11] - 2026-07-31
 
 ### Fixed
