@@ -1654,6 +1654,12 @@ function Register-RequiredProviders {
     if ($Config.enable_backup -eq $true) {
         $requiredProviders += "Microsoft.DataProtection"
     }
+    # Defender for Cloud workflow automation (issue #37) — the Logic App lives
+    # under Microsoft.Logic and the security automation under Microsoft.Security.
+    if ($Config.enable_defender_workflow_automation -eq $true) {
+        $requiredProviders += "Microsoft.Logic"
+        $requiredProviders += "Microsoft.Security"
+    }
 
     # ── Required subscription FEATURE flags ──
     # Some resources need a subscription FEATURE registered (az feature register),
