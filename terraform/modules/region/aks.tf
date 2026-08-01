@@ -5,8 +5,8 @@
 # User-Assigned Managed Identity for AKS
 resource "azurerm_user_assigned_identity" "aks" {
   name                = local.managed_identity_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   tags                = local.default_tags
 }
 
@@ -62,8 +62,8 @@ module "aks" {
   version = "~> 0.4.0"
 
   name      = local.aks_name
-  parent_id = azurerm_resource_group.main.id
-  location  = azurerm_resource_group.main.location
+  parent_id = local.rg_runtime.id
+  location  = local.rg_runtime.location
   tags      = local.default_tags
 
   # DNS prefix for the cluster
@@ -385,7 +385,7 @@ data "azurerm_kubernetes_cluster" "agic" {
   count = var.enable_app_gateway && var.enable_agic ? 1 : 0
 
   name                = module.aks.name
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_runtime.name
 
   depends_on = [module.aks]
 }
@@ -401,7 +401,7 @@ resource "azurerm_role_assignment" "agic_appgw_contributor" {
 resource "azurerm_role_assignment" "agic_rg_reader" {
   count = var.enable_app_gateway && var.enable_agic ? 1 : 0
 
-  scope                = azurerm_resource_group.main.id
+  scope                = local.rg_runtime.id
   role_definition_name = "Reader"
   principal_id         = data.azurerm_kubernetes_cluster.agic[0].ingress_application_gateway[0].ingress_application_gateway_identity[0].object_id
 }

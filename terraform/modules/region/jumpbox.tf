@@ -35,8 +35,8 @@ resource "azurerm_public_ip" "bastion" {
   count = local.enable_jumpbox ? 1 : 0
 
   name                = local.bastion_pip_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = var.availability_zones
@@ -47,8 +47,8 @@ resource "azurerm_bastion_host" "main" {
   count = local.enable_jumpbox ? 1 : 0
 
   name                = local.bastion_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   sku                 = var.bastion_sku
   # Native-client tunneling (az network bastion ssh/tunnel) requires Standard.
   tunneling_enabled = var.bastion_sku == "Standard"
@@ -73,8 +73,8 @@ resource "azurerm_public_ip" "jumpbox_nat" {
   count = local.enable_jumpbox_nat ? 1 : 0
 
   name                = local.jumpbox_nat_pip_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   allocation_method   = "Static"
   sku                 = "Standard"
   tags                = local.default_tags
@@ -84,8 +84,8 @@ resource "azurerm_nat_gateway" "jumpbox" {
   count = local.enable_jumpbox_nat ? 1 : 0
 
   name                    = local.jumpbox_natgw_name
-  location                = azurerm_resource_group.main.location
-  resource_group_name     = azurerm_resource_group.main.name
+  location                = local.rg_runtime.location
+  resource_group_name     = local.rg_runtime.name
   sku_name                = "Standard"
   idle_timeout_in_minutes = 4
   tags                    = local.default_tags
@@ -104,8 +104,8 @@ resource "azurerm_network_interface" "jumpbox" {
   count = local.enable_jumpbox ? 1 : 0
 
   name                = local.jumpbox_nic_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   tags                = local.default_tags
 
   ip_configuration {
@@ -120,8 +120,8 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
 
   name                = local.jumpbox_vm_name
   computer_name       = "jumpbox"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   size                = var.jumpbox_vm_size
   admin_username      = var.jumpbox_admin_username
   network_interface_ids = [
@@ -218,7 +218,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "jumpbox" {
   count = local.enable_jumpbox ? 1 : 0
 
   virtual_machine_id = azurerm_linux_virtual_machine.jumpbox[0].id
-  location           = azurerm_resource_group.main.location
+  location           = local.rg_runtime.location
   enabled            = true
 
   daily_recurrence_time = var.jumpbox_auto_shutdown_time

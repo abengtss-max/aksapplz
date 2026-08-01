@@ -38,6 +38,26 @@ variable "tags" {
   default     = {}
 }
 
+variable "resource_group_layout" {
+  description = <<-DESC
+    How region resources are grouped into resource groups.
+      "flat"      - a single regional resource group holding everything (default).
+      "lifecycle" - three CAF-aligned resource groups split by lifecycle:
+                    <rg>-network (connectivity), <rg>-platform (stateful shared
+                    services) and <rg>-runtime (disposable AKS/App Gateway/jumpbox).
+    Changing this on an existing deployment is a breaking change: resources cannot
+    be moved between resource groups in place and will be recreated. See the
+    resource-group design docs and issue #40 for migration guidance.
+  DESC
+  type        = string
+  default     = "flat"
+
+  validation {
+    condition     = contains(["flat", "lifecycle"], var.resource_group_layout)
+    error_message = "resource_group_layout must be either \"flat\" or \"lifecycle\"."
+  }
+}
+
 # --- Networking ---
 variable "vnet_address_space" {
   description = "The address space for this region's spoke VNet."

@@ -7,8 +7,8 @@ resource "azurerm_public_ip" "app_gateway" {
   count = var.enable_app_gateway ? 1 : 0
 
   name                = "pip-${local.app_gateway_name}"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = var.availability_zones
@@ -32,8 +32,8 @@ resource "azurerm_web_application_firewall_policy" "main" {
   count = var.enable_app_gateway ? 1 : 0
 
   name                = local.waf_policy_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   tags                = local.default_tags
 
   policy_settings {
@@ -62,8 +62,8 @@ resource "azurerm_application_gateway" "main" {
   count = var.enable_app_gateway ? 1 : 0
 
   name                = local.app_gateway_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_runtime.location
+  resource_group_name = local.rg_runtime.name
   tags                = local.default_tags
   zones               = var.availability_zones
   http2_enabled       = true

@@ -60,6 +60,29 @@ variable "tags" {
   default     = {}
 }
 
+variable "resource_group_layout" {
+  description = <<-DESC
+    How each region's resources are grouped into resource groups.
+      "flat"      - one regional resource group holding everything (default;
+                    behaviour unchanged from earlier releases).
+      "lifecycle" - three CAF-aligned resource groups split by lifecycle:
+                    rg-<prefix>-network  (VNet, subnets, NSGs, peering),
+                    rg-<prefix>-platform (Key Vault, ACR, monitoring, backup),
+                    rg-<prefix>-runtime  (AKS, App Gateway, jumpbox).
+    WARNING: changing this on an existing deployment is a breaking change.
+    Azure resources cannot be moved between resource groups in place, so a
+    switch forces recreation. Use it for new deployments, or follow the
+    migration guidance in the resource-group design docs / issue #40.
+  DESC
+  type        = string
+  default     = "flat"
+
+  validation {
+    condition     = contains(["flat", "lifecycle"], var.resource_group_layout)
+    error_message = "resource_group_layout must be either \"flat\" or \"lifecycle\"."
+  }
+}
+
 # =============================================================================
 # Networking
 # =============================================================================

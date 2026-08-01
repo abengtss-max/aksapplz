@@ -15,6 +15,16 @@ output "resource_group_id" {
   value       = module.region["primary"].resource_group_id
 }
 
+output "network_resource_group_name" {
+  description = "Name of the primary region's network-tier resource group. Equals resource_group_name in the flat layout."
+  value       = module.region["primary"].network_resource_group_name
+}
+
+output "runtime_resource_group_name" {
+  description = "Name of the primary region's runtime-tier resource group. Equals resource_group_name in the flat layout."
+  value       = module.region["primary"].runtime_resource_group_name
+}
+
 output "vnet_id" {
   description = "The ID of the primary spoke VNet."
   value       = module.region["primary"].vnet_id

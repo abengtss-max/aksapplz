@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Opt-in CAF lifecycle-based resource-group layout** (`resource_group_layout`,
+  issue #40). A new root variable selects how each region's resources are grouped:
+  `flat` (default, unchanged — one `rg-<prefix>` per region) or `lifecycle`, which
+  splits resources by lifecycle into three CAF-aligned resource groups:
+  `rg-<prefix>-network` (VNet, subnets, NSGs, route tables, peering),
+  `rg-<prefix>-platform` (Key Vault, ACR, monitoring, backup, and the private
+  endpoints/DNS zones fronting them), and `rg-<prefix>-runtime` (AKS, Application
+  Gateway, jumpbox). The region module now routes every resource through per-tier
+  locals (`rg_network`, `rg_runtime`, and `main` as the platform tier); in `flat`
+  mode all tiers resolve to the single `main` RG, so the plan is byte-for-byte
+  identical to earlier releases. New module/root outputs
+  `network_resource_group_name` and `runtime_resource_group_name` expose the tier
+  RGs (both equal `resource_group_name` in `flat` mode). The wizard renders a
+  commented `resource_group_layout` hint into generated tfvars.
+  **Breaking when changed:** Azure cannot move resources between resource groups in
+  place, so switching an existing deployment from `flat` to `lifecycle` forces
+  recreation — choose the layout at first deployment. See the
+  [Resource groups](docs/concepts/resource-groups.md) concept page and the
+  Configuration reference for details and migration guidance.
+
 ## [1.19.1] - 2026-08-01
 
 ### Fixed

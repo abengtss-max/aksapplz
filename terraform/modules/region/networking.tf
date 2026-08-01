@@ -2,9 +2,36 @@
 # Region module - Networking (Spoke VNet, Subnets, NSGs, UDR, VNet Peering)
 # -----------------------------------------------------------------------------
 
-# Resource Group
+# Resource Group(s)
+#
+# "main" is the primary regional resource group. In the default "flat" layout it
+# holds every resource and keeps its original name (rg-<prefix>). In the
+# "lifecycle" layout it becomes the PLATFORM tier (rg-<prefix>-platform) holding
+# the long-lived stateful services (Key Vault, ACR, monitoring, backup), while
+# the network and runtime tiers get their own resource groups below.
 resource "azurerm_resource_group" "main" {
-  name     = local.resource_group_name
+  name     = local._rg_lifecycle ? "${local.resource_group_name}-platform" : local.resource_group_name
+  location = var.location
+  tags     = local.default_tags
+}
+
+# NETWORK tier (lifecycle layout only) - long-lived connectivity foundation:
+# VNet, subnets, NSGs, route tables and peering.
+resource "azurerm_resource_group" "network" {
+  count = local._rg_lifecycle ? 1 : 0
+
+  name     = "${local.resource_group_name}-network"
+  location = var.location
+  tags     = local.default_tags
+}
+
+# RUNTIME tier (lifecycle layout only) - the disposable cluster tier: AKS,
+# Application Gateway and the optional management jumpbox. This tier can be torn
+# down and rebuilt without touching network or platform state.
+resource "azurerm_resource_group" "runtime" {
+  count = local._rg_lifecycle ? 1 : 0
+
+  name     = "${local.resource_group_name}-runtime"
   location = var.location
   tags     = local.default_tags
 }
@@ -14,8 +41,8 @@ resource "azurerm_route_table" "aks" {
   count = local.is_corp ? 1 : 0
 
   name                = local.route_table_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 
   route {
@@ -29,16 +56,16 @@ resource "azurerm_route_table" "aks" {
 # NSG - AKS System Node Pool Subnet
 resource "azurerm_network_security_group" "aks_system_nodes" {
   name                = local.nsg_aks_system_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
 # NSG - AKS User Node Pool Subnet
 resource "azurerm_network_security_group" "aks_user_nodes" {
   name                = local.nsg_aks_user_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -48,8 +75,8 @@ resource "azurerm_network_security_group" "aks_user_nodes" {
 # (default rules only) satisfies the policy without affecting API server traffic.
 resource "azurerm_network_security_group" "aks_api_server" {
   name                = local.nsg_apiserver_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -58,8 +85,8 @@ resource "azurerm_network_security_group" "app_gateway" {
   count = var.enable_app_gateway ? 1 : 0
 
   name                = local.nsg_appgw_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 
   # Required for Application Gateway v2
@@ -117,8 +144,8 @@ resource "azurerm_network_security_group" "private_endpoints" {
   count = local.use_private_endpoints ? 1 : 0
 
   name                = local.nsg_pe_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 
   security_rule {
@@ -155,8 +182,8 @@ resource "azurerm_network_security_group" "agc" {
   count = var.enable_agc ? 1 : 0
 
   name                = local.nsg_agc_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -167,8 +194,8 @@ resource "azurerm_network_security_group" "jumpbox" {
   count = local.enable_jumpbox ? 1 : 0
 
   name                = local.nsg_jumpbox_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 
   security_rule {
@@ -203,8 +230,8 @@ resource "azurerm_network_security_group" "bastion" {
   count = local.enable_jumpbox ? 1 : 0
 
   name                = local.nsg_bastion_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = local.rg_network.location
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 
   # --- Inbound ---
@@ -324,8 +351,8 @@ module "spoke_vnet" {
   version = "~> 0.7"
 
   name          = local.vnet_name
-  parent_id     = azurerm_resource_group.main.id
-  location      = azurerm_resource_group.main.location
+  parent_id     = local.rg_network.id
+  location      = local.rg_network.location
   address_space = [var.vnet_address_space]
   tags          = local.default_tags
 
@@ -463,7 +490,7 @@ resource "azurerm_virtual_network_peering" "spoke_to_hub" {
   count = local.is_corp ? 1 : 0
 
   name                         = "peer-spoke-to-hub"
-  resource_group_name          = azurerm_resource_group.main.name
+  resource_group_name          = local.rg_network.name
   virtual_network_name         = module.spoke_vnet.name
   remote_virtual_network_id    = var.hub_vnet_resource_id
   allow_forwarded_traffic      = true

@@ -8,13 +8,23 @@ output "location" {
 }
 
 output "resource_group_name" {
-  description = "The name of the region's resource group."
+  description = "The name of the region's primary resource group. In the lifecycle layout this is the platform tier (rg-<prefix>-platform)."
   value       = azurerm_resource_group.main.name
 }
 
 output "resource_group_id" {
-  description = "The ID of the region's resource group."
+  description = "The ID of the region's primary (platform) resource group."
   value       = azurerm_resource_group.main.id
+}
+
+output "network_resource_group_name" {
+  description = "Name of the network-tier resource group. Equals resource_group_name in the flat layout."
+  value       = local.rg_network.name
+}
+
+output "runtime_resource_group_name" {
+  description = "Name of the runtime-tier resource group. Equals resource_group_name in the flat layout."
+  value       = local.rg_runtime.name
 }
 
 # Networking
