@@ -1338,6 +1338,20 @@ function Write-TfvarsFile {
     } else {
         "# enable_encryption_at_host = <unset: scenario-driven; set true/false to force>"
     }
+    # Network defense-in-depth controls are opt-in (default false) with no
+    # scenario-driven default, so only render them when the operator set them in
+    # inputs.yaml; an absent key leaves the control off. enable_nsg_flow_logs
+    # additionally requires enable_diagnostic_settings (always true here).
+    $nodeNsgRulesLine = if ($null -ne $Config.enable_node_nsg_rules) {
+        "enable_node_nsg_rules = $(& $boolTf $Config.enable_node_nsg_rules)"
+    } else {
+        "# enable_node_nsg_rules = <unset: default false; set true for an explicit inbound allow/deny baseline on the node-pool NSGs>"
+    }
+    $nsgFlowLogsLine = if ($null -ne $Config.enable_nsg_flow_logs) {
+        "enable_nsg_flow_logs = $(& $boolTf $Config.enable_nsg_flow_logs)"
+    } else {
+        "# enable_nsg_flow_logs = <unset: default false; set true for Network Watcher NSG flow logs + Traffic Analytics (needs enable_diagnostic_settings)>"
+    }
     $userNodeLabelsBlock = if ($isRegulated) {
         @"
   node_labels = {
@@ -1503,6 +1517,8 @@ enable_defender_for_containers_plan = $(& $boolTf $Config.enable_defender_for_co
 enable_managed_prometheus  = $(& $boolTf $Config.enable_prometheus)
 enable_managed_grafana     = $(& $boolTf $Config.enable_grafana)
 enable_diagnostic_settings = true
+$nodeNsgRulesLine
+$nsgFlowLogsLine
 
 # -----------------------------------------------------------------------------
 # Scaling
