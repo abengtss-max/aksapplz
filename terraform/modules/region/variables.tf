@@ -41,16 +41,18 @@ variable "tags" {
 variable "resource_group_layout" {
   description = <<-DESC
     How region resources are grouped into resource groups.
-      "flat"      - a single regional resource group holding everything (default).
-      "lifecycle" - three CAF-aligned resource groups split by lifecycle:
-                    <rg>-network (connectivity), <rg>-platform (stateful shared
-                    services) and <rg>-runtime (disposable AKS/App Gateway/jumpbox).
+      "lifecycle" - (default) three CAF-aligned resource groups split by
+                    lifecycle: <rg>-network (connectivity), <rg>-platform
+                    (stateful shared services) and <rg>-runtime (disposable
+                    AKS/App Gateway/jumpbox).
+      "flat"      - a single regional resource group holding everything (legacy
+                    escape hatch for existing, un-migrated deployments).
     Changing this on an existing deployment is a breaking change: resources cannot
     be moved between resource groups in place and will be recreated. See the
     resource-group design docs and issue #40 for migration guidance.
   DESC
   type        = string
-  default     = "flat"
+  default     = "lifecycle"
 
   validation {
     condition     = contains(["flat", "lifecycle"], var.resource_group_layout)

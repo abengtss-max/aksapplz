@@ -1388,7 +1388,7 @@ tenant_id                    = "$($Config.tenant_id)"
 location                     = "$($Config.bootstrap_location)"
 workload_name                = "$($Config.service_name)"
 environment                  = "$($Config.environment_name)"
-$(if ($Config.resource_group_layout) { "resource_group_layout        = `"$($Config.resource_group_layout)`"" } else { "# resource_group_layout      = `"flat`"  # flat (default) | lifecycle (CAF lifecycle-based RG split; breaking change, see issue #40)" })
+$(if ($Config.resource_group_layout) { "resource_group_layout        = `"$($Config.resource_group_layout)`"" } else { "# resource_group_layout      = `"lifecycle`"  # lifecycle (default; CAF lifecycle-based RG split) | flat (legacy single-RG escape hatch for un-migrated deployments, see issue #40)" })
 
 tags = {
   "costCenter"   = "IT"

@@ -13,18 +13,18 @@ editing this file is idempotent.
 | `location` | Primary Azure region. | `swedencentral` |
 | `secondary_location` | Set to enable a full second region. Leave empty for single-region. | `westeurope` |
 | `topology` | `standalone`, `hub_and_spoke`, or `spoke`. | `standalone` |
-| `resource_group_layout` | `flat` (default) or `lifecycle` (CAF lifecycle-based resource-group split). See [Resource group layout](#resource-group-layout). | `flat` |
+| `resource_group_layout` | `lifecycle` (default, CAF lifecycle-based resource-group split) or `flat` (legacy single resource group). See [Resource group layout](#resource-group-layout). | `lifecycle` |
 
 ## Resource group layout
 
 `resource_group_layout` controls how each region's resources are grouped into Azure resource
-groups. It is an opt-in setting — the default preserves the historical single-resource-group
-behaviour.
+groups. New deployments use `lifecycle` automatically; `flat` is a legacy escape hatch that
+preserves the historical single-resource-group behaviour for existing, un-migrated deployments.
 
 | Value | Resource groups per region | When to use |
 |---|---|---|
-| `flat` (default) | `rg-<prefix>` holds everything. | Simple deployments; unchanged behaviour. |
-| `lifecycle` | `rg-<prefix>-network`, `rg-<prefix>-platform`, `rg-<prefix>-runtime`. | CAF-aligned separation of concerns and clean cluster teardown. |
+| `lifecycle` (default) | `rg-<prefix>-network`, `rg-<prefix>-platform`, `rg-<prefix>-runtime`. | CAF-aligned separation of concerns and clean cluster teardown. Applied automatically. |
+| `flat` | `rg-<prefix>` holds everything. | Legacy behaviour; keeps an existing flat deployment in place until you migrate. |
 
 In the `lifecycle` layout, resources are grouped by **lifecycle** (the primary CAF guidance for
 resource-group design):
@@ -40,9 +40,10 @@ Front Door / Traffic Manager RG are unchanged by this setting.
 
 !!! warning "Switching layout is a breaking change"
     Azure cannot move a resource between resource groups in place, so changing
-    `resource_group_layout` on an existing deployment forces resources to be **recreated**. Choose
-    the layout at first deployment. To migrate an existing environment, plan a destroy/redeploy of
-    the affected region (or a state move/import). See
+    `resource_group_layout` on an existing deployment forces resources to be **recreated**. New
+    deployments get `lifecycle` automatically; an existing `flat` deployment must explicitly set
+    `flat` to stay put. To migrate, plan a destroy/redeploy of the affected region (or a state
+    move/import). See
     [issue #40](https://github.com/abengtss-max/aksapplz/issues/40) for migration and teardown
     guidance.
 

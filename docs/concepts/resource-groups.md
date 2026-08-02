@@ -6,14 +6,9 @@ updated, and deleted together belong in the same resource group.
 
 ## The two layouts
 
-The `resource_group_layout` setting (default `flat`) selects one of two layouts per region.
+The `resource_group_layout` setting (default `lifecycle`) selects one of two layouts per region.
 
-### `flat` (default)
-
-A single regional resource group, `rg-<prefix>`, holds everything. Simple, and unchanged from
-earlier releases. Good for demos, dev, and single-purpose clusters.
-
-### `lifecycle`
+### `lifecycle` (default)
 
 Three resource groups split by lifecycle:
 
@@ -26,6 +21,12 @@ rg-<prefix>-runtime    the cluster tier (disposable, rebuildable)
 Plus the resource groups the accelerator already isolates: the AKS node resource group
 (`MC_*`), the backup snapshot group (`rg-<prefix>-snap`), and the global Front Door / Traffic
 Manager group. Those are unaffected by this setting.
+
+### `flat`
+
+A single regional resource group, `rg-<prefix>`, holds everything. This is the legacy behaviour
+from earlier releases, kept as an escape hatch so an existing flat deployment can stay in place
+until it is migrated. Also fine for demos, dev, and single-purpose clusters.
 
 ## What each group holds, and why
 
@@ -76,7 +77,8 @@ the above together — which is exactly the friction the `lifecycle` layout remo
 ## Switching layouts is breaking
 
 Azure cannot move a resource between resource groups in place. Changing `resource_group_layout`
-on an existing deployment forces the affected resources to be **recreated**. Pick the layout at
-first deployment. To migrate an existing environment, plan a destroy/redeploy of the region (or a
-Terraform `state mv` / import exercise). Track migration guidance in
+on an existing deployment forces the affected resources to be **recreated**. New deployments get
+`lifecycle` automatically; an existing `flat` deployment must explicitly set `flat` to stay put.
+To migrate an existing environment, plan a destroy/redeploy of the region (or a Terraform
+`state mv` / import exercise). Track migration guidance in
 [issue #40](https://github.com/abengtss-max/aksapplz/issues/40).
