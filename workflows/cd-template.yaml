@@ -195,7 +195,9 @@ jobs:
         if: inputs.action == 'destroy'
         run: |
           set +e
-          RG="$(terraform output -raw resource_group_name 2>/dev/null || echo '')"
+          # The jumpbox lives in the runtime tier (rg-<prefix>-runtime under the
+          # default "lifecycle" layout; the single regional RG under "flat").
+          RG="$(terraform output -raw runtime_resource_group_name 2>/dev/null || terraform output -raw resource_group_name 2>/dev/null || echo '')"
           if [ -z "$RG" ] || [ "$RG" = "null" ]; then
             echo "::notice::No resource_group_name output resolved; skipping pre-destroy VM start."
             exit 0
@@ -307,7 +309,11 @@ jobs:
             echo "::notice::App Gateway not enabled - nothing to wire."
             exit 0
           fi
-          RG="$(terraform output -raw resource_group_name)"
+          # AKS and the App Gateway live in the runtime tier. Under the default
+          # "lifecycle" resource_group_layout that is rg-<prefix>-runtime; under
+          # "flat" runtime_resource_group_name resolves to the single regional RG.
+          # Fall back to resource_group_name for older state without the output.
+          RG="$(terraform output -raw runtime_resource_group_name 2>/dev/null || terraform output -raw resource_group_name)"
           AKS="$(terraform output -raw aks_cluster_name)"
           POOL="$(terraform output -raw app_gateway_backend_pool_name)"
 
