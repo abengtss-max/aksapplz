@@ -31,9 +31,9 @@ resource-group design):
 
 | Resource group | Contents | Lifecycle |
 |---|---|---|
-| `rg-<prefix>-network` | Spoke VNet, subnets, NSGs, route tables, VNet peering. | Long-lived; changes rarely. |
-| `rg-<prefix>-platform` | Key Vault, ACR, Log Analytics / Managed Prometheus / Grafana, Azure Backup, and the private endpoints + private DNS zones that front those services. | Long-lived; holds stateful data and compliance-retained resources. |
-| `rg-<prefix>-runtime` | AKS cluster, Application Gateway + WAF, and the optional management jumpbox. | Disposable; can be destroyed and rebuilt without touching network or platform state. |
+| `rg-<prefix>-network` | Spoke VNet, subnets, NSGs, route tables, VNet peering, plus all private-link plumbing: private endpoints, private DNS zones, and the Azure Monitor Private Link Scope (AMPLS). | Long-lived; changes rarely. |
+| `rg-<prefix>-platform` | Key Vault, ACR, Log Analytics / Managed Prometheus / Grafana, Azure Backup. | Long-lived; holds stateful data and compliance-retained resources. |
+| `rg-<prefix>-runtime` | AKS cluster, Application Gateway + WAF, and the optional management jumpbox (VM, Azure Bastion, and its NAT gateway). | Disposable; can be destroyed and rebuilt without touching network or platform state. |
 
 The AKS node resource group (`MC_*`), the backup snapshot RG (`-snap`), and the global
 Front Door / Traffic Manager RG are unchanged by this setting.

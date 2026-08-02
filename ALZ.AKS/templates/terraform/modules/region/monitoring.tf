@@ -235,7 +235,7 @@ resource "azurerm_private_dns_zone" "grafana" {
   count = var.enable_managed_grafana && local.manage_private_dns ? 1 : 0
 
   name                = "privatelink.grafana.azure.com"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -243,7 +243,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "grafana" {
   count = var.enable_managed_grafana && local.manage_private_dns ? 1 : 0
 
   name                  = "pdnslink-grf-${local.name_prefix}"
-  resource_group_name   = azurerm_resource_group.main.name
+  resource_group_name   = local.rg_network.name
   private_dns_zone_name = azurerm_private_dns_zone.grafana[0].name
   virtual_network_id    = module.spoke_vnet.resource_id
   registration_enabled  = false
@@ -254,8 +254,8 @@ resource "azurerm_private_endpoint" "grafana" {
   count = var.enable_managed_grafana && local.use_private_endpoints ? 1 : 0
 
   name                = "pe-${local.grafana_name}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = local.rg_network.name
+  location            = local.rg_network.location
   subnet_id           = module.spoke_vnet.subnets["private_endpoints"].resource_id
   tags                = local.default_tags
 

@@ -24,7 +24,8 @@ locals {
   # --- Resource group layout (opt-in, CAF lifecycle-based split) -----------
   # "flat"      -> one regional resource group (default; behaviour unchanged).
   # "lifecycle" -> three resource groups split by lifecycle:
-  #                  <rg>-network  : VNet, subnets, NSGs, route tables, peering
+  #                  <rg>-network  : VNet, subnets, NSGs, route tables, peering,
+  #                                  private endpoints / DNS zones / AMPLS
   #                  <rg>-platform : Key Vault, ACR, monitoring, backup
   #                                  (the existing "main" RG, renamed)
   #                  <rg>-runtime  : AKS, App Gateway, jumpbox (disposable tier)

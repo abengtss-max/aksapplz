@@ -32,9 +32,9 @@ until it is migrated. Also fine for demos, dev, and single-purpose clusters.
 
 | Resource group | Contents | Why it's grouped this way |
 |---|---|---|
-| `…-network` | Spoke VNet, subnets, NSGs, route tables, VNet peering. | Connectivity is the slowest-changing layer. Keeping it separate means IP plans and peering survive cluster rebuilds untouched. |
-| `…-platform` | Key Vault, ACR, Log Analytics / Managed Prometheus / Grafana, Azure Backup, and the private endpoints + private DNS zones that front those services. | These hold **state** — secrets, images, telemetry history, backups — often under retention/compliance rules. A private endpoint's lifecycle follows the service it fronts, so it lives with that service (CAF lifecycle grouping), not with the VNet. |
-| `…-runtime` | AKS cluster, Application Gateway + WAF, optional management jumpbox. | The **disposable** tier. You can destroy and recreate it to rebuild the cluster, change VM sizes, or recover from drift, without risking network or stateful data. |
+| `…-network` | Spoke VNet, subnets, NSGs, route tables, VNet peering — plus all private-link plumbing: the private endpoints, private DNS zones, and the Azure Monitor Private Link Scope (AMPLS) that connect the workload to its private services. | Connectivity is the slowest-changing layer. Keeping the network and its private-link plumbing together means IP plans, DNS, and endpoints survive cluster rebuilds untouched, under one network-team RBAC/lock scope. |
+| `…-platform` | Key Vault, ACR, Log Analytics / Managed Prometheus / Grafana, Azure Backup. | These hold **state** — secrets, images, telemetry history, backups — often under retention/compliance rules. They must outlive any cluster. The private endpoints that front them live in `…-network` with the rest of the connectivity. |
+| `…-runtime` | AKS cluster, Application Gateway + WAF, and the optional management jumpbox (VM, Azure Bastion, and its NAT gateway for egress). | The **disposable** tier. You can destroy and recreate it to rebuild the cluster, change VM sizes, or recover from drift, without risking network or stateful data. Bastion and the NAT gateway exist only to serve the jumpbox VM, so they share its lifecycle and stay here rather than in `…-network`. |
 
 The one-line story: **destroy `runtime`, keep `platform`, keep `network`.**
 
@@ -67,9 +67,8 @@ runtime tier:
 - **Key Vault, ACR, monitoring history, and backups stay put** in `platform`, so you don't hit
   Key Vault soft-delete name collisions or a Backup vault that blocks its resource group from
   deleting.
-- **Private endpoints and private DNS zones** for the platform services stay with those services,
-  so runtime teardown doesn't race the `network` or `platform` groups with
-  `AnotherOperationInProgress` (409) errors.
+- **Private endpoints and private DNS zones stay put** in `network`, so runtime teardown doesn't
+  race the `network` or `platform` groups with `AnotherOperationInProgress` (409) errors.
 
 In the `flat` layout everything shares one resource group, so a full teardown must sequence all of
 the above together — which is exactly the friction the `lifecycle` layout removes.

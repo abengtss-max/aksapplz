@@ -36,8 +36,9 @@ module "acr" {
   # region subnet_resource_id may itself be unknown-until-apply, which is fine.
   private_endpoints = {
     for k, r in local.regions : k => {
-      name               = k == "primary" ? "pe-${local.acr_name}" : "pe-${local.acr_name}-${k}"
-      subnet_resource_id = module.region[k].private_endpoints_subnet_id
+      name                = k == "primary" ? "pe-${local.acr_name}" : "pe-${local.acr_name}-${k}"
+      resource_group_name = module.region[k].network_resource_group_name
+      subnet_resource_id  = module.region[k].private_endpoints_subnet_id
       private_dns_zone_resource_ids = local.acr_self_managed_dns ? (
         [azurerm_private_dns_zone.acr[0].id]
       ) : var.acr_private_dns_zone_ids
@@ -85,7 +86,7 @@ resource "azurerm_private_dns_zone" "acr" {
   count = local.acr_self_managed_dns ? 1 : 0
 
   name                = "privatelink.azurecr.io"
-  resource_group_name = module.region["primary"].resource_group_name
+  resource_group_name = module.region["primary"].network_resource_group_name
   tags                = local.default_tags
 }
 
@@ -93,7 +94,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "acr" {
   for_each = local.acr_self_managed_dns ? local.regions : {}
 
   name                  = "pdnslink-acr-${each.key}"
-  resource_group_name   = module.region["primary"].resource_group_name
+  resource_group_name   = module.region["primary"].network_resource_group_name
   private_dns_zone_name = azurerm_private_dns_zone.acr[0].name
   virtual_network_id    = module.region[each.key].vnet_id
   registration_enabled  = false

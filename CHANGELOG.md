@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **CAF lifecycle-based resource-group layout is now the default** (`resource_group_layout`,
   issue #40). Each region's resources are split by lifecycle into three CAF-aligned
-  resource groups: `rg-<prefix>-network` (VNet, subnets, NSGs, route tables, peering),
-  `rg-<prefix>-platform` (Key Vault, ACR, monitoring, backup, and the private
-  endpoints/DNS zones fronting them), and `rg-<prefix>-runtime` (AKS, Application
-  Gateway, jumpbox). This happens automatically for new deployments — no configuration
+  resource groups: `rg-<prefix>-network` (VNet, subnets, NSGs, route tables, peering,
+  and all private-link plumbing — private endpoints, private DNS zones, and the Azure
+  Monitor Private Link Scope), `rg-<prefix>-platform` (Key Vault, ACR, monitoring,
+  backup), and `rg-<prefix>-runtime` (AKS, Application Gateway, and the jumpbox —
+  including its Azure Bastion and NAT gateway, which share the jumpbox lifecycle). This happens automatically for new deployments — no configuration
   required. The region module routes every resource through per-tier locals
   (`rg_network`, `rg_runtime`, and `main` as the platform tier). New module/root outputs
   `network_resource_group_name` and `runtime_resource_group_name` expose the tier RGs.
