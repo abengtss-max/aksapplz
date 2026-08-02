@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Container Insights data collection rule fails to create with `InvalidPayload`**
+  on fresh deployments. The Log Analytics workspace module was pinned loosely
+  (`~> 0.4`), and the module's `internet_ingestion_enabled` default changed to
+  disabled in v0.4.2+. Because the workspace ingestion setting was never specified,
+  a floating version brought the workspace up with public ingestion off, leaving the
+  Container Insights DCR (which had no Data Collection Endpoint) with no valid
+  ingestion path. The module version is now pinned and the workspace's ingestion/query
+  public access is set explicitly (enabled only when the AMPLS private path is not in
+  use). When private link is on, the Container Insights DCR now routes through the
+  in-scope Linux DCE, aligning the code with the intended private-ingestion design.
+
 ### Changed
 - **CAF lifecycle-based resource-group layout is now the default** (`resource_group_layout`,
   issue #40). Each region's resources are split by lifecycle into three CAF-aligned
