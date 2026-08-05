@@ -13,6 +13,40 @@ editing this file is idempotent.
 | `location` | Primary Azure region. | `swedencentral` |
 | `secondary_location` | Set to enable a full second region. Leave empty for single-region. | `westeurope` |
 | `topology` | `standalone`, `hub_and_spoke`, or `spoke`. | `standalone` |
+| `resource_group_layout` | `lifecycle` (default, CAF lifecycle-based resource-group split) or `flat` (legacy single resource group). See [Resource group layout](#resource-group-layout). | `lifecycle` |
+
+## Resource group layout
+
+`resource_group_layout` controls how each region's resources are grouped into Azure resource
+groups. New deployments use `lifecycle` automatically; `flat` is a legacy escape hatch that
+preserves the historical single-resource-group behaviour for existing, un-migrated deployments.
+
+| Value | Resource groups per region | When to use |
+|---|---|---|
+| `lifecycle` (default) | `rg-<prefix>-network`, `rg-<prefix>-platform`, `rg-<prefix>-runtime`. | CAF-aligned separation of concerns and clean cluster teardown. Applied automatically. |
+| `flat` | `rg-<prefix>` holds everything. | Legacy behaviour; keeps an existing flat deployment in place until you migrate. |
+
+In the `lifecycle` layout, resources are grouped by **lifecycle** (the primary CAF guidance for
+resource-group design):
+
+| Resource group | Contents | Lifecycle |
+|---|---|---|
+| `rg-<prefix>-network` | Spoke VNet, subnets, NSGs, route tables, VNet peering, plus all private-link plumbing: private endpoints, private DNS zones, and the Azure Monitor Private Link Scope (AMPLS). | Long-lived; changes rarely. |
+| `rg-<prefix>-platform` | Key Vault, ACR, Log Analytics / Managed Prometheus / Grafana, Azure Backup. | Long-lived; holds stateful data and compliance-retained resources. |
+| `rg-<prefix>-runtime` | AKS cluster, Application Gateway + WAF, and the optional management jumpbox (VM, Azure Bastion, and its NAT gateway). | Disposable; can be destroyed and rebuilt without touching network or platform state. |
+
+The AKS node resource group (`MC_*`), the backup snapshot RG (`-snap`), and the global
+Front Door / Traffic Manager RG are unchanged by this setting.
+
+!!! warning "Switching layout is a breaking change"
+    Azure cannot move a resource between resource groups in place, so changing
+    `resource_group_layout` on an existing deployment forces resources to be **recreated**. New
+    deployments get `lifecycle` automatically; an existing `flat` deployment must explicitly set
+    `flat` to stay put. To migrate, plan a destroy/redeploy of the affected region (or a state
+    move/import). See
+    [issue #40](https://github.com/abengtss-max/aksapplz/issues/40) for migration and teardown
+    guidance.
+
 
 ## Cluster options
 

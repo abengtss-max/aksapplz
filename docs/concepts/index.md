@@ -31,4 +31,13 @@ understand *why* it's built the way it is — or before you pick your networking
 
     [:octicons-arrow-right-24: Multi-region](multi-region.md)
 
+-   :material-folder-multiple-outline:{ .lg .middle } **Resource groups**
+
+    ---
+
+    How resources are grouped by lifecycle — the `flat` vs `lifecycle` layouts, identity
+    placement, and clean cluster teardown.
+
+    [:octicons-arrow-right-24: Resource groups](resource-groups.md)
+
 </div>

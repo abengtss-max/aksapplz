@@ -6,7 +6,7 @@
     RootModule        = 'ALZ.AKS.psm1'
 
     # Version number of this module
-    ModuleVersion     = '1.19.1'
+    ModuleVersion     = '2.0.0'
 
     # ID used to uniquely identify this module
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -52,6 +52,10 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+## 2.0.0
+- BREAKING (CAF lifecycle-based resource-group layout is now the DEFAULT - issue #40): each region`s resources are split by lifecycle into three CAF-aligned resource groups instead of a single flat `rg-<prefix>`: `rg-<prefix>-network` (VNet, subnets, NSGs, route tables, peering, and all private-link plumbing - private endpoints, private DNS zones, and the Azure Monitor Private Link Scope), `rg-<prefix>-platform` (Key Vault, ACR, monitoring, backup), and `rg-<prefix>-runtime` (AKS, Application Gateway, and the jumpbox - including its Azure Bastion and NAT gateway, which share the jumpbox lifecycle). New deployments get this automatically with no configuration. The region module routes every resource through per-tier locals (`rg_network`, `rg_runtime`, and `main` as the platform tier); new module/root outputs `network_resource_group_name` and `runtime_resource_group_name` expose the tier RGs. A legacy `flat` value (one `rg-<prefix>` per region, all tiers resolving to `main`) remains as an escape hatch. **Breaking for existing deployments:** Azure cannot move resources between resource groups in place, so a `flat` deployment that re-applies WITHOUT explicitly setting `resource_group_layout = "flat"` will have resources RECREATED - set `flat` to stay put, then follow the migration guidance (issue #41). Live-validated end-to-end on a private full-stack deploy in swedencentral. Applied byte-identical across both consumable Terraform trees; `terraform fmt` clean + `terraform validate` succeed.
+- Fix (Container Insights data collection rule fails to create with `InvalidPayload` on fresh deployments): the Log Analytics workspace module was pinned loosely (`~> 0.4`) and the module`s `internet_ingestion_enabled` default flipped to disabled in v0.4.2+; because workspace ingestion was never specified, a floating version brought the workspace up with public ingestion off, leaving the Container Insights DCR (which had no Data Collection Endpoint) with no valid ingestion path. The module version is now pinned and the workspace`s ingestion/query public access is set explicitly (enabled only when the AMPLS private path is not in use). When private link is on, the Container Insights DCR now routes through the in-scope Linux DCE, aligning the code with the intended private-ingestion design.
+
 ## 1.19.1
 - Fix (`terraform destroy` DETERMINISTICALLY fails tearing down the management jumpbox - `AADSSHLoginForLinux ... Cannot modify extensions in the VM when the VM is not running`): the opt-in management jumpbox (`enable_management_jumpbox = true`) has an auto-shutdown schedule (`azurerm_dev_test_global_vm_shutdown_schedule`), so by teardown time the VM is deallocated. Terraform destroys the `AADSSHLoginForLinux` VM extension (a child of the VM) BEFORE the VM itself, and Azure rejects deleting/modifying an extension on a STOPPED VM with `409 OperationNotAllowed: Cannot modify extensions in the VM when the VM is not running`. This is NOT a transient error, so the CD destroy retry loop could not recover it and every teardown failed. Added a best-effort pre-destroy step to the CD template (`workflows/cd-template.yaml` + `ALZ.AKS/templates/workflows/cd-template.yaml`): when `action = destroy`, it OIDC-logs in (`azure/login`, reusing the caller`s `id-token: write`) and runs `az vm start --ids` for every VM in the workload resource group (`terraform output -raw resource_group_name`) so the extension delete succeeds and the VM is then destroyed normally. Skips cleanly when there is no VM. No Terraform change.
 

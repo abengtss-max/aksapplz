@@ -40,7 +40,7 @@ resource "azurerm_monitor_private_link_scope" "monitor" {
   count = local.monitor_private_link ? 1 : 0
 
   name                = "ampls-${local.name_prefix}"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 
   # Open mode keeps the VNet able to reach Azure Monitor resources that are not
@@ -56,7 +56,7 @@ resource "azurerm_monitor_private_link_scoped_service" "dce" {
   count = local.monitor_private_link ? 1 : 0
 
   name                = "amplss-dce-${local.name_prefix}"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   scope_name          = azurerm_monitor_private_link_scope.monitor[0].name
   linked_resource_id  = azurerm_monitor_data_collection_endpoint.prometheus[0].id
 }
@@ -66,7 +66,7 @@ resource "azurerm_monitor_private_link_scoped_service" "law" {
   count = local.monitor_private_link ? 1 : 0
 
   name                = "amplss-law-${local.name_prefix}"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   scope_name          = azurerm_monitor_private_link_scope.monitor[0].name
   linked_resource_id  = module.log_analytics.resource_id
 }
@@ -77,7 +77,7 @@ resource "azurerm_private_dns_zone" "monitor" {
   for_each = local.monitor_private_link && local.manage_private_dns ? toset(local.monitor_privatelink_zones) : toset([])
 
   name                = each.value
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -85,7 +85,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "monitor" {
   for_each = local.monitor_private_link && local.manage_private_dns ? toset(local.monitor_privatelink_zones) : toset([])
 
   name                  = "pdnslink-mon-${replace(each.value, ".", "-")}"
-  resource_group_name   = azurerm_resource_group.main.name
+  resource_group_name   = local.rg_network.name
   private_dns_zone_name = azurerm_private_dns_zone.monitor[each.value].name
   virtual_network_id    = module.spoke_vnet.resource_id
   registration_enabled  = false
@@ -97,8 +97,8 @@ resource "azurerm_private_endpoint" "monitor" {
   count = local.monitor_private_link ? 1 : 0
 
   name                = "pe-ampls-${local.name_prefix}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = local.rg_network.name
+  location            = local.rg_network.location
   subnet_id           = module.spoke_vnet.subnets["private_endpoints"].resource_id
   tags                = local.default_tags
 

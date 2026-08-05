@@ -4,8 +4,15 @@
 
 # Log Analytics Workspace (for Container Insights & diagnostics)
 module "log_analytics" {
-  source  = "Azure/avm-res-operationalinsights-workspace/azurerm"
-  version = "~> 0.4"
+  source = "Azure/avm-res-operationalinsights-workspace/azurerm"
+  # Pinned exactly: from v0.4.2 the module made workspace internet ingestion a
+  # required input defaulting to DISABLED. Because this module block did not set
+  # it, a floating "~> 0.4" silently pulled a newer version and brought the
+  # workspace up with public ingestion off - which broke Container Insights DCR
+  # creation (InvalidPayload) since that DCR had no private ingestion path. Pin
+  # the version and set ingestion/query explicitly below so behaviour no longer
+  # depends on the module default.
+  version = "0.4.2"
 
   name                = local.log_analytics_name
   resource_group_name = azurerm_resource_group.main.name
@@ -14,6 +21,13 @@ module "log_analytics" {
 
   log_analytics_workspace_retention_in_days = var.log_retention_days
   log_analytics_workspace_sku               = "PerGB2018"
+
+  # Keep public ingestion/query enabled only when the AMPLS private path is not
+  # in use. With private link on, ingestion flows through the AMPLS and the
+  # Container Insights DCR routes through the DCE (see below and
+  # monitoring-privatelink.tf), so public access stays disabled.
+  log_analytics_workspace_internet_ingestion_enabled = !local.monitor_private_link
+  log_analytics_workspace_internet_query_enabled     = !local.monitor_private_link
 }
 
 # Azure Monitor Workspace (for Managed Prometheus)
@@ -110,6 +124,13 @@ resource "azurerm_monitor_data_collection_rule" "container_insights" {
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   tags                = local.default_tags
+
+  # When the AMPLS private link is in use the workspace has public ingestion
+  # disabled, so this DCR must route through a Data Collection Endpoint that is a
+  # scoped service in the AMPLS. The Linux Prometheus DCE (created and added to
+  # the AMPLS whenever private link is on) serves that path. Without private
+  # link the workspace accepts public ingestion and no DCE is required.
+  data_collection_endpoint_id = local.monitor_private_link ? azurerm_monitor_data_collection_endpoint.prometheus[0].id : null
 
   destinations {
     log_analytics {
@@ -235,7 +256,7 @@ resource "azurerm_private_dns_zone" "grafana" {
   count = var.enable_managed_grafana && local.manage_private_dns ? 1 : 0
 
   name                = "privatelink.grafana.azure.com"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -243,7 +264,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "grafana" {
   count = var.enable_managed_grafana && local.manage_private_dns ? 1 : 0
 
   name                  = "pdnslink-grf-${local.name_prefix}"
-  resource_group_name   = azurerm_resource_group.main.name
+  resource_group_name   = local.rg_network.name
   private_dns_zone_name = azurerm_private_dns_zone.grafana[0].name
   virtual_network_id    = module.spoke_vnet.resource_id
   registration_enabled  = false
@@ -254,8 +275,8 @@ resource "azurerm_private_endpoint" "grafana" {
   count = var.enable_managed_grafana && local.use_private_endpoints ? 1 : 0
 
   name                = "pe-${local.grafana_name}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = local.rg_network.name
+  location            = local.rg_network.location
   subnet_id           = module.spoke_vnet.subnets["private_endpoints"].resource_id
   tags                = local.default_tags
 

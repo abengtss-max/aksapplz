@@ -21,6 +21,9 @@ module "region" {
   environment_short = var.environment_short
   tags              = var.tags
 
+  # Resource group layout (flat vs. lifecycle split)
+  resource_group_layout = var.resource_group_layout
+
   # Per-region networking
   vnet_address_space           = each.value.vnet_address_space
   subnet_address_prefixes      = each.value.subnet_address_prefixes

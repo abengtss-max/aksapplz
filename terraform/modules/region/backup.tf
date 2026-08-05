@@ -125,7 +125,7 @@ resource "azurerm_private_dns_zone" "backup_blob" {
   count = local.backup_manage_blob_dns ? 1 : 0
 
   name                = "privatelink.blob.core.windows.net"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -133,7 +133,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "backup_blob" {
   count = local.backup_manage_blob_dns ? 1 : 0
 
   name                  = "pdnslink-bkp-blob-${local.name_prefix}"
-  resource_group_name   = azurerm_resource_group.main.name
+  resource_group_name   = local.rg_network.name
   private_dns_zone_name = azurerm_private_dns_zone.backup_blob[0].name
   virtual_network_id    = module.spoke_vnet.resource_id
   registration_enabled  = false
@@ -144,8 +144,8 @@ resource "azurerm_private_endpoint" "backup_blob" {
   count = local.backup_use_pe ? 1 : 0
 
   name                = "pe-${local.backup_storage_account_name}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = local.rg_network.name
+  location            = local.rg_network.location
   subnet_id           = module.spoke_vnet.subnets["private_endpoints"].resource_id
   tags                = local.default_tags
 

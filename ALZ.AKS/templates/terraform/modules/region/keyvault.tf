@@ -37,8 +37,9 @@ module "key_vault" {
   # supplied from the hub (corp) or self-managed for standalone deployments.
   private_endpoints = local.use_private_endpoints ? {
     primary = {
-      name               = "pe-${local.key_vault_name}"
-      subnet_resource_id = module.spoke_vnet.subnets["private_endpoints"].resource_id
+      name                = "pe-${local.key_vault_name}"
+      resource_group_name = local.rg_network.name
+      subnet_resource_id  = module.spoke_vnet.subnets["private_endpoints"].resource_id
       private_dns_zone_resource_ids = local.manage_private_dns ? (
         [azurerm_private_dns_zone.keyvault[0].id]
       ) : var.keyvault_private_dns_zone_ids
@@ -73,7 +74,7 @@ resource "azurerm_private_dns_zone" "keyvault" {
   count = local.manage_private_dns ? 1 : 0
 
   name                = "privatelink.vaultcore.azure.net"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = local.rg_network.name
   tags                = local.default_tags
 }
 
@@ -81,7 +82,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "keyvault" {
   count = local.manage_private_dns ? 1 : 0
 
   name                  = "pdnslink-kv-${local.name_prefix}"
-  resource_group_name   = azurerm_resource_group.main.name
+  resource_group_name   = local.rg_network.name
   private_dns_zone_name = azurerm_private_dns_zone.keyvault[0].name
   virtual_network_id    = module.spoke_vnet.resource_id
   registration_enabled  = false

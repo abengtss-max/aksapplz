@@ -20,8 +20,24 @@ locals {
   name_prefix = "${var.workload_name}-${local.env_short}-${local.loc_short}"
 
   resource_group_name = "rg-${local.name_prefix}"
-  vnet_name           = "vnet-${local.name_prefix}"
-  aks_name            = "aks-${local.name_prefix}"
+
+  # --- Resource group layout (opt-in, CAF lifecycle-based split) -----------
+  # "flat"      -> one regional resource group (default; behaviour unchanged).
+  # "lifecycle" -> three resource groups split by lifecycle:
+  #                  <rg>-network  : VNet, subnets, NSGs, route tables, peering,
+  #                                  private endpoints / DNS zones / AMPLS
+  #                  <rg>-platform : Key Vault, ACR, monitoring, backup
+  #                                  (the existing "main" RG, renamed)
+  #                  <rg>-runtime  : AKS, App Gateway, jumpbox (disposable tier)
+  # Every resource points at one of the tier objects below, so both layouts
+  # share a single code path. In "flat" mode all tiers resolve to "main", so
+  # the plan is byte-for-byte identical to the pre-split module.
+  _rg_lifecycle = var.resource_group_layout == "lifecycle"
+  rg_network    = local._rg_lifecycle ? azurerm_resource_group.network[0] : azurerm_resource_group.main
+  rg_runtime    = local._rg_lifecycle ? azurerm_resource_group.runtime[0] : azurerm_resource_group.main
+
+  vnet_name = "vnet-${local.name_prefix}"
+  aks_name  = "aks-${local.name_prefix}"
   # Key Vault names are globally unique across Azure. A 3-char random suffix
   # (see random_string.kv_suffix below) is generated on the first apply and
   # preserved in state, so re-plans yield the same name. On a fresh apply

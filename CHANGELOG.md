@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-05
+
+### Fixed
+- **Container Insights data collection rule fails to create with `InvalidPayload`**
+  on fresh deployments. The Log Analytics workspace module was pinned loosely
+  (`~> 0.4`), and the module's `internet_ingestion_enabled` default changed to
+  disabled in v0.4.2+. Because the workspace ingestion setting was never specified,
+  a floating version brought the workspace up with public ingestion off, leaving the
+  Container Insights DCR (which had no Data Collection Endpoint) with no valid
+  ingestion path. The module version is now pinned and the workspace's ingestion/query
+  public access is set explicitly (enabled only when the AMPLS private path is not in
+  use). When private link is on, the Container Insights DCR now routes through the
+  in-scope Linux DCE, aligning the code with the intended private-ingestion design.
+
+### Changed
+- **CAF lifecycle-based resource-group layout is now the default** (`resource_group_layout`,
+  issue #40). Each region's resources are split by lifecycle into three CAF-aligned
+  resource groups: `rg-<prefix>-network` (VNet, subnets, NSGs, route tables, peering,
+  and all private-link plumbing — private endpoints, private DNS zones, and the Azure
+  Monitor Private Link Scope), `rg-<prefix>-platform` (Key Vault, ACR, monitoring,
+  backup), and `rg-<prefix>-runtime` (AKS, Application Gateway, and the jumpbox —
+  including its Azure Bastion and NAT gateway, which share the jumpbox lifecycle). This happens automatically for new deployments — no configuration
+  required. The region module routes every resource through per-tier locals
+  (`rg_network`, `rg_runtime`, and `main` as the platform tier). New module/root outputs
+  `network_resource_group_name` and `runtime_resource_group_name` expose the tier RGs.
+  A legacy `flat` value (one `rg-<prefix>` per region, all tiers resolving to `main`)
+  remains available as an escape hatch for existing deployments that have not migrated.
+  **Breaking for existing deployments:** Azure cannot move resources between resource
+  groups in place, so an existing `flat` deployment that re-applies without explicitly
+  setting `resource_group_layout = "flat"` will have resources recreated. Set `flat` to
+  stay put, then follow the migration guidance. See the
+  [Resource groups](docs/concepts/resource-groups.md) concept page and the
+  Configuration reference for details and migration guidance.
+
+
 ## [1.19.1] - 2026-08-01
 
 ### Fixed
