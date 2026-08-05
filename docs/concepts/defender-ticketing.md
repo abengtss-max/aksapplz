@@ -70,7 +70,7 @@ Key Vault over its **public** endpoint. When the primary Key Vault has public ac
 
 - store the token in a Key Vault that permits **trusted Azure services** (or a dedicated
   ticketing Key Vault reachable by the Logic App), **or**
-- move to a **VNet-integrated Standard Logic App** (tracked as a follow-up).
+- move to a **VNet-integrated Standard Logic App** ([tracked in #42](https://github.com/abengtss-max/aksapplz/issues/42)).
 
 The GitHub API call itself is outbound to the public internet and is unaffected.
 

@@ -30,7 +30,7 @@
 # (enable_private_endpoints), the runtime secret fetch cannot reach it. In that
 # case, store the token in a Key Vault that permits trusted Azure services (or a
 # dedicated ticketing Key Vault), or move to a VNet-integrated Standard Logic
-# App (tracked as a follow-up). See docs/concepts/defender-ticketing.md.
+# App (tracked in #42). See docs/concepts/defender-ticketing.md.
 # -----------------------------------------------------------------------------
 
 locals {
