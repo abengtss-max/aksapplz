@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-05
+
 ### Fixed
 - **Container Insights data collection rule fails to create with `InvalidPayload`**
   on fresh deployments. The Log Analytics workspace module was pinned loosely
