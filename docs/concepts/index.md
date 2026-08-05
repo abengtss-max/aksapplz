@@ -40,4 +40,13 @@ understand *why* it's built the way it is — or before you pick your networking
 
     [:octicons-arrow-right-24: Resource groups](resource-groups.md)
 
+-   :material-ticket-confirmation-outline:{ .lg .middle } **Defender ticketing**
+
+    ---
+
+    Turn Microsoft Defender for Cloud alerts into GitHub issues automatically — the
+    opt-in Workflow Automation + Logic App flow and its runtime-token design.
+
+    [:octicons-arrow-right-24: Defender ticketing](defender-ticketing.md)
+
 </div>

@@ -1498,6 +1498,24 @@ enable_azure_policy      = $(& $boolTf $Config.enable_azure_policy)
 enable_defender          = $(& $boolTf $Config.enable_defender)
 enable_defender_for_containers_plan = $(& $boolTf $Config.enable_defender_for_containers_plan)
 
+# Defender for Cloud -> GitHub work-item automation (issue #37, opt-in, off by default).
+# Turns Defender security alerts into GitHub Issues via Workflow Automation + a Logic App.
+# The GitHub token is read at runtime from a Key Vault secret (never inlined). See
+# docs/concepts/defender-ticketing.md before enabling.
+$(if ($Config.enable_defender_workflow_automation) { @"
+enable_defender_workflow_automation       = $(& $boolTf $Config.enable_defender_workflow_automation)
+defender_ticketing_target                 = "$(if ($Config.defender_ticketing_target) { $Config.defender_ticketing_target } else { 'github' })"
+defender_ticketing_github_repository       = "$($Config.defender_ticketing_github_repository)"
+defender_ticketing_github_pat_secret_name  = "$($Config.defender_ticketing_github_pat_secret_name)"
+defender_ticketing_min_severity           = "$(if ($Config.defender_ticketing_min_severity) { $Config.defender_ticketing_min_severity } else { 'High' })"
+"@ } else { @"
+# enable_defender_workflow_automation      = true
+# defender_ticketing_target                = "github"
+# defender_ticketing_github_repository      = "owner/repo"
+# defender_ticketing_github_pat_secret_name = "github-issues-token"   # Key Vault secret holding a GitHub token (Issues:write)
+# defender_ticketing_min_severity          = "High"                   # Low | Medium | High
+"@ })
+
 # -----------------------------------------------------------------------------
 # Monitoring
 # -----------------------------------------------------------------------------

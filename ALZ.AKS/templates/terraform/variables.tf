@@ -412,6 +412,88 @@ variable "enable_defender_for_containers_plan" {
   default     = false
 }
 
+variable "enable_defender_workflow_automation" {
+  description = <<-EOT
+    Opt-in: automatically turn Microsoft Defender for Cloud security alerts into
+    tracked work items via Defender for Cloud Workflow Automation
+    (Microsoft.Security/automations) targeting a Consumption Azure Logic App.
+    Only the GitHub Issues target is implemented today (see
+    defender_ticketing_target). Defaults to false so no automation resources,
+    cost, or tickets are ever created unless explicitly enabled.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "defender_ticketing_target" {
+  description = <<-EOT
+    Work-item tracker that Defender findings are filed into when
+    enable_defender_workflow_automation is true. Only "github" (GitHub Issues)
+    and "none" are supported today; "azuredevops" and "servicenow" are reserved
+    for future work. When "none", no automation is created even if the feature
+    flag is on.
+  EOT
+  type        = string
+  default     = "none"
+
+  validation {
+    condition     = contains(["none", "github"], var.defender_ticketing_target)
+    error_message = "defender_ticketing_target must be one of: none, github."
+  }
+}
+
+variable "defender_ticketing_github_repository" {
+  description = <<-EOT
+    Target GitHub repository (owner/repo) that Defender findings are filed into
+    as issues, e.g. "contoso/security-workitems". Required when
+    enable_defender_workflow_automation is true and defender_ticketing_target =
+    "github".
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "defender_ticketing_github_pat_secret_name" {
+  description = <<-EOT
+    Name of the Key Vault secret (in this deployment's primary-region Key Vault)
+    that holds a GitHub token with permission to create issues in
+    defender_ticketing_github_repository (a fine-grained PAT with Issues:write,
+    or a GitHub App installation token). The Logic App reads this secret at
+    RUNTIME using its managed identity - the token is never stored in code,
+    state, or the workflow definition. Required when the GitHub target is
+    enabled. Pre-create the secret before enabling the feature.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "defender_ticketing_min_severity" {
+  description = <<-EOT
+    Minimum Defender for Cloud alert severity that triggers a work item.
+    "High" (default) files only High-severity alerts; "Medium" files Medium and
+    High; "Low" files everything. Filtering happens in the Defender automation
+    rule set, so lower-severity alerts never reach the Logic App.
+  EOT
+  type        = string
+  default     = "High"
+
+  validation {
+    condition     = contains(["Low", "Medium", "High"], var.defender_ticketing_min_severity)
+    error_message = "defender_ticketing_min_severity must be one of: Low, Medium, High."
+  }
+}
+
+variable "defender_ticketing_github_labels" {
+  description = <<-EOT
+    Labels applied to every GitHub issue created from a Defender finding. The
+    labels must already exist in the target repository (GitHub does not create
+    them implicitly on issue creation). The alert severity is included in the
+    issue title/body, so it does not need to be a label.
+  EOT
+  type        = list(string)
+  default     = ["security", "defender"]
+}
+
 variable "enable_keda" {
   description = "Enable KEDA (Kubernetes Event-Driven Autoscaler)."
   type        = bool

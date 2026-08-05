@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Defender for Cloud → GitHub work-item automation (issue #37).** New opt-in
+  feature that automatically turns Microsoft Defender for Cloud security alerts
+  into tracked **GitHub Issues**, so findings are acted on rather than only
+  visible on the Grafana dashboards (#35/#36). A Defender for Cloud Workflow
+  Automation (`Microsoft.Security/automations`), scoped to the subscription and
+  filtered by severity, invokes a Consumption Logic App that reads a GitHub
+  token from Key Vault **at runtime via its managed identity** (never inlined in
+  code, state, or the workflow definition) and creates an issue via the GitHub
+  REST API. Gated behind `enable_defender_workflow_automation` (default `false`)
+  plus a `defender_ticketing_target` selector (`github` | `none` today;
+  `azuredevops` / `servicenow` reserved for later). Configurable target repo,
+  Key Vault token-secret name, minimum severity (`High` default), and issue
+  labels. The Logic App's identity is auto-granted **Key Vault Secrets User** on
+  the primary-region Key Vault. Nothing is provisioned and no cost is incurred
+  while disabled. Applied byte-identical across both consumable Terraform trees;
+  `terraform fmt` clean + `terraform validate` succeed. Wizard renders commented
+  tfvars hints; new [Defender ticketing](docs/concepts/defender-ticketing.md)
+  concept page + Configuration reference section (incl. the private-Key-Vault
+  networking caveat for Consumption Logic Apps).
+
 ## [2.0.0] - 2026-08-05
 
 ### Fixed

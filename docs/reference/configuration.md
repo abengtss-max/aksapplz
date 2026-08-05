@@ -110,6 +110,22 @@ registered (`az feature register --namespace Microsoft.Compute --name Encryption
 and the node VM SKU must support it (for example `Standard_D4ds_v5`). Changing this on an
 existing cluster reimages the node pools.
 
+## Defender work-item automation
+
+Automatically turn Microsoft Defender for Cloud security alerts into tracked GitHub
+issues, so findings are acted on instead of only being visible on the dashboards.
+Entirely opt-in and off by default. See [Defender ticketing](../concepts/defender-ticketing.md)
+for the design, the runtime-token flow, and the private-Key-Vault networking caveat.
+
+| Key | Default | Description |
+|---|---|---|
+| `enable_defender_workflow_automation` | `false` | Master switch. When `true`, provisions a Defender for Cloud Workflow Automation + a Consumption Logic App that files work items. Nothing is created (and no cost is incurred) while `false`. |
+| `defender_ticketing_target` | `none` | Tracker to file findings into. Only `github` and `none` are supported today (`azuredevops` / `servicenow` are reserved). |
+| `defender_ticketing_github_repository` | `""` | Target GitHub repo (`owner/repo`) for issues. Required when the GitHub target is enabled. |
+| `defender_ticketing_github_pat_secret_name` | `""` | Name of the Key Vault secret (in the primary-region Key Vault) holding a GitHub token with `Issues:write`. Read at runtime by the Logic App's managed identity — never inlined. Pre-create the secret before enabling. |
+| `defender_ticketing_min_severity` | `High` | Minimum alert severity that files a work item: `Low` (all), `Medium` (Medium + High), or `High`. Filtering happens in the Defender automation rule set. |
+| `defender_ticketing_github_labels` | `["security","defender"]` | Labels applied to each issue. They must already exist in the target repository. |
+
 ## GitHub & pipeline
 
 | Key | Description |

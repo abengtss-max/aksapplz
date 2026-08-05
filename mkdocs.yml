@@ -62,6 +62,7 @@ nav:
       - Topologies: concepts/topologies.md
       - Multi-region: concepts/multi-region.md
       - Resource groups: concepts/resource-groups.md
+      - Defender ticketing: concepts/defender-ticketing.md
   - Configuration reference: reference/configuration.md
   - Advanced:
       - advanced.md
