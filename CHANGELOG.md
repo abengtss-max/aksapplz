@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Azure Firewall teardown can fail deleting its public IP** with
+  `PublicIPAddressCannotBeDeleted` while Azure finishes disassociating the address
+  from the deleted firewall. The CD destroy workflow now treats this eventual-
+  consistency response as transient and retries from refreshed Terraform state.
+
 ## [2.0.0] - 2026-08-05
 
 ### Fixed

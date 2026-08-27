@@ -218,10 +218,11 @@ jobs:
           # recomputing from live state (bounded, 3 attempts). These are the
           # well-known fresh full-stack races: AKS agent-pool EtagMismatch /
           # "Another operation is in progress" (aka.ms/aks/aksoperationpreempted),
-          # private DNS-zone-group AnotherOperationInProgress during teardown, and
-          # ARM throttling (429). A genuine config error does NOT match this
-          # filter, so the loop exits immediately and the step fails fast.
-          transient='EtagMismatch|[Aa]nother operation .*is in progress|AnotherOperationInProgress|429 Too Many Requests|TooManyRequests|context deadline exceeded'
+          # private DNS-zone-group AnotherOperationInProgress during teardown,
+          # delayed Azure Firewall public-IP disassociation, and ARM throttling
+          # (429). A genuine config error does NOT match this filter, so the loop
+          # exits immediately and the step fails fast.
+          transient='EtagMismatch|[Aa]nother operation .*is in progress|AnotherOperationInProgress|PublicIPAddressCannotBeDeleted|429 Too Many Requests|TooManyRequests|context deadline exceeded'
           if [ "${{ inputs.action }}" = "destroy" ]; then
             # Re-plan-and-destroy against CURRENT state instead of applying the
             # saved destroy plan. A teardown that stops on a transient Azure error
